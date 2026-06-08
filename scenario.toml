@@ -26,4 +26,4 @@ q_step = 0.01
 enabled = false
 cone_u_steps = 24
 cone_v_steps = 32
-spiral_trail_steps = 300
+spiral_trail_steps = 80

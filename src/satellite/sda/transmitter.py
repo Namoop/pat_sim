@@ -10,8 +10,8 @@ from satellite.geometry import (
     believed_direction,
     believed_distance,
     cone_surface_mesh,
-    desmos_k_surface_mesh,
     global_spiral_frame,
+    plane_spiral_swept_mesh,
     spiral_path_on_target_plane,
     spiral_trail_on_plane,
     transmitter_basis,
@@ -94,18 +94,17 @@ class TransmitterSDA:
     def swept_area_mesh_up_to(
         self,
         q: float,
-        u_steps: int,
-        v_steps: int,
+        path_steps: int,
     ) -> tuple[np.ndarray, np.ndarray]:
-        """Desmos K(u,v) caps at actual-target range |P_t - P_1| for visualization."""
-        return desmos_k_surface_mesh(
+        """Flat swept ribbon on the target plane at |P_t - P_1| height."""
+        return plane_spiral_swept_mesh(
             self.p1,
             q,
-            self.frame_at,
-            self.alpha,
+            self.boresight_at,
+            self.nominal_boresight,
             self.actual_target_range,
-            u_steps,
-            v_steps,
+            self.alpha,
+            path_steps,
         )
 
     def believed_target_at(self, q: float) -> Vec3:

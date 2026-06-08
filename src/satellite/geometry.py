@@ -224,6 +224,75 @@ def spiral_path_on_target_plane(
     return np.array(points, dtype=np.float64)
 
 
+def plane_spiral_swept_mesh(
+    p1: Vec3,
+    q_end: float,
+    boresight_fn: Callable[[float], Vec3],
+    plane_normal: Vec3,
+    plane_distance: float,
+    alpha: float,
+    num_steps: int,
+) -> tuple[np.ndarray, np.ndarray]:
+    """
+    Single flat swept area on the target plane at actual-target height.
+
+    Projects the spiral onto the plane perpendicular to the believed boresight,
+    then builds one ribbon mesh (path ± beam footprint radius) growing with q.
+    """
+    if q_end <= 0.0 or num_steps < 2:
+        return np.empty((0, 3)), np.empty((0, 3), dtype=np.int64)
+
+    n = normalize(plane_normal)
+    footprint_r = plane_distance * np.tan(alpha)
+    if footprint_r <= 0.0:
+        return np.empty((0, 3)), np.empty((0, 3), dtype=np.int64)
+
+    path = spiral_path_on_target_plane(
+        p1, q_end, boresight_fn, plane_normal, plane_distance, num_steps
+    )
+    if len(path) < 2:
+        return np.empty((0, 3)), np.empty((0, 3), dtype=np.int64)
+
+    left_pts: list[Vec3] = []
+    right_pts: list[Vec3] = []
+
+    for i in range(len(path)):
+        if i < len(path) - 1:
+            tangent = path[i + 1] - path[i]
+        else:
+            tangent = path[i] - path[i - 1]
+
+        tangent = tangent - dot(tangent, n) * n
+        if norm(tangent) < 1e-12:
+            tangent = np.array([1.0, 0.0, 0.0]) - dot(np.array([1.0, 0.0, 0.0]), n) * n
+        tangent = normalize(tangent)
+        lateral = normalize(cross(n, tangent))
+
+        left_pts.append(path[i] + footprint_r * lateral)
+        right_pts.append(path[i] - footprint_r * lateral)
+
+    left = np.array(left_pts, dtype=np.float64)
+    right = np.array(right_pts, dtype=np.float64)
+
+    verts = np.vstack([left, right])
+    faces: list[list[int]] = []
+    count = len(path)
+
+    for i in range(count - 1):
+        li = i
+        ri = count + i
+        faces.append([li, ri, ri + 1])
+        faces.append([li, ri + 1, li + 1])
+
+    # Close the start with a fan from the spiral origin on the plane
+    origin_idx = len(verts)
+    verts = np.vstack([verts, path[0:1]])
+    faces.append([origin_idx, 0, count])
+    faces.append([origin_idx, count, 1])
+
+    return verts, np.array(faces, dtype=np.int64)
+
+
 def desmos_k_surface_mesh(
     p1: Vec3,
     q_end: float,
