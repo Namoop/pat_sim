@@ -1,0 +1,29 @@
+[scenario]
+name = "desmos_default"
+
+[positions]
+p1 = [0.0, 0.0, 0.0]
+p2 = [0.0, 1.0, 5.0]
+pt = [0.8, 0.0, 4.5]
+
+[offsets]
+theta_jumble = 0.0
+phi_jumble = 0.0
+
+[sda]
+k = 5.0
+alpha = 0.0335
+gamma = 0.5
+beta = 0.5
+omega_r = 10.0
+L_r = 0.15
+
+[simulation]
+q_max = 5.0
+q_step = 0.01
+
+[visualization]
+enabled = false
+cone_u_steps = 24
+cone_v_steps = 32
+spiral_trail_steps = 300
