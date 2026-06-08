@@ -18,7 +18,7 @@ pip install -e ".[viz]"
 # Fast headless — prints hit summary
 python -m satellite --config scenario.toml
 
-# Interactive 3D window (orbit/pan, time slider, Next button)
+# Interactive 3D window (orbit/pan, time slider, Play/Pause, Next scenario stub)
 python -m satellite --config scenario.toml --visualize
 
 # Start visualization at a specific time

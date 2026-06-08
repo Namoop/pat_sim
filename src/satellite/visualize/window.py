@@ -52,6 +52,11 @@ def run_visualizer(result: ScenarioResult, start_q: float = 0.0) -> None:
             self._swept_actor = None
             self._receiver_actor = None
             self._scene_built = False
+            self._playing = False
+
+            self._play_timer = QTimer(self)
+            self._play_timer.setInterval(50)
+            self._play_timer.timeout.connect(self._on_play_tick)
 
             central = QWidget()
             self.setCentralWidget(central)
@@ -68,12 +73,17 @@ def run_visualizer(result: ScenarioResult, start_q: float = 0.0) -> None:
             self.slider.setValue(int(self.current_q / q_step))
             self.slider.valueChanged.connect(self._on_slider_changed)
 
+            self.play_btn = QPushButton("Play")
+            self.play_btn.clicked.connect(self._toggle_play)
+
             self.next_btn = QPushButton("Next")
-            self.next_btn.clicked.connect(self._on_next)
+            self.next_btn.setToolTip("Advance to next scenario (not yet implemented)")
+            self.next_btn.clicked.connect(self._on_next_scenario)
 
             controls.addWidget(QLabel("Time q:"))
             controls.addWidget(self.slider, stretch=1)
             controls.addWidget(self.time_label)
+            controls.addWidget(self.play_btn)
             controls.addWidget(self.next_btn)
             layout.addLayout(controls)
 
@@ -87,7 +97,7 @@ def run_visualizer(result: ScenarioResult, start_q: float = 0.0) -> None:
 
         def _init_scene(self) -> None:
             self._build_scene()
-            self._update_time(self.current_q)
+            self._set_q(self.current_q)
 
         def _build_scene(self) -> None:
             p = self.plotter
@@ -144,9 +154,19 @@ def run_visualizer(result: ScenarioResult, start_q: float = 0.0) -> None:
             )
             return self._to_polydata(verts, faces)
 
-        def _update_time(self, q: float) -> None:
-            self.current_q = float(np.clip(q, 0.0, q_max))
-            self.time_label.setText(f"{self.current_q:.3f} / {q_max:.3f}")
+        def _set_q(self, q: float) -> None:
+            """Update time display and scene without changing slider signals."""
+            q = float(np.clip(q, 0.0, q_max))
+            self.current_q = q
+            self.time_label.setText(f"{q:.3f} / {q_max:.3f}")
+
+            self.slider.blockSignals(True)
+            self.slider.setValue(int(q / q_step))
+            self.slider.blockSignals(False)
+
+            self._update_scene()
+
+        def _update_scene(self) -> None:
 
             if self._cone_actor is not None:
                 self.plotter.remove_actor(self._cone_actor)
@@ -179,14 +199,39 @@ def run_visualizer(result: ScenarioResult, start_q: float = 0.0) -> None:
                 self.plotter.render()
 
         def _on_slider_changed(self, value: int) -> None:
-            self._update_time(value * q_step)
+            self._pause()
+            self._set_q(value * q_step)
 
-        def _on_next(self) -> None:
-            new_q = min(self.current_q + q_step, q_max)
-            self.slider.setValue(int(new_q / q_step))
-            self._update_time(new_q)
+        def _toggle_play(self) -> None:
+            if self._playing:
+                self._pause()
+            else:
+                self._play()
+
+        def _play(self) -> None:
+            if self.current_q >= q_max:
+                self._set_q(0.0)
+            self._playing = True
+            self.play_btn.setText("Pause")
+            self._play_timer.start()
+
+        def _pause(self) -> None:
+            self._playing = False
+            self._play_timer.stop()
+            self.play_btn.setText("Play")
+
+        def _on_play_tick(self) -> None:
+            if self.current_q >= q_max:
+                self._pause()
+                return
+            self._set_q(self.current_q + q_step)
+
+        def _on_next_scenario(self) -> None:
+            """Stub for Monte Carlo batch — advance to the next scenario."""
+            self._pause()
 
         def closeEvent(self, event) -> None:  # noqa: N802
+            self._play_timer.stop()
             self.plotter.close()
             super().closeEvent(event)
 
