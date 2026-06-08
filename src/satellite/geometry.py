@@ -224,6 +224,63 @@ def spiral_path_on_target_plane(
     return np.array(points, dtype=np.float64)
 
 
+def ribbon_surface_point(
+    p1: Vec3,
+    a_axis: Vec3,
+    b_axis: Vec3,
+    distance: float,
+    alpha: float,
+    v_width: float,
+) -> Vec3:
+    """R_ribbon(u,v) = P_1 + d*A_s(u) + d*tan(alpha)*v*B_s(u) at fixed u."""
+    return p1 + distance * a_axis + distance * np.tan(alpha) * v_width * b_axis
+
+
+def ribbon_swept_mesh(
+    p1: Vec3,
+    q_end: float,
+    frame_fn: Callable[[float], tuple[Vec3, Vec3, Vec3]],
+    alpha: float,
+    distance: float,
+    u_steps: int,
+    v_steps: int,
+) -> tuple[np.ndarray, np.ndarray]:
+    """
+    Continuous 3D ribbon swept along the spiral up to q_end:
+
+        R_ribbon(u,v) = P_1 + d*A_s(u) + d*tan(alpha)*v*B_s(u)
+
+    u in [0, q_end] follows the search spiral; v in [-1, 1] spans beam width.
+    """
+    if q_end <= 0.0 or u_steps < 2 or v_steps < 2:
+        return np.empty((0, 3)), np.empty((0, 3), dtype=np.int64)
+
+    u_vals = linspace(0.0, q_end, u_steps)
+    v_vals = linspace(-1.0, 1.0, v_steps)
+
+    verts: list[Vec3] = []
+    for u in u_vals:
+        a_s, b_s, _ = frame_fn(u)
+        for v_width in v_vals:
+            verts.append(
+                ribbon_surface_point(p1, a_s, b_s, distance, alpha, float(v_width))
+            )
+
+    vertices = np.array(verts, dtype=np.float64)
+    faces: list[list[int]] = []
+
+    for i in range(u_steps - 1):
+        for j in range(v_steps - 1):
+            a = i * v_steps + j
+            b_idx = a + 1
+            c_idx = a + v_steps
+            d_idx = c_idx + 1
+            faces.append([a, b_idx, d_idx])
+            faces.append([a, d_idx, c_idx])
+
+    return vertices, np.array(faces, dtype=np.int64)
+
+
 def plane_spiral_swept_mesh(
     p1: Vec3,
     q_end: float,

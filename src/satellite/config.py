@@ -47,6 +47,7 @@ class VisualizationConfig:
     cone_u_steps: int
     cone_v_steps: int
     spiral_trail_steps: int
+    ribbon_v_steps: int
 
 
 @dataclass(frozen=True)
@@ -113,7 +114,8 @@ def load_config(path: str | Path) -> ScenarioConfig:
             enabled=bool(visualization.get("enabled", False)),
             cone_u_steps=int(visualization.get("cone_u_steps", 24)),
             cone_v_steps=int(visualization.get("cone_v_steps", 32)),
-            spiral_trail_steps=int(visualization.get("spiral_trail_steps", 300)),
+            spiral_trail_steps=int(visualization.get("spiral_trail_steps", 80)),
+            ribbon_v_steps=int(visualization.get("ribbon_v_steps", 4)),
         ),
     )
 

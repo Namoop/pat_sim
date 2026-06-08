@@ -27,3 +27,4 @@ enabled = false
 cone_u_steps = 24
 cone_v_steps = 32
 spiral_trail_steps = 80
+ribbon_v_steps = 4

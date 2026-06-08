@@ -11,7 +11,7 @@ from satellite.geometry import (
     believed_distance,
     cone_surface_mesh,
     global_spiral_frame,
-    plane_spiral_swept_mesh,
+    ribbon_swept_mesh,
     spiral_path_on_target_plane,
     spiral_trail_on_plane,
     transmitter_basis,
@@ -94,17 +94,18 @@ class TransmitterSDA:
     def swept_area_mesh_up_to(
         self,
         q: float,
-        path_steps: int,
+        u_steps: int,
+        v_steps: int,
     ) -> tuple[np.ndarray, np.ndarray]:
-        """Flat swept ribbon on the target plane at |P_t - P_1| height."""
-        return plane_spiral_swept_mesh(
+        """3D ribbon R(u,v) at actual-target range |P_t - P_1|."""
+        return ribbon_swept_mesh(
             self.p1,
             q,
-            self.boresight_at,
-            self.nominal_boresight,
-            self.actual_target_range,
+            self.frame_at,
             self.alpha,
-            path_steps,
+            self.actual_target_range,
+            u_steps,
+            v_steps,
         )
 
     def believed_target_at(self, q: float) -> Vec3:
