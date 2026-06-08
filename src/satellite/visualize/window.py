@@ -75,7 +75,7 @@ def run_visualizer(result: ScenarioResult, start_q: float = 0.0) -> None:
             self._dish_actor = None
             self._dish_ray_poly: pv.PolyData | None = None
             self._dish_ray_actor = None
-            self._dish_ray_length = float(np.linalg.norm(result.p1 - result.pt) * 0.25)
+            self._dish_ray_length = float(np.linalg.norm(result.p1 - result.pt))
             self._scene_built = False
             self._playing = False
 
