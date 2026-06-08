@@ -140,6 +140,7 @@ def run_visualizer(result: ScenarioResult, start_q: float = 0.0) -> None:
             verts, faces = result.transmitter.swept_area_mesh_up_to(
                 q,
                 viz.spiral_trail_steps,
+                viz.cone_v_steps,
             )
             return self._to_polydata(verts, faces)
 

@@ -65,6 +65,11 @@ def receiver_basis(pt: Vec3, p1: Vec3, u_up: Vec3 | None = None) -> tuple[Vec3, 
     return u_look, u_t, u_b
 
 
+def local_spiral_angles(u: float, w: float, k: float) -> tuple[float, float]:
+    """Desmos Theta_L(u) = w*u, Phi_L(u) = k*u in the transmitter local frame."""
+    return w * u, k * u
+
+
 def spiral_angles(
     u: float,
     theta_0: float,
@@ -72,6 +77,7 @@ def spiral_angles(
     w: float,
     k: float,
 ) -> tuple[float, float]:
+    """Global spherical angles Theta(u), Phi(u) — reference only."""
     return theta_0 + w * u, phi_0 + k * u
 
 
@@ -93,17 +99,20 @@ def local_spiral_frame(theta: float, phi: float) -> tuple[Vec3, Vec3, Vec3]:
 
 def global_spiral_frame(
     u: float,
-    theta_0: float,
-    phi_0: float,
     w: float,
     k: float,
     u_x: Vec3,
     u_y: Vec3,
     u_z: Vec3,
 ) -> tuple[Vec3, Vec3, Vec3]:
-    """Desmos A_s, B_s, C_s at parameter u."""
-    theta, phi = spiral_angles(u, theta_0, phi_0, w, k)
-    a_l, b_l, c_l = local_spiral_frame(theta, phi)
+    """
+    Desmos A_s, B_s, C_s at spiral parameter u.
+
+    Uses local angles Theta_L = w*u, Phi_L = k*u, then maps through (U_x, U_y, U_z).
+    At u=0 the boresight is U_z (believed direction toward P_2).
+    """
+    theta_l, phi_l = local_spiral_angles(u, w, k)
+    a_l, b_l, c_l = local_spiral_frame(theta_l, phi_l)
     return (
         transform_local_to_global(a_l, u_x, u_y, u_z),
         transform_local_to_global(b_l, u_x, u_y, u_z),
@@ -215,75 +224,51 @@ def spiral_path_on_target_plane(
     return np.array(points, dtype=np.float64)
 
 
-def spiral_swept_area_mesh(
+def desmos_k_surface_mesh(
     p1: Vec3,
     q_end: float,
-    boresight_fn: Callable[[float], Vec3],
-    plane_normal: Vec3,
-    plane_distance: float,
+    frame_fn: Callable[[float], tuple[Vec3, Vec3, Vec3]],
     alpha: float,
-    num_steps: int,
+    distance: float,
+    u_steps: int,
+    v_steps: int,
 ) -> tuple[np.ndarray, np.ndarray]:
     """
-    Filled orange swept area on the target plane, growing with q_end.
+    Desmos K(u,v) swept search caps from u=0 to u=q_end:
 
-    Triangulates from the nominal center (believed aim point on the plane) out
-    to the spiral path, plus small footprint disks along the path.
+        K(u,v) = P_1 + d*A_s(u) + d*tan(alpha)*cos(v)*B_s(u) + d*tan(alpha)*sin(v)*C_s(u)
+
+    At u=0 the first cap is centered on P_2 (believed target).
     """
-    n = normalize(plane_normal)
-    center = p1 + plane_distance * n
-    path = spiral_path_on_target_plane(
-        p1, q_end, boresight_fn, plane_normal, plane_distance, num_steps
-    )
-
-    if q_end <= 0.0 or len(path) < 2:
+    if q_end <= 0.0 or u_steps < 1 or v_steps < 3:
         return np.empty((0, 3)), np.empty((0, 3), dtype=np.int64)
 
-    footprint_r = plane_distance * np.tan(alpha)
-    disk_steps = 12
+    u_vals = linspace(0.0, q_end, max(2, u_steps))
+    v_vals = np.linspace(0.0, 2.0 * np.pi, v_steps, endpoint=False, dtype=np.float64)
 
-    verts: list[Vec3] = [center, *path]
+    verts: list[Vec3] = []
+    for u in u_vals:
+        a_s, b_s, c_s = frame_fn(u)
+        for v_angle in v_vals:
+            verts.append(
+                cone_surface_point(p1, a_s, b_s, c_s, alpha, distance, v_angle)
+            )
+
+    vertices = np.array(verts, dtype=np.float64)
+    u_count = len(u_vals)
     faces: list[list[int]] = []
 
-    # Fan from nominal center along the spiral (filled region grows with q)
-    for i in range(len(path) - 1):
-        faces.append([0, i + 1, i + 2])
+    for i in range(u_count - 1):
+        for j in range(v_steps):
+            j_next = (j + 1) % v_steps
+            a = i * v_steps + j
+            b_idx = i * v_steps + j_next
+            c_idx = (i + 1) * v_steps + j
+            d_idx = (i + 1) * v_steps + j_next
+            faces.append([a, b_idx, d_idx])
+            faces.append([a, d_idx, c_idx])
 
-    # Beam footprint disks along the path for visible width (Desmos orange disk)
-    sample_indices = list(range(0, len(path), max(1, len(path) // 30)))
-    if sample_indices[-1] != len(path) - 1:
-        sample_indices.append(len(path) - 1)
-
-    for idx in sample_indices:
-        point = path[idx]
-        if idx < len(path) - 1:
-            tangent = path[idx + 1] - path[idx]
-        elif idx > 0:
-            tangent = path[idx] - path[idx - 1]
-        else:
-            tangent = np.array([1.0, 0.0, 0.0])
-
-        tangent = tangent - dot(tangent, n) * n
-        if norm(tangent) < 1e-12:
-            fallback = np.array([1.0, 0.0, 0.0]) - dot(np.array([1.0, 0.0, 0.0]), n) * n
-            tangent = fallback if norm(fallback) > 1e-12 else np.array([0.0, 1.0, 0.0])
-        tangent = normalize(tangent)
-        bitangent = normalize(cross(n, tangent))
-
-        disk_center_idx = len(verts)
-        verts.append(point)
-        for k in range(disk_steps):
-            angle = 2.0 * np.pi * k / disk_steps
-            verts.append(
-                point
-                + footprint_r * np.cos(angle) * tangent
-                + footprint_r * np.sin(angle) * bitangent
-            )
-        for k in range(disk_steps):
-            k_next = (k + 1) % disk_steps
-            faces.append([disk_center_idx, disk_center_idx + 1 + k, disk_center_idx + 1 + k_next])
-
-    return np.array(verts, dtype=np.float64), np.array(faces, dtype=np.int64)
+    return vertices, np.array(faces, dtype=np.int64)
 
 
 def spiral_trail_on_plane(

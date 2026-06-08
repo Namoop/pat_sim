@@ -10,9 +10,9 @@ from satellite.geometry import (
     believed_direction,
     believed_distance,
     cone_surface_mesh,
+    desmos_k_surface_mesh,
     global_spiral_frame,
     spiral_path_on_target_plane,
-    spiral_swept_area_mesh,
     spiral_trail_on_plane,
     transmitter_basis,
 )
@@ -49,8 +49,6 @@ class TransmitterSDA:
     def frame_at(self, q: float) -> tuple[Vec3, Vec3, Vec3]:
         return global_spiral_frame(
             q,
-            self.theta_0,
-            self.phi_0,
             self.w,
             self.k,
             self.u_x,
@@ -93,17 +91,22 @@ class TransmitterSDA:
     def swept_area_mesh_up_to(
         self,
         q: float,
-        num_steps: int,
+        u_steps: int,
+        v_steps: int,
     ) -> tuple[np.ndarray, np.ndarray]:
-        return spiral_swept_area_mesh(
+        return desmos_k_surface_mesh(
             self.p1,
             q,
-            self.boresight_at,
-            self.nominal_boresight,
-            self.plane_distance,
+            self.frame_at,
             self.alpha,
-            num_steps,
+            self.plane_distance,
+            u_steps,
+            v_steps,
         )
+
+    def believed_target_at(self, q: float) -> Vec3:
+        """Beam-axis point at believed range — equals P_2 at q=0."""
+        return self.p1 + self.plane_distance * self.boresight_at(q)
 
     def spiral_trail(
         self,
