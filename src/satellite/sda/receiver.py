@@ -77,23 +77,23 @@ class ReceiverSDA:
 
     def observe_beam(self, in_cone: bool, beam_direction: Vec3, dq: float) -> Vec3:
         """
-        Update dish orientation when the beam is visible.
+        Update dish orientation after beam detection.
 
         beam_direction is the transmitter boresight (beam emission axis from P_1).
-        The dish points toward the source, opposite to that axis, slewing at a rate
-        set on first detection so the initial offset closes in dish_slew_time q units.
+        First collision starts tracking; slewing then continues toward the source
+        even if the dish rotates out of the beam.
         """
         toward_source = -normalize(beam_direction)
-        if in_cone:
-            if not self.dish.has_seen_beam:
-                incident = angle_between(self.dish.boresight, toward_source)
-                self.dish.incident_angle = incident
-                self.dish.has_seen_beam = True
-                if self.dish_slew_time > 0.0:
-                    self.dish.slew_rate = incident / self.dish_slew_time
-                else:
-                    self.dish.slew_rate = float("inf")
+        if in_cone and not self.dish.has_seen_beam:
+            incident = angle_between(self.dish.boresight, toward_source)
+            self.dish.incident_angle = incident
+            self.dish.has_seen_beam = True
+            if self.dish_slew_time > 0.0:
+                self.dish.slew_rate = incident / self.dish_slew_time
+            else:
+                self.dish.slew_rate = float("inf")
 
+        if self.dish.has_seen_beam:
             max_step = (self.dish.slew_rate or 0.0) * dq
             self.dish.boresight = rotate_toward(
                 self.dish.boresight,
