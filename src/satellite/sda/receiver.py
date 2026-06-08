@@ -76,16 +76,20 @@ class ReceiverSDA:
         """
         Update dish orientation when the beam is visible.
 
-        beam_direction is the transmitter boresight (incoming beam axis).
+        beam_direction is the transmitter boresight (beam emission axis from P_1).
+        The dish points toward the source, opposite to that axis.
         Detection still uses the existing in-cone test; the dish does not
         affect that yet.
         """
-        incoming = normalize(beam_direction)
+        toward_source = -normalize(beam_direction)
         if in_cone:
             if not self.dish.has_seen_beam:
-                self.dish.incident_angle = angle_between(self.dish.boresight, incoming)
+                self.dish.incident_angle = angle_between(
+                    self.dish.boresight,
+                    toward_source,
+                )
                 self.dish.has_seen_beam = True
-            self.dish.boresight = incoming
+            self.dish.boresight = toward_source
         return self.dish.boresight
 
     def dish_mesh_at(
