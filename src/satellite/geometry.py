@@ -65,6 +65,44 @@ def receiver_basis(pt: Vec3, p1: Vec3, u_up: Vec3 | None = None) -> tuple[Vec3, 
     return u_look, u_t, u_b
 
 
+def direction_with_local_offset(
+    base: Vec3,
+    theta_offset: float,
+    phi_offset: float,
+) -> Vec3:
+    """Apply small local theta/phi offsets to a unit direction."""
+    theta_0, phi_0 = spherical_angles_from_direction(base)
+    u_x, u_y, u_z = transmitter_basis(theta_0, phi_0)
+    local = spherical_to_cartesian(theta_offset, phi_offset)
+    return normalize(transform_local_to_global(local, u_x, u_y, u_z))
+
+
+def axis_perpendicular_basis(axis: Vec3) -> tuple[Vec3, Vec3]:
+    axis = normalize(axis)
+    ref = np.array([0.0, 0.0, 1.0], dtype=np.float64)
+    if abs(dot(axis, ref)) > 0.95:
+        ref = np.array([0.0, 1.0, 0.0], dtype=np.float64)
+    u = normalize(cross(axis, ref))
+    v = cross(axis, u)
+    return u, v
+
+
+def dish_mesh(
+    mount: Vec3,
+    boresight: Vec3,
+    radius: float,
+    depth: float,
+    u_steps: int = 12,
+    v_steps: int = 24,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Shallow dish cone on a mount point, opening along boresight."""
+    axis = normalize(boresight)
+    u, v = axis_perpendicular_basis(axis)
+    half_angle = float(np.arctan2(radius, depth))
+    apex = mount - depth * axis
+    return cone_surface_mesh(apex, axis, u, v, half_angle, depth, u_steps, v_steps)
+
+
 def local_spiral_angles(u: float, w: float, k: float) -> tuple[float, float]:
     """Desmos Theta_L(u) = w*u, Phi_L(u) = k*u in the transmitter local frame."""
     return w * u, k * u

@@ -32,6 +32,11 @@ def normalize(v: Vec3) -> Vec3:
     return v / n
 
 
+def angle_between(a: Vec3, b: Vec3) -> float:
+    """Angle in radians between two directions."""
+    return float(np.arccos(np.clip(dot(normalize(a), normalize(b)), -1.0, 1.0)))
+
+
 def distance(a: Vec3, b: Vec3) -> float:
     return norm(b - a)
 

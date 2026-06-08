@@ -22,6 +22,13 @@ L_r = 0.15
 q_max = 5.0
 q_step = 0.01
 
+[receiver]
+dish_theta_offset = 0.08
+dish_phi_offset = 0.06
+body_radius = 0.1
+dish_radius = 0.08
+dish_depth = 0.04
+
 [visualization]
 enabled = false
 cone_u_steps = 24

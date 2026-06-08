@@ -42,6 +42,15 @@ class SimulationConfig:
 
 
 @dataclass(frozen=True)
+class ReceiverConfig:
+    dish_theta_offset: float
+    dish_phi_offset: float
+    body_radius: float
+    dish_radius: float
+    dish_depth: float
+
+
+@dataclass(frozen=True)
 class VisualizationConfig:
     enabled: bool
     cone_u_steps: int
@@ -57,6 +66,7 @@ class ScenarioConfig:
     offsets: OffsetsConfig
     sda: SdaConfig
     simulation: SimulationConfig
+    receiver: ReceiverConfig
     visualization: VisualizationConfig
 
 
@@ -77,6 +87,7 @@ def load_config(path: str | Path) -> ScenarioConfig:
     offsets = data.get("offsets", {})
     sda = data.get("sda", {})
     simulation = data.get("simulation", {})
+    receiver = data.get("receiver", {})
     visualization = data.get("visualization", {})
 
     pt_raw = positions.get("pt")
@@ -109,6 +120,13 @@ def load_config(path: str | Path) -> ScenarioConfig:
             q_max=float(simulation["q_max"]),
             q_step=float(simulation["q_step"]),
             beam_length=beam_length,
+        ),
+        receiver=ReceiverConfig(
+            dish_theta_offset=float(receiver.get("dish_theta_offset", 0.08)),
+            dish_phi_offset=float(receiver.get("dish_phi_offset", 0.06)),
+            body_radius=float(receiver.get("body_radius", 0.1)),
+            dish_radius=float(receiver.get("dish_radius", 0.08)),
+            dish_depth=float(receiver.get("dish_depth", 0.04)),
         ),
         visualization=VisualizationConfig(
             enabled=bool(visualization.get("enabled", False)),

@@ -5,12 +5,32 @@ from __future__ import annotations
 from collections.abc import Callable
 from dataclasses import dataclass
 
+import numpy as np
+
 from satellite.config import ScenarioConfig, resolve_actual_position
 from satellite.detection import alignment_dot, in_cone_at_q, scan_hits_up_to
 from satellite.geometry import actual_target_direction, believed_direction
 from satellite.math3d import Vec3, distance, norm
 from satellite.sda.receiver import ReceiverSDA
 from satellite.sda.transmitter import TransmitterSDA
+
+
+def replay_dish_tracking(
+    receiver: ReceiverSDA,
+    transmitter: TransmitterSDA,
+    in_cone_at_q: Callable[[float], bool],
+    q_end: float,
+    q_step: float,
+) -> None:
+    """Replay dish orientation from q=0 through q_end."""
+    receiver.reset_dish_tracking()
+    q = 0.0
+    while q <= q_end + 1e-12:
+        receiver.observe_beam(
+            in_cone_at_q(q),
+            transmitter.boresight_at(q),
+        )
+        q += q_step
 
 
 @dataclass
@@ -57,6 +77,11 @@ def run_scenario(config: ScenarioConfig) -> ScenarioResult:
         config.sda.beta,
         config.sda.omega_r,
         config.sda.L_r,
+        dish_theta_offset=config.receiver.dish_theta_offset,
+        dish_phi_offset=config.receiver.dish_phi_offset,
+        body_radius=config.receiver.body_radius,
+        dish_radius=config.receiver.dish_radius,
+        dish_depth=config.receiver.dish_depth,
     )
 
     target_direction = actual_target_direction(p1, pt)
@@ -76,6 +101,14 @@ def run_scenario(config: ScenarioConfig) -> ScenarioResult:
     alignment_at_q_max = alignment_dot(
         target_direction,
         transmitter.boresight_at(config.simulation.q_max),
+    )
+
+    replay_dish_tracking(
+        receiver,
+        transmitter,
+        check_in_cone,
+        config.simulation.q_max,
+        config.simulation.q_step,
     )
 
     return ScenarioResult(
@@ -107,9 +140,14 @@ def format_summary(result: ScenarioResult) -> str:
     ]
     if result.hit_at_q is not None:
         lines.append(f"Hit at q = {result.hit_at_q:.4f}")
+    if result.receiver.dish.has_seen_beam and result.receiver.dish.incident_angle is not None:
+        lines.append(
+            f"Dish incident angle at first detection = "
+            f"{np.degrees(result.receiver.dish.incident_angle):.3f} deg"
+        )
     lines.append(
         f"Alignment at q_max = {result.alignment_at_q_max:.6f} "
-        f"(threshold cos(alpha) = {__import__('numpy').cos(result.config.sda.alpha):.6f})"
+        f"(threshold cos(alpha) = {np.cos(result.config.sda.alpha):.6f})"
     )
     q_max = result.config.simulation.q_max
     lines.append(

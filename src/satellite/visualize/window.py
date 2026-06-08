@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from satellite.scenario import ScenarioResult
+from satellite.scenario import ScenarioResult, replay_dish_tracking
 
 
 def _configure_qt_platform() -> None:
@@ -71,6 +71,8 @@ def run_visualizer(result: ScenarioResult, start_q: float = 0.0) -> None:
             self._swept_poly: pv.PolyData | None = None
             self._swept_actor = None
             self._receiver_actor = None
+            self._dish_poly: pv.PolyData | None = None
+            self._dish_actor = None
             self._scene_built = False
             self._playing = False
 
@@ -137,8 +139,10 @@ def run_visualizer(result: ScenarioResult, start_q: float = 0.0) -> None:
                 label="believed target",
             )
 
+            body_radius = config.receiver.body_radius
+
             self._receiver_actor = p.add_mesh(
-                pv.Sphere(radius=0.1, center=result.pt),
+                pv.Sphere(radius=body_radius, center=result.pt),
                 color="red",
                 label="receiver (actual)",
             )
@@ -174,6 +178,13 @@ def run_visualizer(result: ScenarioResult, start_q: float = 0.0) -> None:
             )
             return self._to_polydata(verts, faces)
 
+        def _dish_mesh(self) -> pv.PolyData:
+            verts, faces = result.receiver.dish_mesh_at(
+                viz.cone_u_steps // 2,
+                viz.cone_v_steps // 2,
+            )
+            return self._to_polydata(verts, faces)
+
         def _set_q(self, q: float) -> None:
             """Update time display and scene without changing slider signals."""
             q = float(np.clip(q, 0.0, q_max))
@@ -184,6 +195,13 @@ def run_visualizer(result: ScenarioResult, start_q: float = 0.0) -> None:
             self.slider.setValue(int(q / q_step))
             self.slider.blockSignals(False)
 
+            replay_dish_tracking(
+                result.receiver,
+                result.transmitter,
+                result.in_cone_at_q,
+                q,
+                q_step,
+            )
             self._update_scene()
 
         def _update_mesh_actor(
@@ -245,6 +263,15 @@ def run_visualizer(result: ScenarioResult, start_q: float = 0.0) -> None:
             color = "limegreen" if in_cone else "red"
             prop = self._receiver_actor.GetProperty()
             prop.SetColor(*pv.Color(color).float_rgb)
+
+            self._update_mesh_actor(
+                self._dish_mesh(),
+                "_dish_poly",
+                "_dish_actor",
+                color="gold",
+                opacity=0.85,
+                label="receiver dish",
+            )
 
             if self.isVisible():
                 self.plotter.render()
