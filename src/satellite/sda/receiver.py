@@ -21,6 +21,7 @@ class ReceiverDishState:
     incident_angle: float | None = None
     has_seen_beam: bool = False
     slew_rate: float | None = None
+    track_target: Vec3 | None = None
 
 
 class ReceiverSDA:
@@ -80,24 +81,25 @@ class ReceiverSDA:
         Update dish orientation after beam detection.
 
         beam_direction is the transmitter boresight (beam emission axis from P_1).
-        First collision starts tracking; slewing then continues toward the source
-        even if the dish rotates out of the beam.
+        On first collision the incident angle and a fixed track target are recorded;
+        slewing continues toward that target even after the beam moves away.
         """
-        toward_source = -normalize(beam_direction)
         if in_cone and not self.dish.has_seen_beam:
+            toward_source = -normalize(beam_direction)
             incident = angle_between(self.dish.boresight, toward_source)
             self.dish.incident_angle = incident
+            self.dish.track_target = toward_source.copy()
             self.dish.has_seen_beam = True
             if self.dish_slew_time > 0.0:
                 self.dish.slew_rate = incident / self.dish_slew_time
             else:
                 self.dish.slew_rate = float("inf")
 
-        if self.dish.has_seen_beam:
+        if self.dish.has_seen_beam and self.dish.track_target is not None:
             max_step = (self.dish.slew_rate or 0.0) * dq
             self.dish.boresight = rotate_toward(
                 self.dish.boresight,
-                toward_source,
+                self.dish.track_target,
                 max_step,
             )
         return self.dish.boresight
