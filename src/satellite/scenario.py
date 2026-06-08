@@ -45,6 +45,7 @@ def run_scenario(config: ScenarioConfig) -> ScenarioResult:
     transmitter = TransmitterSDA(
         p1,
         p2,
+        pt,
         config.sda.k,
         config.sda.alpha,
         config.simulation.beam_length,

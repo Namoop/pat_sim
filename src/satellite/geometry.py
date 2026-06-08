@@ -238,7 +238,8 @@ def desmos_k_surface_mesh(
 
         K(u,v) = P_1 + d*A_s(u) + d*tan(alpha)*cos(v)*B_s(u) + d*tan(alpha)*sin(v)*C_s(u)
 
-    At u=0 the first cap is centered on P_2 (believed target).
+    At u=0 the first cap lies along the believed boresight at the given range.
+    For visualization, pass |P_t - P_1| so caps sit at actual-target height.
     """
     if q_end <= 0.0 or u_steps < 1 or v_steps < 3:
         return np.empty((0, 3)), np.empty((0, 3), dtype=np.int64)
