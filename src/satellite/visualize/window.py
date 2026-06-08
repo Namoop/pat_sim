@@ -48,7 +48,9 @@ def run_visualizer(result: ScenarioResult, start_q: float = 0.0) -> None:
             self.resize(1100, 800)
 
             self.current_q = float(np.clip(start_q, 0.0, q_max))
+            self._cone_poly: pv.PolyData | None = None
             self._cone_actor = None
+            self._swept_poly: pv.PolyData | None = None
             self._swept_actor = None
             self._receiver_actor = None
             self._scene_built = False
@@ -166,29 +168,60 @@ def run_visualizer(result: ScenarioResult, start_q: float = 0.0) -> None:
 
             self._update_scene()
 
+        def _update_mesh_actor(
+            self,
+            mesh: pv.PolyData,
+            poly_attr: str,
+            actor_attr: str,
+            *,
+            color: str,
+            opacity: float,
+            label: str | None = None,
+        ) -> None:
+            """Create actor once, then update points in place to avoid flicker."""
+            poly = getattr(self, poly_attr)
+            actor = getattr(self, actor_attr)
+
+            if mesh.n_points == 0:
+                if actor is not None:
+                    actor.SetVisibility(0)
+                return
+
+            if poly is None or actor is None:
+                setattr(self, poly_attr, mesh)
+                kwargs: dict = {
+                    "color": color,
+                    "opacity": opacity,
+                    "show_edges": False,
+                }
+                if label is not None:
+                    kwargs["label"] = label
+                actor = self.plotter.add_mesh(mesh, **kwargs)
+                setattr(self, actor_attr, actor)
+                return
+
+            actor.SetVisibility(1)
+            poly.points = mesh.points
+            poly.Modified()
+            actor.mapper.Update()
+
         def _update_scene(self) -> None:
-
-            if self._cone_actor is not None:
-                self.plotter.remove_actor(self._cone_actor)
-            if self._swept_actor is not None:
-                self.plotter.remove_actor(self._swept_actor)
-
-            self._cone_actor = self.plotter.add_mesh(
+            self._update_mesh_actor(
                 self._cone_mesh(self.current_q),
+                "_cone_poly",
+                "_cone_actor",
                 color="crimson",
                 opacity=0.45,
-                show_edges=False,
             )
 
-            swept = self._swept_area_mesh(self.current_q)
-            if swept.n_points > 0:
-                self._swept_actor = self.plotter.add_mesh(
-                    swept,
-                    color="orange",
-                    opacity=0.55,
-                    show_edges=False,
-                    label="swept area",
-                )
+            self._update_mesh_actor(
+                self._swept_area_mesh(self.current_q),
+                "_swept_poly",
+                "_swept_actor",
+                color="orange",
+                opacity=0.55,
+                label="swept area",
+            )
 
             in_cone = result.in_cone_at_q(self.current_q)
             color = "limegreen" if in_cone else "red"
