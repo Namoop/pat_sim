@@ -183,6 +183,7 @@ def run_visualizer(result: ScenarioResult, start_q: float = 0.0) -> None:
                 q,
                 viz.spiral_trail_steps,
                 viz.ribbon_v_steps,
+                target_range=result.receiver.dish_range_from_p1(),
             )
             return self._to_polydata(verts, faces)
 

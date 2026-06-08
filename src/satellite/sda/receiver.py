@@ -13,7 +13,7 @@ from satellite.geometry import (
     receiver_global_frame,
     receiver_basis,
 )
-from satellite.math3d import Vec3, angle_between, normalize, rotate_toward
+from satellite.math3d import Vec3, angle_between, distance, normalize, rotate_toward
 
 
 @dataclass
@@ -82,6 +82,10 @@ class ReceiverSDA:
     def dish_mount(self) -> Vec3:
         """Dish mount on the receiver body surface along current boresight."""
         return self.pt + self.dish.boresight * self.body_radius
+
+    def dish_range_from_p1(self) -> float:
+        """Range from P_1 to the dish mount on the receiver surface."""
+        return distance(self.p1, self.dish_mount)
 
     def dish_aperture_radius(self) -> float:
         return dish_aperture_radius(self.p1, self.dish_mount, self.dish_fov)

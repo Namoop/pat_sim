@@ -96,14 +96,15 @@ class TransmitterSDA:
         q: float,
         u_steps: int,
         v_steps: int,
+        target_range: float | None = None,
     ) -> tuple[np.ndarray, np.ndarray]:
-        """3D ribbon R(u,v) at actual-target range |P_t - P_1|."""
+        """3D ribbon R(u,v) at target range along each boresight."""
         return ribbon_swept_mesh(
             self.p1,
             q,
             self.frame_at,
             self.alpha,
-            self.actual_target_range,
+            target_range if target_range is not None else self.actual_target_range,
             u_steps,
             v_steps,
         )
