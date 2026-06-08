@@ -16,6 +16,24 @@ def _configure_qt_platform() -> None:
         os.environ["QT_QPA_PLATFORM"] = "xcb"
 
 
+def _install_sigint_handler(app, window) -> None:
+    """Allow Ctrl+C to close the window cleanly while Qt owns the event loop."""
+    import signal
+
+    def _handle_sigint(_signum, _frame) -> None:
+        window.close()
+        app.quit()
+
+    signal.signal(signal.SIGINT, _handle_sigint)
+
+    # Periodically yield to Python so SIGINT is delivered during app.exec().
+    from PyQt6.QtCore import QTimer
+
+    timer = QTimer()
+    timer.timeout.connect(lambda: None)
+    timer.start(200)
+
+
 def run_visualizer(result: ScenarioResult, start_q: float = 0.0) -> None:
     """Open interactive 3D window. Imports pyvista/Qt lazily."""
     _configure_qt_platform()
@@ -270,4 +288,5 @@ def run_visualizer(result: ScenarioResult, start_q: float = 0.0) -> None:
 
     window = SatelliteWindow()
     window.show()
+    _install_sigint_handler(app, window)
     app.exec()

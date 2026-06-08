@@ -45,7 +45,11 @@ def main(argv: list[str] | None = None) -> int:
     if visualize:
         from satellite.visualize import run_visualizer
 
-        run_visualizer(result, start_q=args.q)
+        try:
+            run_visualizer(result, start_q=args.q)
+        except KeyboardInterrupt:
+            print("Interrupted.", file=sys.stderr)
+            return 130
 
     return 0
 
