@@ -155,7 +155,7 @@ def run_visualizer(result: ScenarioResult, start_q: float = 0.0) -> None:
             p.reset_camera()
             cam = p.camera
             old_focal = np.array(cam.focal_point, dtype=np.float64)
-            new_focal = np.asarray(result.p2, dtype=np.float64)
+            new_focal = np.asarray(result.pt, dtype=np.float64)
             cam.focal_point = new_focal
             cam.position = np.array(cam.position, dtype=np.float64) + (new_focal - old_focal)
 
