@@ -73,6 +73,9 @@ def run_visualizer(result: ScenarioResult, start_q: float = 0.0) -> None:
             self._receiver_actor = None
             self._dish_poly: pv.PolyData | None = None
             self._dish_actor = None
+            self._dish_ray_poly: pv.PolyData | None = None
+            self._dish_ray_actor = None
+            self._dish_ray_length = float(np.linalg.norm(result.p1 - result.pt) * 0.25)
             self._scene_built = False
             self._playing = False
 
@@ -190,6 +193,37 @@ def run_visualizer(result: ScenarioResult, start_q: float = 0.0) -> None:
             )
             return self._to_polydata(verts, faces)
 
+        def _dish_boresight_line(self) -> pv.PolyData:
+            mount = result.receiver.dish_mount
+            end = mount + result.receiver.dish.boresight * self._dish_ray_length
+            return pv.Line(mount, end)
+
+        def _update_line_actor(
+            self,
+            line: pv.PolyData,
+            poly_attr: str,
+            actor_attr: str,
+            *,
+            color: str,
+            line_width: float,
+            label: str | None = None,
+        ) -> None:
+            poly = getattr(self, poly_attr)
+            actor = getattr(self, actor_attr)
+
+            if poly is None or actor is None:
+                setattr(self, poly_attr, line)
+                kwargs: dict = {"color": color, "line_width": line_width}
+                if label is not None:
+                    kwargs["label"] = label
+                actor = self.plotter.add_mesh(line, **kwargs)
+                setattr(self, actor_attr, actor)
+                return
+
+            poly.points = line.points
+            poly.Modified()
+            actor.mapper.Update()
+
         def _set_q(self, q: float) -> None:
             """Update time display and scene without changing slider signals."""
             q = float(np.clip(q, 0.0, q_max))
@@ -276,6 +310,15 @@ def run_visualizer(result: ScenarioResult, start_q: float = 0.0) -> None:
                 color="gold",
                 opacity=0.85,
                 label="receiver dish",
+            )
+
+            self._update_line_actor(
+                self._dish_boresight_line(),
+                "_dish_ray_poly",
+                "_dish_ray_actor",
+                color="cyan",
+                line_width=4,
+                label="dish boresight",
             )
 
             if self.isVisible():
