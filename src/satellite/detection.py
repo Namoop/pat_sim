@@ -76,13 +76,14 @@ def beam_hits_dish_at_q(
     apex: Vec3,
     dish_mount: Vec3,
     dish_boresight: Vec3,
+    body_radius: float,
     dish_fov: float,
     boresight_fn: Callable[[float], Vec3],
     alpha: float,
     beam_length: float,
 ) -> bool:
     """True when the transmitter cone at q intersects the receiver dish disc."""
-    radius = dish_aperture_radius(apex, dish_mount, dish_fov)
+    radius = dish_aperture_radius(body_radius, dish_fov)
     return cone_intersects_disc(
         apex,
         boresight_fn(q),
@@ -100,6 +101,7 @@ def scan_dish_hits_up_to(
     apex: Vec3,
     dish_mount: Vec3,
     dish_boresight: Vec3,
+    body_radius: float,
     dish_fov: float,
     boresight_fn: Callable[[float], Vec3],
     alpha: float,
@@ -119,6 +121,7 @@ def scan_dish_hits_up_to(
             apex,
             dish_mount,
             dish_boresight,
+            body_radius,
             dish_fov,
             boresight_fn,
             alpha,

@@ -88,7 +88,7 @@ class ReceiverSDA:
         return distance(self.p1, self.dish_mount)
 
     def dish_aperture_radius(self) -> float:
-        return dish_aperture_radius(self.p1, self.dish_mount, self.dish_fov)
+        return dish_aperture_radius(self.body_radius, self.dish_fov)
 
     def observe_beam(self, in_cone: bool, beam_direction: Vec3, dq: float) -> Vec3:
         """

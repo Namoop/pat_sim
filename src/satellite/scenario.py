@@ -93,6 +93,7 @@ def run_scenario(config: ScenarioConfig) -> ScenarioResult:
     alpha = config.sda.alpha
     beam_length = transmitter.beam_length
     dish_fov = config.receiver.dish_fov
+    body_radius = config.receiver.body_radius
 
     def check_dish_hit(q: float) -> bool:
         return beam_hits_dish_at_q(
@@ -100,6 +101,7 @@ def run_scenario(config: ScenarioConfig) -> ScenarioResult:
             p1,
             receiver.dish_mount,
             receiver.dish.boresight,
+            body_radius,
             dish_fov,
             transmitter.boresight_at,
             alpha,
@@ -112,6 +114,7 @@ def run_scenario(config: ScenarioConfig) -> ScenarioResult:
         p1,
         receiver.initial_dish_mount,
         receiver.initial_dish_boresight,
+        body_radius,
         dish_fov,
         transmitter.boresight_at,
         alpha,

@@ -87,10 +87,9 @@ def axis_perpendicular_basis(axis: Vec3) -> tuple[Vec3, Vec3]:
     return u, v
 
 
-def dish_aperture_radius(source: Vec3, mount: Vec3, dish_fov: float) -> float:
-    """Physical disc radius from full FOV (radians) at range to the source."""
-    d = distance(source, mount)
-    return d * np.tan(dish_fov / 2.0)
+def dish_aperture_radius(body_radius: float, dish_fov: float) -> float:
+    """Physical disc radius from full FOV (radians) relative to the body."""
+    return body_radius * np.tan(dish_fov / 2.0)
 
 
 def dish_disc_mesh(
