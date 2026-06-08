@@ -48,6 +48,7 @@ class ReceiverConfig:
     body_radius: float
     dish_radius: float
     dish_depth: float
+    dish_slew_time: float
 
 
 @dataclass(frozen=True)
@@ -127,6 +128,7 @@ def load_config(path: str | Path) -> ScenarioConfig:
             body_radius=float(receiver.get("body_radius", 0.1)),
             dish_radius=float(receiver.get("dish_radius", 0.08)),
             dish_depth=float(receiver.get("dish_depth", 0.04)),
+            dish_slew_time=float(receiver.get("dish_slew_time", 0.3)),
         ),
         visualization=VisualizationConfig(
             enabled=bool(visualization.get("enabled", False)),

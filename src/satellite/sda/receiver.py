@@ -12,7 +12,7 @@ from satellite.geometry import (
     receiver_global_frame,
     receiver_basis,
 )
-from satellite.math3d import Vec3, angle_between, normalize
+from satellite.math3d import Vec3, angle_between, normalize, rotate_toward
 
 
 @dataclass
@@ -20,6 +20,7 @@ class ReceiverDishState:
     boresight: Vec3
     incident_angle: float | None = None
     has_seen_beam: bool = False
+    slew_rate: float | None = None
 
 
 class ReceiverSDA:
@@ -38,6 +39,7 @@ class ReceiverSDA:
         body_radius: float = 0.1,
         dish_radius: float = 0.08,
         dish_depth: float = 0.04,
+        dish_slew_time: float = 0.3,
     ) -> None:
         self.p1 = p1
         self.pt = pt
@@ -48,6 +50,7 @@ class ReceiverSDA:
         self.body_radius = body_radius
         self.dish_radius = dish_radius
         self.dish_depth = dish_depth
+        self.dish_slew_time = dish_slew_time
 
         self.d_circ = actual_target_plane_distance(p1, pt, l_r)
 
@@ -72,24 +75,31 @@ class ReceiverSDA:
         """Dish mount on the receiver body surface along current boresight."""
         return self.pt + self.dish.boresight * self.body_radius
 
-    def observe_beam(self, in_cone: bool, beam_direction: Vec3) -> Vec3:
+    def observe_beam(self, in_cone: bool, beam_direction: Vec3, dq: float) -> Vec3:
         """
         Update dish orientation when the beam is visible.
 
         beam_direction is the transmitter boresight (beam emission axis from P_1).
-        The dish points toward the source, opposite to that axis.
-        Detection still uses cone-dish collision; the dish does not
-        affect that yet beyond being the collision target.
+        The dish points toward the source, opposite to that axis, slewing at a rate
+        set on first detection so the initial offset closes in dish_slew_time q units.
         """
         toward_source = -normalize(beam_direction)
         if in_cone:
             if not self.dish.has_seen_beam:
-                self.dish.incident_angle = angle_between(
-                    self.dish.boresight,
-                    toward_source,
-                )
+                incident = angle_between(self.dish.boresight, toward_source)
+                self.dish.incident_angle = incident
                 self.dish.has_seen_beam = True
-            self.dish.boresight = toward_source
+                if self.dish_slew_time > 0.0:
+                    self.dish.slew_rate = incident / self.dish_slew_time
+                else:
+                    self.dish.slew_rate = float("inf")
+
+            max_step = (self.dish.slew_rate or 0.0) * dq
+            self.dish.boresight = rotate_toward(
+                self.dish.boresight,
+                toward_source,
+                max_step,
+            )
         return self.dish.boresight
 
     def dish_mesh_at(

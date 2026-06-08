@@ -33,6 +33,7 @@ def replay_dish_tracking(
         receiver.observe_beam(
             in_cone_at_q(q),
             transmitter.boresight_at(q),
+            q_step,
         )
         q += q_step
 
@@ -86,6 +87,7 @@ def run_scenario(config: ScenarioConfig) -> ScenarioResult:
         body_radius=config.receiver.body_radius,
         dish_radius=config.receiver.dish_radius,
         dish_depth=config.receiver.dish_depth,
+        dish_slew_time=config.receiver.dish_slew_time,
     )
 
     target_direction = actual_target_direction(p1, pt)

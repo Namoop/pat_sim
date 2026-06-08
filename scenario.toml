@@ -3,19 +3,19 @@ name = "desmos_default"
 
 [positions]
 p1 = [0.0, 0.0, 0.0]
-p2 = [0.0, 1.0, 5.0]
-pt = [0.8, 0.0, 4.5]
+p2 = [0.0, 0.5, 10.5]
+pt = [0, 0.0, 10]
 
 [offsets]
 theta_jumble = 0.0
 phi_jumble = 0.0
 
 [sda]
-k = 5.0
-alpha = 0.0335
+k = 10.0
+alpha = 0.005
 gamma = 0.5
 beta = 0.5
-omega_r = 10.0
+omega_r = 10.0 #ideally pi_k / alpha
 L_r = 0.15
 
 [simulation]
@@ -23,11 +23,12 @@ q_max = 5.0
 q_step = 0.01
 
 [receiver]
-dish_theta_offset = 0.08
-dish_phi_offset = 0.06
+dish_theta_offset = 0.52
+dish_phi_offset = 0.36
 body_radius = 0.1
-dish_radius = 0.08
-dish_depth = 0.04
+dish_radius = 0.03
+dish_depth = 0.0005
+dish_slew_time = 0.3
 
 [visualization]
 enabled = false

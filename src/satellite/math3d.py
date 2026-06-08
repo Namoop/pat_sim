@@ -37,6 +37,28 @@ def angle_between(a: Vec3, b: Vec3) -> float:
     return float(np.arccos(np.clip(dot(normalize(a), normalize(b)), -1.0, 1.0)))
 
 
+def slerp(a: Vec3, b: Vec3, t: float) -> Vec3:
+    """Spherical linear interpolation between unit directions."""
+    a_u = normalize(a)
+    b_u = normalize(b)
+    cos_theta = dot(a_u, b_u)
+    if cos_theta > 0.9999:
+        return normalize(a_u + t * (b_u - a_u))
+    theta = float(np.arccos(np.clip(cos_theta, -1.0, 1.0)))
+    sin_theta = np.sin(theta)
+    w1 = np.sin((1.0 - t) * theta) / sin_theta
+    w2 = np.sin(t * theta) / sin_theta
+    return w1 * a_u + w2 * b_u
+
+
+def rotate_toward(from_dir: Vec3, to_dir: Vec3, max_angle: float) -> Vec3:
+    """Rotate from_dir toward to_dir by at most max_angle radians."""
+    angle = angle_between(from_dir, to_dir)
+    if angle <= max_angle:
+        return normalize(to_dir)
+    return slerp(from_dir, to_dir, max_angle / angle)
+
+
 def distance(a: Vec3, b: Vec3) -> float:
     return norm(b - a)
 
