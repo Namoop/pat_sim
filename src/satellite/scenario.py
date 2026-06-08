@@ -10,8 +10,8 @@ import numpy as np
 from satellite.config import ScenarioConfig, resolve_actual_position
 from satellite.detection import (
     alignment_dot,
-    beam_hits_receiver_at_q,
-    scan_beam_hits_up_to,
+    beam_hits_dish_at_q,
+    scan_dish_hits_up_to,
 )
 from satellite.geometry import actual_target_direction, believed_direction
 from satellite.math3d import Vec3, distance, norm
@@ -91,25 +91,24 @@ def run_scenario(config: ScenarioConfig) -> ScenarioResult:
     target_direction = actual_target_direction(p1, pt)
     alpha = config.sda.alpha
     beam_length = transmitter.beam_length
-    receiver_radius = config.receiver.body_radius
 
-    def check_beam_hit(q: float) -> bool:
-        return beam_hits_receiver_at_q(
+    def check_dish_hit(q: float) -> bool:
+        return beam_hits_dish_at_q(
             q,
             p1,
-            pt,
-            receiver_radius,
+            receiver.dish_mount,
+            receiver.dish_radius,
             transmitter.boresight_at,
             alpha,
             beam_length,
         )
 
-    hit, hit_at_q = scan_beam_hits_up_to(
+    hit, hit_at_q = scan_dish_hits_up_to(
         config.simulation.q_max,
         config.simulation.q_step,
         p1,
-        pt,
-        receiver_radius,
+        receiver.dish_mount,
+        receiver.dish_radius,
         transmitter.boresight_at,
         alpha,
         beam_length,
@@ -123,7 +122,7 @@ def run_scenario(config: ScenarioConfig) -> ScenarioResult:
     replay_dish_tracking(
         receiver,
         transmitter,
-        check_beam_hit,
+        check_dish_hit,
         config.simulation.q_max,
         config.simulation.q_step,
     )
@@ -139,7 +138,7 @@ def run_scenario(config: ScenarioConfig) -> ScenarioResult:
         hit=hit,
         hit_at_q=hit_at_q,
         alignment_at_q_max=alignment_at_q_max,
-        in_cone_at_q=check_beam_hit,
+        in_cone_at_q=check_dish_hit,
     )
 
 

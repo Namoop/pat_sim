@@ -78,8 +78,8 @@ class ReceiverSDA:
 
         beam_direction is the transmitter boresight (beam emission axis from P_1).
         The dish points toward the source, opposite to that axis.
-        Detection still uses the existing in-cone test; the dish does not
-        affect that yet.
+        Detection still uses cone-dish collision; the dish does not
+        affect that yet beyond being the collision target.
         """
         toward_source = -normalize(beam_direction)
         if in_cone:
