@@ -85,21 +85,22 @@ def run_scenario(config: ScenarioConfig) -> ScenarioResult:
         dish_theta_offset=config.receiver.dish_theta_offset,
         dish_phi_offset=config.receiver.dish_phi_offset,
         body_radius=config.receiver.body_radius,
-        dish_radius=config.receiver.dish_radius,
-        dish_depth=config.receiver.dish_depth,
+        dish_fov=config.receiver.dish_fov,
         dish_slew_time=config.receiver.dish_slew_time,
     )
 
     target_direction = actual_target_direction(p1, pt)
     alpha = config.sda.alpha
     beam_length = transmitter.beam_length
+    dish_fov = config.receiver.dish_fov
 
     def check_dish_hit(q: float) -> bool:
         return beam_hits_dish_at_q(
             q,
             p1,
             receiver.dish_mount,
-            receiver.dish_radius,
+            receiver.dish.boresight,
+            dish_fov,
             transmitter.boresight_at,
             alpha,
             beam_length,
@@ -109,8 +110,9 @@ def run_scenario(config: ScenarioConfig) -> ScenarioResult:
         config.simulation.q_max,
         config.simulation.q_step,
         p1,
-        receiver.dish_mount,
-        receiver.dish_radius,
+        receiver.initial_dish_mount,
+        receiver.initial_dish_boresight,
+        dish_fov,
         transmitter.boresight_at,
         alpha,
         beam_length,

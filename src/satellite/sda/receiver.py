@@ -8,7 +8,8 @@ from satellite.geometry import (
     actual_target_plane_distance,
     cone_surface_mesh,
     direction_with_local_offset,
-    dish_mesh,
+    dish_aperture_radius,
+    dish_disc_mesh,
     receiver_global_frame,
     receiver_basis,
 )
@@ -37,9 +38,8 @@ class ReceiverSDA:
         l_r: float,
         dish_theta_offset: float = 0.08,
         dish_phi_offset: float = 0.06,
-        body_radius: float = 0.1,
-        dish_radius: float = 0.08,
-        dish_depth: float = 0.04,
+        body_radius: float = 0.5,
+        dish_fov: float = 0.002,
         dish_slew_time: float = 0.3,
     ) -> None:
         self.p1 = p1
@@ -49,8 +49,7 @@ class ReceiverSDA:
         self.omega_r = omega_r
         self.l_r = l_r
         self.body_radius = body_radius
-        self.dish_radius = dish_radius
-        self.dish_depth = dish_depth
+        self.dish_fov = dish_fov
         self.dish_slew_time = dish_slew_time
 
         self.d_circ = actual_target_plane_distance(p1, pt, l_r)
@@ -68,6 +67,14 @@ class ReceiverSDA:
     def dish_state(self) -> ReceiverDishState:
         return self.dish
 
+    @property
+    def initial_dish_mount(self) -> Vec3:
+        return self.pt + self._initial_boresight * self.body_radius
+
+    @property
+    def initial_dish_boresight(self) -> Vec3:
+        return self._initial_boresight
+
     def reset_dish_tracking(self) -> None:
         self.dish = ReceiverDishState(boresight=self._initial_boresight.copy())
 
@@ -76,14 +83,18 @@ class ReceiverSDA:
         """Dish mount on the receiver body surface along current boresight."""
         return self.pt + self.dish.boresight * self.body_radius
 
+    def dish_aperture_radius(self) -> float:
+        return dish_aperture_radius(self.p1, self.dish_mount, self.dish_fov)
+
     def observe_beam(self, in_cone: bool, beam_direction: Vec3, dq: float) -> Vec3:
         """
         Update dish orientation after beam detection.
 
         beam_direction is the transmitter boresight (beam emission axis from P_1).
         On first collision the incident angle and a fixed track target are recorded;
-        slewing continues toward that target even after the beam moves away.
+        slewing begins on the next step toward that target.
         """
+        just_detected = False
         if in_cone and not self.dish.has_seen_beam:
             toward_source = -normalize(beam_direction)
             incident = angle_between(self.dish.boresight, toward_source)
@@ -94,8 +105,13 @@ class ReceiverSDA:
                 self.dish.slew_rate = incident / self.dish_slew_time
             else:
                 self.dish.slew_rate = float("inf")
+            just_detected = True
 
-        if self.dish.has_seen_beam and self.dish.track_target is not None:
+        if (
+            self.dish.has_seen_beam
+            and not just_detected
+            and self.dish.track_target is not None
+        ):
             max_step = (self.dish.slew_rate or 0.0) * dq
             self.dish.boresight = rotate_toward(
                 self.dish.boresight,
@@ -106,16 +122,13 @@ class ReceiverSDA:
 
     def dish_mesh_at(
         self,
-        u_steps: int = 12,
-        v_steps: int = 24,
+        segments: int = 32,
     ) -> tuple[np.ndarray, np.ndarray]:
-        return dish_mesh(
+        return dish_disc_mesh(
             self.dish_mount,
             self.dish.boresight,
-            self.dish_radius,
-            self.dish_depth,
-            u_steps,
-            v_steps,
+            self.dish_aperture_radius(),
+            segments,
         )
 
     def frame_at(self, t: float) -> tuple[Vec3, Vec3, Vec3]:

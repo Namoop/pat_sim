@@ -131,12 +131,12 @@ def run_visualizer(result: ScenarioResult, start_q: float = 0.0) -> None:
             p.add_axes()
 
             p.add_mesh(
-                pv.Sphere(radius=0.08, center=result.p1),
+                pv.Sphere(radius=0.5, center=result.p1),
                 color="blue",
                 label="transmitter",
             )
             p.add_mesh(
-                pv.Sphere(radius=0.06, center=result.p2),
+                pv.Sphere(radius=0.5, center=result.p2),
                 color="gray",
                 opacity=0.5,
                 label="believed target",
@@ -187,10 +187,7 @@ def run_visualizer(result: ScenarioResult, start_q: float = 0.0) -> None:
             return self._to_polydata(verts, faces)
 
         def _dish_mesh(self) -> pv.PolyData:
-            verts, faces = result.receiver.dish_mesh_at(
-                viz.cone_u_steps // 2,
-                viz.cone_v_steps // 2,
-            )
+            verts, faces = result.receiver.dish_mesh_at(viz.cone_v_steps)
             return self._to_polydata(verts, faces)
 
         def _dish_boresight_line(self) -> pv.PolyData:

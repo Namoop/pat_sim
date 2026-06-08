@@ -46,8 +46,7 @@ class ReceiverConfig:
     dish_theta_offset: float
     dish_phi_offset: float
     body_radius: float
-    dish_radius: float
-    dish_depth: float
+    dish_fov: float
     dish_slew_time: float
 
 
@@ -125,9 +124,8 @@ def load_config(path: str | Path) -> ScenarioConfig:
         receiver=ReceiverConfig(
             dish_theta_offset=float(receiver.get("dish_theta_offset", 0.08)),
             dish_phi_offset=float(receiver.get("dish_phi_offset", 0.06)),
-            body_radius=float(receiver.get("body_radius", 0.1)),
-            dish_radius=float(receiver.get("dish_radius", 0.08)),
-            dish_depth=float(receiver.get("dish_depth", 0.04)),
+            body_radius=float(receiver.get("body_radius", 0.5)),
+            dish_fov=float(receiver.get("dish_fov", 0.002)),
             dish_slew_time=float(receiver.get("dish_slew_time", 0.3)),
         ),
         visualization=VisualizationConfig(

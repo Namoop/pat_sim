@@ -6,6 +6,7 @@ from collections.abc import Callable
 
 import numpy as np
 
+from satellite.geometry import dish_aperture_radius
 from satellite.math3d import Vec3, dot, normalize
 
 
@@ -19,46 +20,53 @@ def is_in_cone(alignment: float, alpha: float) -> bool:
     return alignment >= np.cos(alpha)
 
 
-def cone_intersects_sphere(
+def cone_intersects_disc(
     apex: Vec3,
     axis: Vec3,
     alpha: float,
     length: float,
     center: Vec3,
+    normal: Vec3,
     radius: float,
 ) -> bool:
-    """True when a finite cone and sphere overlap."""
+    """True when a finite cone overlaps a flat disc."""
     a = normalize(axis)
+    n = normalize(normal)
+    tan_a = np.tan(alpha)
+
     oc = center - apex
     t = dot(oc, a)
     oc_sq = dot(oc, oc)
-    r = radius
+    h_sq = max(0.0, oc_sq - t * t)
+    h = float(np.sqrt(h_sq))
 
-    if oc_sq <= r * r:
-        return True
-
-    if t + r < 0.0 or t - r > length:
+    if t + radius < 0.0 or t - radius > length:
         return False
 
-    tan_a = np.tan(alpha)
-
     t_clamped = min(max(t, 0.0), length)
-    h_sq = max(0.0, oc_sq - t_clamped * t_clamped)
-    h = float(np.sqrt(h_sq))
-    if h <= t_clamped * tan_a + r:
+    h_clamped_sq = max(0.0, oc_sq - t_clamped * t_clamped)
+    h_clamped = float(np.sqrt(h_clamped_sq))
+    if h_clamped <= t_clamped * tan_a + radius:
         return True
 
-    if t >= length - r:
-        cap_center = apex + length * a
-        vc = center - cap_center
-        h_cap_sq = max(0.0, dot(vc, vc) - dot(vc, a) ** 2)
-        if float(np.sqrt(h_cap_sq)) <= length * tan_a + r:
-            return True
+    denom = dot(a, n)
+    if abs(denom) < 1e-12:
+        return False
 
-    if t < r:
-        h_apex_sq = max(0.0, oc_sq - t * t)
-        if float(np.sqrt(h_apex_sq)) <= r:
-            return True
+    t_plane = dot(center - apex, n) / denom
+    if t_plane < 0.0 or t_plane > length:
+        return False
+
+    axis_on_plane = apex + t_plane * a
+    to_center = center - axis_on_plane
+    d_plane = float(
+        np.sqrt(max(0.0, dot(to_center, to_center) - dot(to_center, n) ** 2))
+    )
+    if d_plane <= t_plane * tan_a + radius:
+        return True
+
+    if h <= radius and 0.0 <= t <= length:
+        return True
 
     return False
 
@@ -66,20 +74,23 @@ def cone_intersects_sphere(
 def beam_hits_dish_at_q(
     q: float,
     apex: Vec3,
-    dish_center: Vec3,
-    dish_radius: float,
+    dish_mount: Vec3,
+    dish_boresight: Vec3,
+    dish_fov: float,
     boresight_fn: Callable[[float], Vec3],
     alpha: float,
     beam_length: float,
 ) -> bool:
-    """True when the transmitter cone at q intersects the receiver dish aperture."""
-    return cone_intersects_sphere(
+    """True when the transmitter cone at q intersects the receiver dish disc."""
+    radius = dish_aperture_radius(apex, dish_mount, dish_fov)
+    return cone_intersects_disc(
         apex,
         boresight_fn(q),
         alpha,
         beam_length,
-        dish_center,
-        dish_radius,
+        dish_mount,
+        dish_boresight,
+        radius,
     )
 
 
@@ -87,8 +98,9 @@ def scan_dish_hits_up_to(
     q_max: float,
     q_step: float,
     apex: Vec3,
-    dish_center: Vec3,
-    dish_radius: float,
+    dish_mount: Vec3,
+    dish_boresight: Vec3,
+    dish_fov: float,
     boresight_fn: Callable[[float], Vec3],
     alpha: float,
     beam_length: float,
@@ -97,7 +109,7 @@ def scan_dish_hits_up_to(
     Scan from 0 to q_max for cone-dish intersection.
 
     Returns (hit, hit_at_q). hit_at_q is the first q where the beam cone
-    collides with the receiver dish.
+    collides with the receiver dish disc.
     """
     hit_at_q: float | None = None
     q = 0.0
@@ -105,8 +117,9 @@ def scan_dish_hits_up_to(
         if beam_hits_dish_at_q(
             q,
             apex,
-            dish_center,
-            dish_radius,
+            dish_mount,
+            dish_boresight,
+            dish_fov,
             boresight_fn,
             alpha,
             beam_length,

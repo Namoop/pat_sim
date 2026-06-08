@@ -12,7 +12,7 @@ phi_jumble = 0.0
 
 [sda]
 k = 10.0
-alpha = 0.005
+alpha = 0.005 # from SIM config 
 gamma = 0.5
 beta = 0.5
 omega_r = 10.0 #ideally pi_k / alpha
@@ -25,9 +25,8 @@ q_step = 0.01
 [receiver]
 dish_theta_offset = 0.52
 dish_phi_offset = 0.36
-body_radius = 0.1
-dish_radius = 0.03
-dish_depth = 0.0005
+body_radius = 0.5
+dish_fov = 0.002
 dish_slew_time = 0.3
 
 [visualization]

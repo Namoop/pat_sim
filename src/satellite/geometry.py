@@ -87,20 +87,34 @@ def axis_perpendicular_basis(axis: Vec3) -> tuple[Vec3, Vec3]:
     return u, v
 
 
-def dish_mesh(
+def dish_aperture_radius(source: Vec3, mount: Vec3, dish_fov: float) -> float:
+    """Physical disc radius from full FOV (radians) at range to the source."""
+    d = distance(source, mount)
+    return d * np.tan(dish_fov / 2.0)
+
+
+def dish_disc_mesh(
     mount: Vec3,
     boresight: Vec3,
     radius: float,
-    depth: float,
-    u_steps: int = 12,
-    v_steps: int = 24,
+    segments: int = 32,
 ) -> tuple[np.ndarray, np.ndarray]:
-    """Shallow dish cone on a mount point, opening along boresight."""
+    """Flat circular dish aperture in the plane normal to boresight."""
     axis = normalize(boresight)
     u, v = axis_perpendicular_basis(axis)
-    half_angle = float(np.arctan2(radius, depth))
-    apex = mount - depth * axis
-    return cone_surface_mesh(apex, axis, u, v, half_angle, depth, u_steps, v_steps)
+    angles = np.linspace(0.0, 2.0 * np.pi, segments, endpoint=False, dtype=np.float64)
+
+    verts: list[Vec3] = [mount]
+    for theta in angles:
+        verts.append(mount + radius * (np.cos(theta) * u + np.sin(theta) * v))
+
+    faces: list[list[int]] = []
+    for i in range(segments):
+        j = i + 1
+        k = 1 if i == segments - 1 else i + 2
+        faces.append([0, j, k])
+
+    return np.asarray(verts, dtype=np.float64), np.asarray(faces, dtype=np.int64)
 
 
 def local_spiral_angles(u: float, w: float, k: float) -> tuple[float, float]:
