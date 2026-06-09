@@ -419,10 +419,8 @@ class ScenarioResult:
         if satellite == "S1":
             if phase is SearchPhase.S1_TRANSMIT:
                 return self.s1.receiver.initial_dish_boresight
-            return self.s1.receiver.dish_boresight
-        if phase is SearchPhase.S2_TRANSMIT:
-            return self.s2.receiver.dish_boresight
-        return self.s2.receiver.dish_boresight
+            return self.s1.receiver.display_boresight()
+        return self.s2.receiver.display_boresight()
 
     def boresight_ray_length(self, satellite: str) -> float:
         sat = self.s1 if satellite == "S1" else self.s2

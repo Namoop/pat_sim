@@ -130,11 +130,11 @@ class OpticalBench:
         if in_cone and not acq.has_seen_beam:
             toward_source = -normalize(beam_direction)
             acq.incident_angle = angle_between(dish, toward_source)
-            acq.track_target = toward_source.copy()
+            acq.track_target = self.toward_partner.copy()
             acq.has_seen_beam = True
             acq.fsm_locked = True
             fsm.snap_to(self.bench_boresight, toward_source)
-            bench_incident = angle_between(self.bench_boresight, toward_source)
+            bench_incident = angle_between(self.bench_boresight, acq.track_target)
             if self.bench_slew_time > 0.0:
                 acq.bench_slew_rate = bench_incident / self.bench_slew_time
             else:

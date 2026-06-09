@@ -12,7 +12,7 @@ from satellite.geometry import (
     receiver_global_frame,
     receiver_basis,
 )
-from satellite.math3d import Vec3
+from satellite.math3d import Vec3, angle_between
 from satellite.sda.bench import BenchGeometry, OpticalBench
 from satellite.sda.fsm import FastSteeringMirror
 
@@ -110,6 +110,22 @@ class ReceiverSDA:
 
     def geometry_snapshot(self) -> BenchGeometry:
         return self.bench.geometry_snapshot(self.body_radius)
+
+    def display_boresight(self) -> Vec3:
+        """Boresight for viz: FSM-corrected while slewing, bench aim when settled."""
+        if self.has_seen_beam and self.fsm.locked:
+            settled = (
+                angle_between(
+                    self.bench.bench_boresight,
+                    self.bench.toward_partner,
+                )
+                < 1e-8
+            )
+            if not settled:
+                return self.fsm.effective_receive_boresight(
+                    self.bench.bench_boresight
+                )
+        return self.dish_boresight
 
     def dish_range_from_partner(self) -> float:
         from satellite.math3d import distance
