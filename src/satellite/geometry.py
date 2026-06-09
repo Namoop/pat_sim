@@ -14,6 +14,7 @@ from satellite.math3d import (
     linspace,
     normalize,
     norm,
+    rotate_vector,
     spherical_angles_from_direction,
     spherical_to_cartesian,
     transform_local_to_global,
@@ -65,16 +66,43 @@ def receiver_basis(pt: Vec3, p1: Vec3, u_up: Vec3 | None = None) -> tuple[Vec3, 
     return u_look, u_t, u_b
 
 
+def direction_with_tangent_offset(
+    base: Vec3,
+    tangent_u: Vec3,
+    tangent_v: Vec3,
+    offset_u: float,
+    offset_v: float,
+) -> Vec3:
+    """
+    Apply combined tangent-plane offsets to a unit direction.
+
+    offset_u and offset_v are small angles (rad) along tangent_u and tangent_v;
+    the total tilt magnitude is hypot(offset_u, offset_v).
+    """
+    axis = normalize(base)
+    w = offset_u * tangent_u + offset_v * tangent_v
+    w_mag = norm(w)
+    if w_mag < 1e-15:
+        return axis
+    rot_axis = normalize(cross(axis, w))
+    return normalize(rotate_vector(axis, rot_axis, w_mag))
+
+
 def direction_with_local_offset(
     base: Vec3,
     theta_offset: float,
     phi_offset: float,
 ) -> Vec3:
-    """Apply small local theta/phi offsets to a unit direction."""
+    """Apply tangent offsets using the transmitter-style basis at base."""
     theta_0, phi_0 = spherical_angles_from_direction(base)
     u_x, u_y, u_z = transmitter_basis(theta_0, phi_0)
-    local = spherical_to_cartesian(theta_offset, phi_offset)
-    return normalize(transform_local_to_global(local, u_x, u_y, u_z))
+    return direction_with_tangent_offset(
+        u_z,
+        u_x,
+        u_y,
+        theta_offset,
+        phi_offset,
+    )
 
 
 def axis_perpendicular_basis(axis: Vec3) -> tuple[Vec3, Vec3]:

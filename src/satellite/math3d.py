@@ -51,6 +51,14 @@ def slerp(a: Vec3, b: Vec3, t: float) -> Vec3:
     return w1 * a_u + w2 * b_u
 
 
+def rotate_vector(v: Vec3, axis: Vec3, angle: float) -> Vec3:
+    """Rotate vector v about unit axis by angle radians (Rodrigues)."""
+    axis = normalize(axis)
+    cos_a = np.cos(angle)
+    sin_a = np.sin(angle)
+    return v * cos_a + cross(axis, v) * sin_a + axis * dot(axis, v) * (1.0 - cos_a)
+
+
 def rotate_toward(from_dir: Vec3, to_dir: Vec3, max_angle: float) -> Vec3:
     """Rotate from_dir toward to_dir by at most max_angle radians."""
     angle = angle_between(from_dir, to_dir)

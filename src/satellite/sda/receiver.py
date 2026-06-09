@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from satellite.geometry import (
     actual_target_plane_distance,
     cone_surface_mesh,
-    direction_with_local_offset,
+    direction_with_tangent_offset,
     dish_aperture_radius,
     dish_disc_mesh,
     receiver_global_frame,
@@ -55,8 +55,11 @@ class ReceiverSDA:
         self.d_circ = actual_target_plane_distance(p1, pt, l_r)
 
         toward_p1 = normalize(p1 - pt)
-        initial_boresight = direction_with_local_offset(
-            toward_p1,
+        u_look, u_t, u_b = receiver_basis(pt, p1)
+        initial_boresight = direction_with_tangent_offset(
+            u_look,
+            u_t,
+            u_b,
             dish_theta_offset,
             dish_phi_offset,
         )
