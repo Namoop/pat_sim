@@ -93,7 +93,6 @@ def run_scenario(config: ScenarioConfig) -> ScenarioResult:
     alpha = config.sda.alpha
     beam_length = transmitter.beam_length
     dish_fov = config.receiver.dish_fov
-    body_radius = config.receiver.body_radius
 
     def check_dish_hit(q: float) -> bool:
         return beam_hits_dish_at_q(
@@ -101,7 +100,6 @@ def run_scenario(config: ScenarioConfig) -> ScenarioResult:
             p1,
             receiver.dish_mount,
             receiver.dish.boresight,
-            body_radius,
             dish_fov,
             transmitter.boresight_at,
             alpha,
@@ -114,7 +112,6 @@ def run_scenario(config: ScenarioConfig) -> ScenarioResult:
         p1,
         receiver.initial_dish_mount,
         receiver.initial_dish_boresight,
-        body_radius,
         dish_fov,
         transmitter.boresight_at,
         alpha,
@@ -164,9 +161,11 @@ def format_summary(result: ScenarioResult) -> str:
     if result.hit_at_q is not None:
         lines.append(f"Hit at q = {result.hit_at_q:.4f}")
     if result.receiver.dish.has_seen_beam and result.receiver.dish.incident_angle is not None:
+        half_fov = result.config.receiver.dish_fov / 2.0
         lines.append(
             f"Dish incident angle at first detection = "
-            f"{np.degrees(result.receiver.dish.incident_angle):.3f} deg"
+            f"{np.degrees(result.receiver.dish.incident_angle):.3f} deg "
+            f"(dish half-FOV = {np.degrees(half_fov):.3f} deg)"
         )
     lines.append(
         f"Alignment at q_max = {result.alignment_at_q_max:.6f} "

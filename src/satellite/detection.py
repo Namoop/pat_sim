@@ -6,8 +6,7 @@ from collections.abc import Callable
 
 import numpy as np
 
-from satellite.geometry import dish_aperture_radius
-from satellite.math3d import Vec3, dot, normalize
+from satellite.math3d import Vec3, angle_between, dot, norm, normalize
 
 
 def alignment_dot(target_direction: Vec3, boresight: Vec3) -> float:
@@ -20,55 +19,29 @@ def is_in_cone(alignment: float, alpha: float) -> bool:
     return alignment >= np.cos(alpha)
 
 
-def cone_intersects_disc(
+def is_within_dish_fov(
+    dish_boresight: Vec3,
+    incoming_direction: Vec3,
+    dish_fov: float,
+) -> bool:
+    """True when incoming beam lies within the dish full FOV (radians)."""
+    return angle_between(dish_boresight, incoming_direction) <= dish_fov / 2.0
+
+
+def point_in_transmitter_cone(
     apex: Vec3,
     axis: Vec3,
     alpha: float,
     length: float,
-    center: Vec3,
-    normal: Vec3,
-    radius: float,
+    point: Vec3,
 ) -> bool:
-    """True when a finite cone overlaps a flat disc."""
-    a = normalize(axis)
-    n = normalize(normal)
-    tan_a = np.tan(alpha)
-
-    oc = center - apex
-    t = dot(oc, a)
-    oc_sq = dot(oc, oc)
-    h_sq = max(0.0, oc_sq - t * t)
-    h = float(np.sqrt(h_sq))
-
-    if t + radius < 0.0 or t - radius > length:
+    """True when a point lies inside the finite transmitter cone."""
+    to_point = point - apex
+    dist = norm(to_point)
+    if dist <= 0.0 or dist > length:
         return False
-
-    t_clamped = min(max(t, 0.0), length)
-    h_clamped_sq = max(0.0, oc_sq - t_clamped * t_clamped)
-    h_clamped = float(np.sqrt(h_clamped_sq))
-    if h_clamped <= t_clamped * tan_a + radius:
-        return True
-
-    denom = dot(a, n)
-    if abs(denom) < 1e-12:
-        return False
-
-    t_plane = dot(center - apex, n) / denom
-    if t_plane < 0.0 or t_plane > length:
-        return False
-
-    axis_on_plane = apex + t_plane * a
-    to_center = center - axis_on_plane
-    d_plane = float(
-        np.sqrt(max(0.0, dot(to_center, to_center) - dot(to_center, n) ** 2))
-    )
-    if d_plane <= t_plane * tan_a + radius:
-        return True
-
-    if h <= radius and 0.0 <= t <= length:
-        return True
-
-    return False
+    direction = to_point / dist
+    return dot(normalize(axis), direction) >= np.cos(alpha)
 
 
 def beam_hits_dish_at_q(
@@ -76,23 +49,20 @@ def beam_hits_dish_at_q(
     apex: Vec3,
     dish_mount: Vec3,
     dish_boresight: Vec3,
-    body_radius: float,
     dish_fov: float,
     boresight_fn: Callable[[float], Vec3],
     alpha: float,
     beam_length: float,
 ) -> bool:
-    """True when the transmitter cone at q intersects the receiver dish disc."""
-    radius = dish_aperture_radius(body_radius, dish_fov)
-    return cone_intersects_disc(
-        apex,
-        boresight_fn(q),
-        alpha,
-        beam_length,
-        dish_mount,
-        dish_boresight,
-        radius,
-    )
+    """
+    True when the transmitter beam illuminates the dish mount and the
+  incoming direction falls within the dish angular FOV.
+    """
+    beam_axis = boresight_fn(q)
+    toward_source = -normalize(beam_axis)
+    if not is_within_dish_fov(dish_boresight, toward_source, dish_fov):
+        return False
+    return point_in_transmitter_cone(apex, beam_axis, alpha, beam_length, dish_mount)
 
 
 def scan_dish_hits_up_to(
@@ -101,17 +71,16 @@ def scan_dish_hits_up_to(
     apex: Vec3,
     dish_mount: Vec3,
     dish_boresight: Vec3,
-    body_radius: float,
     dish_fov: float,
     boresight_fn: Callable[[float], Vec3],
     alpha: float,
     beam_length: float,
 ) -> tuple[bool, float | None]:
     """
-    Scan from 0 to q_max for cone-dish intersection.
+    Scan from 0 to q_max for dish detection.
 
-    Returns (hit, hit_at_q). hit_at_q is the first q where the beam cone
-    collides with the receiver dish disc.
+    Returns (hit, hit_at_q). hit_at_q is the first q where the beam is
+    visible to the dish (transmitter cone on mount and within dish FOV).
     """
     hit_at_q: float | None = None
     q = 0.0
@@ -121,7 +90,6 @@ def scan_dish_hits_up_to(
             apex,
             dish_mount,
             dish_boresight,
-            body_radius,
             dish_fov,
             boresight_fn,
             alpha,
