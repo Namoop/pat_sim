@@ -11,15 +11,11 @@ from satellite.math3d import Vec3, as_vec3
 
 @dataclass(frozen=True)
 class SatelliteInstanceConfig:
-    """Per-spacecraft pose and pointing offsets ([s1] / [s2])."""
+    """Per-spacecraft pose and optical-bench offsets ([s1] / [s2])."""
 
     position: Vec3
-    body_theta_offset: float
-    body_phi_offset: float
-    beam_theta_offset: float
-    beam_phi_offset: float
-    dish_theta_offset: float
-    dish_phi_offset: float
+    bench_theta_offset: float
+    bench_phi_offset: float
 
 
 @dataclass(frozen=True)
@@ -28,7 +24,8 @@ class SharedSatelliteConfig:
 
     body_radius: float
     dish_fov: float
-    dish_slew_time: float
+    bench_slew_time: float
+    fsm_settle_time: float
     beam_width_mrad: float
 
     @property
@@ -88,12 +85,8 @@ def _load_satellite_instance(
 ) -> SatelliteInstanceConfig:
     return SatelliteInstanceConfig(
         position=_vec3_from_list(data["position"], f"{section}.position"),
-        body_theta_offset=float(data.get("body_theta_offset", 0.0)),
-        body_phi_offset=float(data.get("body_phi_offset", 0.0)),
-        beam_theta_offset=float(data.get("beam_theta_offset", 0.0)),
-        beam_phi_offset=float(data.get("beam_phi_offset", 0.0)),
-        dish_theta_offset=float(data.get("dish_theta_offset", 0.08)),
-        dish_phi_offset=float(data.get("dish_phi_offset", 0.06)),
+        bench_theta_offset=float(data.get("bench_theta_offset", 0.0)),
+        bench_phi_offset=float(data.get("bench_phi_offset", 0.0)),
     )
 
 
@@ -122,7 +115,13 @@ def load_config(path: str | Path) -> ScenarioConfig:
         satellite=SharedSatelliteConfig(
             body_radius=float(satellite.get("body_radius", 0.5)),
             dish_fov=float(satellite.get("dish_fov", 0.002)),
-            dish_slew_time=float(satellite.get("dish_slew_time", 0.3)),
+            bench_slew_time=float(
+                satellite.get(
+                    "bench_slew_time",
+                    satellite.get("dish_slew_time", 0.3),
+                )
+            ),
+            fsm_settle_time=float(satellite.get("fsm_settle_time", 0.0)),
             beam_width_mrad=float(satellite["beam_width"]),
         ),
         sda=SdaConfig(

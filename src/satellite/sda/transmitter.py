@@ -15,6 +15,7 @@ from satellite.geometry import (
     transmitter_basis,
 )
 from satellite.math3d import Vec3, distance, normalize, spherical_angles_from_direction
+from satellite.sda.boresight_table import BoresightTable
 
 
 class TransmitterSDA:
@@ -28,6 +29,8 @@ class TransmitterSDA:
         k: float,
         alpha: float,
         beam_length: float,
+        *,
+        boresight_table: BoresightTable | None = None,
     ) -> None:
         self.position = position
         self.believed_boresight = normalize(believed_boresight)
@@ -44,6 +47,7 @@ class TransmitterSDA:
         self.believed_range = distance(position, partner_actual)
         self.actual_target_range = self.believed_range
         self.beam_length = beam_length
+        self.boresight_table = boresight_table
 
     @classmethod
     def from_boresight(
@@ -56,6 +60,8 @@ class TransmitterSDA:
         beam_length: float | None = None,
         *,
         boresight_extension: float = 5.0,
+        q_max: float | None = None,
+        q_step: float | None = None,
     ) -> TransmitterSDA:
         link_range = distance(position, partner_actual)
         length = (
@@ -63,7 +69,10 @@ class TransmitterSDA:
             if beam_length is not None
             else link_range + boresight_extension
         )
-        return cls(position, believed_boresight, partner_actual, k, alpha, length)
+        tx = cls(position, believed_boresight, partner_actual, k, alpha, length)
+        if q_max is not None and q_step is not None:
+            tx.boresight_table = BoresightTable.build(tx.boresight_at, q_max, q_step)
+        return tx
 
     # Backward-compat aliases
     @property
@@ -85,6 +94,8 @@ class TransmitterSDA:
         )
 
     def boresight_at(self, q: float) -> Vec3:
+        if self.boresight_table is not None:
+            return self.boresight_table.at(q)
         a_s, _, _ = self.frame_at(q)
         return a_s
 

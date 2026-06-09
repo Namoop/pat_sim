@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from contextlib import nullcontext
 from dataclasses import dataclass, field
 
 import numpy as np
@@ -9,6 +10,7 @@ import numpy as np
 from satellite.config import ScenarioConfig
 from satellite.detection import (
     alignment_dot,
+    beam_hits_dish,
     beam_hits_dish_at_q,
     beam_missed_dish_fov_at_q,
 )
@@ -122,6 +124,11 @@ class ScenarioResult:
     def check_dish_hit(self, q: float) -> bool:
         return self.active_in_cone(q)
 
+    def _measure(self, profiler: SimReplayProfiler | None, name: str):
+        if profiler is not None and profiler.enabled:
+            return profiler.measure(name)
+        return nullcontext()
+
     def _step_phase1(
         self,
         q: float,
@@ -134,37 +141,28 @@ class ScenarioResult:
 
         if profiler is not None and profiler.enabled:
             profiler.step_count += 1
-            with profiler.measure("tx_boresight_at"):
-                beam = tx.boresight_at(local_q)
-            with profiler.measure("rx_dish_geometry"):
-                mount = rx.dish_mount
-                dish = rx.dish_boresight
-            with profiler.measure("beam_hits_dish"):
-                in_fov = beam_hits_dish_at_q(
-                    local_q,
-                    tx.position,
-                    mount,
-                    dish,
-                    rx.dish_fov,
-                    tx.boresight_at,
-                    tx.alpha,
-                    tx.beam_length,
-                )
-            with profiler.measure("observe_beam"):
-                rx.observe_beam(in_fov, beam, q_step)
-            return in_fov
 
-        in_fov = beam_hits_dish_at_q(
-            local_q,
-            tx.position,
-            rx.dish_mount,
-            rx.dish_boresight,
-            rx.dish_fov,
-            tx.boresight_at,
-            tx.alpha,
-            tx.beam_length,
-        )
-        rx.observe_beam(in_fov, tx.boresight_at(local_q), q_step)
+        with self._measure(profiler, "tx_boresight_at"):
+            beam = tx.boresight_at(local_q)
+        with self._measure(profiler, "rx_dish_geometry"):
+            geom = rx.geometry_snapshot()
+        with self._measure(profiler, "beam_hits_dish"):
+            in_fov = beam_hits_dish(
+                tx.position,
+                geom.mount,
+                geom.dish_boresight,
+                rx.dish_fov,
+                beam,
+                tx.alpha,
+                tx.beam_length,
+            )
+        with self._measure(profiler, "observe_beam"):
+            rx.observe_beam(
+                in_fov,
+                beam,
+                q_step,
+                dish_at_step_start=geom.dish_boresight,
+            )
         return in_fov
 
     def _step_phase2(
@@ -181,37 +179,28 @@ class ScenarioResult:
 
         if profiler is not None and profiler.enabled:
             profiler.step_count += 1
-            with profiler.measure("tx_boresight_at"):
-                beam = tx.boresight_at(local_q)
-            with profiler.measure("rx_dish_geometry"):
-                mount = rx.dish_mount
-                dish = rx.dish_boresight
-            with profiler.measure("beam_hits_dish"):
-                in_fov = beam_hits_dish_at_q(
-                    local_q,
-                    tx.position,
-                    mount,
-                    dish,
-                    rx.dish_fov,
-                    tx.boresight_at,
-                    tx.alpha,
-                    tx.beam_length,
-                )
-            with profiler.measure("observe_beam"):
-                rx.observe_beam(in_fov, beam, q_step)
-            return in_fov
 
-        in_fov = beam_hits_dish_at_q(
-            local_q,
-            tx.position,
-            rx.dish_mount,
-            rx.dish_boresight,
-            rx.dish_fov,
-            tx.boresight_at,
-            tx.alpha,
-            tx.beam_length,
-        )
-        rx.observe_beam(in_fov, tx.boresight_at(local_q), q_step)
+        with self._measure(profiler, "tx_boresight_at"):
+            beam = tx.boresight_at(local_q)
+        with self._measure(profiler, "rx_dish_geometry"):
+            geom = rx.geometry_snapshot()
+        with self._measure(profiler, "beam_hits_dish"):
+            in_fov = beam_hits_dish(
+                tx.position,
+                geom.mount,
+                geom.dish_boresight,
+                rx.dish_fov,
+                beam,
+                tx.alpha,
+                tx.beam_length,
+            )
+        with self._measure(profiler, "observe_beam"):
+            rx.observe_beam(
+                in_fov,
+                beam,
+                q_step,
+                dish_at_step_start=geom.dish_boresight,
+            )
         return in_fov
 
     def _ensure_phase2_transmitter(self) -> None:
@@ -308,13 +297,14 @@ class ScenarioResult:
                                     prefix="S2 Received",
                                 )
                             )
+                            event_log.append("S2 FSM centered beam on camera")
                         s2_first_detect = q
                     if (
                         s2_first_detect is not None
                         and q > s2_first_detect + 1e-9
                         and not s2_slew_logged
                     ):
-                        event_log.append("S2 Body slewing toward lock")
+                        event_log.append("S2 Bench slewing toward lock")
                         s2_slew_logged = True
 
                 q += q_step
@@ -326,7 +316,7 @@ class ScenarioResult:
 
                 with profiler.measure("phase2_handoff"):
                     self.boresight_end = (
-                        self.s2.body.beam_boresight_inertial().copy()
+                        self.s2.bench.beam_boresight_inertial().copy()
                     )
                     self._ensure_phase2_transmitter()
 
@@ -403,13 +393,14 @@ class ScenarioResult:
                                         prefix="S1 Received",
                                     )
                                 )
+                                event_log.append("S1 FSM centered beam on camera")
                             s1_first_detect = q
                         if (
                             s1_first_detect is not None
                             and q > s1_first_detect + 1e-9
                             and not s1_slew_logged
                         ):
-                            event_log.append("S1 Body slewing toward lock")
+                            event_log.append("S1 Bench slewing toward lock")
                             s1_slew_logged = True
 
                     q += q_step
@@ -480,18 +471,17 @@ def _scan_phase(
         result.s2.receiver.reset_dish_tracking()
         q = 0.0
         while q < q_max - 1e-12:
-            result._step_phase1(q)
-            if result.active_in_cone(q) and hit_at_q is None:
+            in_fov = result._step_phase1(q)
+            if in_fov and hit_at_q is None:
                 hit_at_q = q
             q += q_step
     else:
-        result._ensure_phase2_transmitter()
         result.s1.receiver.reset_dish_tracking()
         q = q_max
         total = result.schedule.total_duration
         while q < total - 1e-12:
-            result._step_phase2(q)
-            if result.active_in_cone(q) and hit_at_q is None:
+            in_fov = result._step_phase2(q)
+            if in_fov and hit_at_q is None:
                 hit_at_q = q
             q += q_step
 
@@ -520,7 +510,7 @@ def run_scenario(config: ScenarioConfig) -> ScenarioResult:
         phase2_hit=False,
         phase2_hit_at_q=None,
         phase2_spiral_center_source="initial_aim",
-        boresight_end=s2.body.initial_beam_boresight.copy(),
+        boresight_end=s2.bench.initial_beam_boresight.copy(),
         phase1_target_direction=phase1_target,
         phase2_target_direction=phase2_target,
         phase1_alignment=0.0,
@@ -535,7 +525,7 @@ def run_scenario(config: ScenarioConfig) -> ScenarioResult:
     )
     result.phase1_hit = phase1_hit
     result.phase1_hit_at_q = phase1_hit_at_q
-    result.boresight_end = s2.body.beam_boresight_inertial().copy()
+    result.boresight_end = s2.bench.beam_boresight_inertial().copy()
     result.phase2_spiral_center_source = (
         "locked" if s2.receiver.has_seen_beam else "initial_aim"
     )
@@ -579,21 +569,18 @@ def format_summary(result: ScenarioResult) -> str:
     ]
     if result.phase1_hit_at_q is not None:
         lines.append(f"Phase 1 hit at q = {result.phase1_hit_at_q:.4f}")
-    if result.s2.receiver.has_seen_beam and result.s2.body.acquisition.incident_angle is not None:
+    if result.s2.receiver.has_seen_beam and result.s2.bench.acquisition.incident_angle is not None:
         fov = result.config.satellite.dish_fov
         rx = result.s2.receiver
         lines.append(
-            f"S2 body offset magnitude = {np.degrees(rx.body.configured_body_offset_magnitude):.3f} deg"
-        )
-        lines.append(
-            f"S2 dish offset magnitude = {np.degrees(rx.configured_offset_magnitude):.3f} deg"
+            f"S2 bench offset magnitude = {np.degrees(rx.bench.configured_bench_offset_magnitude):.3f} deg"
         )
         lines.append(
             f"S2 pointing offset = {np.degrees(rx.initial_pointing_offset):.3f} deg"
         )
         lines.append(
             f"S2 dish incident angle at first detection = "
-            f"{np.degrees(rx.body.acquisition.incident_angle):.3f} deg "
+            f"{np.degrees(rx.bench.acquisition.incident_angle):.3f} deg "
             f"(dish FOV = {np.degrees(fov):.3f} deg)"
         )
     lines.append(
@@ -607,10 +594,10 @@ def format_summary(result: ScenarioResult) -> str:
     lines.append(f"Phase 2 hit: {'yes' if result.phase2_hit else 'no'}")
     if result.phase2_hit_at_q is not None:
         lines.append(f"Phase 2 hit at q = {result.phase2_hit_at_q:.4f}")
-    if result.s1.receiver.has_seen_beam and result.s1.body.acquisition.incident_angle is not None:
+    if result.s1.receiver.has_seen_beam and result.s1.bench.acquisition.incident_angle is not None:
         lines.append(
             f"S1 dish incident angle at first detection = "
-            f"{np.degrees(result.s1.body.acquisition.incident_angle):.3f} deg"
+            f"{np.degrees(result.s1.bench.acquisition.incident_angle):.3f} deg"
         )
     lines.append(
         f"Phase 2 alignment at q_max = {result.phase2_alignment:.6f}"

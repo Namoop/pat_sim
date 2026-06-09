@@ -7,15 +7,18 @@ Monte Carlo satellite link-establishment simulation. Two satellites alternate tr
 | `[0, q_max)` | S1 | S2 |
 | `[q_max, 2·q_max)` | S2 | S1 |
 
-Each satellite carries both a transmitter and receiver. Satellites never communicate; they follow the synchronized schedule only. Phase 2 for S2 spirals around the dish boresight at the end of phase 1 (locked direction if the beam was acquired, otherwise initial mispoint).
+Each satellite carries both a transmitter and receiver. Satellites never communicate; they follow the synchronized schedule only. Phase 2 for S2 spirals around the **bench boresight** at the end of phase 1 (locked direction if the beam was acquired, otherwise initial mispoint).
 
-Each satellite's spiral center uses **beam θ/φ offsets** applied to the true line-of-sight toward its partner.
+The spacecraft body is assumed correctly pointed. Launch mispoint is modeled as **optical-bench rotation**; dish and TX beam share the bench boresight.
 
 ## Install
 
 ```bash
 # Headless (fast batch runs)
 pip install -e .
+
+# Optional Numba-accelerated detection
+pip install -e ".[perf]"
 
 # Interactive 3D visualization
 pip install -e ".[viz]"
@@ -50,8 +53,8 @@ Edit [`scenario.toml`](scenario.toml):
 
 | Section | Key fields |
 |---------|------------|
-| `s1`, `s2` | `position`, `body_theta_offset`, `body_phi_offset`, `beam_theta_offset`, `beam_phi_offset`, `dish_theta_offset`, `dish_phi_offset` |
-| `satellite` | `body_radius`, `dish_fov`, `dish_slew_time`, `beam_width` (milliradians) |
+| `s1`, `s2` | `position`, `bench_theta_offset`, `bench_phi_offset` |
+| `satellite` | `body_radius`, `dish_fov`, `bench_slew_time`, `fsm_settle_time`, `beam_width` (milliradians) |
 | `sda` | `k`, `gamma`, `beta`, `omega_r`, `L_r` |
 | `simulation` | `q_max` (one phase), `q_step`, `boresight_extension` (default 5), optional `beam_length` |
 | `visualization` | `enabled`, mesh resolution settings |
@@ -77,10 +80,10 @@ src/satellite/
 
 ## Model summary
 
-- **Body aim:** per-satellite `body_theta/phi_offset` jumbles the entire spacecraft relative to the partner.
-- **Beam aim:** `beam_theta/phi_offset` relative to the body frame (spiral center).
-- **Dish aim:** `dish_theta/phi_offset` relative to the body frame (gimbal mispoint).
-- **Acquisition slew:** rotates the **entire body** toward the incoming beam; dish and beam follow rigidly and may retain residual error.
+- **Body:** assumed correctly pointed at the partner (no body slew).
+- **Optical bench:** per-satellite `bench_theta/phi_offset` is the sole launch mispoint; dish and TX beam are co-aligned on the bench (spiral center).
+- **Acquisition:** on detect, the **FSM** (fast steering mirror) snaps to center the beam on the camera; the **bench** then slews slowly to recenter the FSM.
 - **Detection:** transmitter cone illuminates dish mount; incoming angle must be within `dish_fov`.
-- **Phase 2 handoff:** S2 builds a new spiral centered on `boresight_end` from full phase-1 replay.
+- **Phase 2 handoff:** S2 builds a new spiral centered on `boresight_end` (end-of-phase-1 bench boresight).
 - **Replay:** headless and visualizer share one coupled replay loop — no separate static-dish scan.
+- **Performance:** spiral boresights are precomputed per phase; optional Numba kernel for detection (`pip install -e ".[perf]"`).

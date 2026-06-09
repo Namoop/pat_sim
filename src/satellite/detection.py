@@ -8,6 +8,10 @@ import numpy as np
 
 from satellite.math3d import Vec3, angle_between, dot, norm, normalize
 
+from satellite import detection_fast as _detection_fast
+
+_beam_hits_dish_fast = _detection_fast.beam_hits_dish_optimized
+
 
 def alignment_dot(target_direction: Vec3, boresight: Vec3) -> float:
     """Desmos f_dot — cosine of angle between target and boresight."""
@@ -96,6 +100,35 @@ def beam_missed_dish_fov_at_q(
     return incident
 
 
+def beam_hits_dish(
+    apex: Vec3,
+    dish_mount: Vec3,
+    dish_boresight: Vec3,
+    dish_fov: float,
+    beam_axis: Vec3,
+    alpha: float,
+    beam_length: float,
+) -> bool:
+    """
+    True when the transmitter beam illuminates the dish mount and the
+    incoming direction falls within the dish angular FOV.
+    """
+    if _beam_hits_dish_fast is not None:
+        return _beam_hits_dish_fast(
+            apex,
+            dish_mount,
+            dish_boresight,
+            dish_fov,
+            beam_axis,
+            alpha,
+            beam_length,
+        )
+    toward_source = -normalize(beam_axis)
+    if not is_within_dish_fov(dish_boresight, toward_source, dish_fov):
+        return False
+    return point_in_transmitter_cone(apex, beam_axis, alpha, beam_length, dish_mount)
+
+
 def beam_hits_dish_at_q(
     q: float,
     apex: Vec3,
@@ -106,15 +139,16 @@ def beam_hits_dish_at_q(
     alpha: float,
     beam_length: float,
 ) -> bool:
-    """
-    True when the transmitter beam illuminates the dish mount and the
-  incoming direction falls within the dish angular FOV.
-    """
-    beam_axis = boresight_fn(q)
-    toward_source = -normalize(beam_axis)
-    if not is_within_dish_fov(dish_boresight, toward_source, dish_fov):
-        return False
-    return point_in_transmitter_cone(apex, beam_axis, alpha, beam_length, dish_mount)
+    """Like beam_hits_dish but evaluates boresight_fn at q."""
+    return beam_hits_dish(
+        apex,
+        dish_mount,
+        dish_boresight,
+        dish_fov,
+        boresight_fn(q),
+        alpha,
+        beam_length,
+    )
 
 
 def scan_dish_hits_up_to(

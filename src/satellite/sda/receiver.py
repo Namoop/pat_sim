@@ -1,4 +1,4 @@
-"""Receiver-side SDA stubs (wobble frame, limited aperture, dish tracking)."""
+"""Receiver-side SDA — dish on optical bench with FSM fine steering."""
 
 from __future__ import annotations
 
@@ -13,15 +13,17 @@ from satellite.geometry import (
     receiver_basis,
 )
 from satellite.math3d import Vec3
-from satellite.sda.body import SpacecraftBody
+from satellite.sda.bench import BenchGeometry, OpticalBench
+from satellite.sda.fsm import FastSteeringMirror
 
 
 class ReceiverSDA:
-    """Receiver dish on a rigid spacecraft body."""
+    """Receiver dish on optical bench with fast steering mirror."""
 
     def __init__(
         self,
-        body: SpacecraftBody,
+        bench: OpticalBench,
+        fsm: FastSteeringMirror,
         gamma: float,
         beta: float,
         omega_r: float,
@@ -29,7 +31,8 @@ class ReceiverSDA:
         body_radius: float,
         dish_fov: float,
     ) -> None:
-        self.body = body
+        self.bench = bench
+        self.fsm = fsm
         self.gamma = gamma
         self.beta = beta
         self.omega_r = omega_r
@@ -38,79 +41,75 @@ class ReceiverSDA:
         self.dish_fov = dish_fov
 
         self.d_circ = actual_target_plane_distance(
-            body.partner_position, body.position, l_r
+            bench.partner_position, bench.position, l_r
         )
 
     # Backward-compat aliases
     @property
     def position(self) -> Vec3:
-        return self.body.position
+        return self.bench.position
 
     @property
     def partner_position(self) -> Vec3:
-        return self.body.partner_position
+        return self.bench.partner_position
 
     @property
     def pt(self) -> Vec3:
-        return self.body.position
+        return self.bench.position
 
     @property
     def p1(self) -> Vec3:
-        return self.body.partner_position
+        return self.bench.partner_position
 
     @property
-    def dish_theta_offset(self) -> float:
-        return self.body.dish_theta_offset
-
-    @property
-    def dish_phi_offset(self) -> float:
-        return self.body.dish_phi_offset
-
-    @property
-    def dish_slew_time(self) -> float:
-        return self.body.body_slew_time
+    def bench_slew_time(self) -> float:
+        return self.bench.bench_slew_time
 
     @property
     def nominal_boresight(self) -> Vec3:
         """True aim direction toward the partner."""
-        return self.body.toward_partner
+        return self.bench.toward_partner
 
     @property
     def dish_boresight(self) -> Vec3:
-        return self.body.dish_boresight_inertial()
+        return self.bench.geometry_snapshot(self.body_radius).dish_boresight
 
     @property
     def has_seen_beam(self) -> bool:
-        return self.body.acquisition.has_seen_beam
+        return self.bench.acquisition.has_seen_beam
 
     @property
     def initial_pointing_offset(self) -> float:
-        return self.body.initial_pointing_offset
+        return self.bench.initial_pointing_offset
 
     @property
     def configured_offset_magnitude(self) -> float:
-        return self.body.configured_dish_offset_magnitude
+        return self.bench.configured_bench_offset_magnitude
 
     @property
     def initial_dish_mount(self) -> Vec3:
-        return self.body.dish_mount_for_boresight(
-            self.body.initial_dish_boresight,
+        return self.bench.dish_mount_for_boresight(
+            self.bench.initial_dish_boresight,
             self.body_radius,
         )
 
     @property
     def initial_dish_boresight(self) -> Vec3:
-        return self.body.initial_dish_boresight
+        return self.bench.initial_dish_boresight
 
     def reset_dish_tracking(self) -> None:
-        self.body.reset_tracking()
+        self.bench.reset_tracking()
+        self.fsm.reset()
 
     @property
     def dish_mount(self) -> Vec3:
-        return self.body.dish_mount(self.body_radius)
+        return self.bench.geometry_snapshot(self.body_radius).mount
 
     def dish_mount_for_boresight(self, boresight: Vec3) -> Vec3:
-        return self.body.dish_mount_for_boresight(boresight, self.body_radius)
+        return self.bench.dish_mount_for_boresight(boresight, self.body_radius)
+
+    def geometry_snapshot(self) -> BenchGeometry:
+        return self.bench.geometry_snapshot(self.body_radius)
 
     def dish_range_from_partner(self) -> float:
         from satellite.math3d import distance
@@ -123,8 +122,21 @@ class ReceiverSDA:
     def dish_aperture_radius(self) -> float:
         return dish_aperture_radius(self.body_radius, self.dish_fov)
 
-    def observe_beam(self, in_cone: bool, beam_direction: Vec3, dq: float) -> Vec3:
-        return self.body.observe_beam(in_cone, beam_direction, dq)
+    def observe_beam(
+        self,
+        in_cone: bool,
+        beam_direction: Vec3,
+        dq: float,
+        *,
+        dish_at_step_start: Vec3 | None = None,
+    ) -> Vec3:
+        return self.bench.observe_beam(
+            self.fsm,
+            in_cone,
+            beam_direction,
+            dq,
+            dish_at_step_start=dish_at_step_start,
+        )
 
     def dish_mesh_at(
         self,
