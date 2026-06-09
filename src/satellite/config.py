@@ -52,6 +52,7 @@ class SimulationConfig:
     q_step: float
     beam_length: float | None
     boresight_extension: float
+    profile_replay: bool
 
 
 @dataclass(frozen=True)
@@ -136,6 +137,7 @@ def load_config(path: str | Path) -> ScenarioConfig:
             q_step=float(simulation["q_step"]),
             beam_length=beam_length,
             boresight_extension=float(simulation.get("boresight_extension", 5.0)),
+            profile_replay=bool(simulation.get("profile_replay", False)),
         ),
         visualization=VisualizationConfig(
             enabled=bool(visualization.get("enabled", False)),

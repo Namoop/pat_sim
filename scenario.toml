@@ -36,6 +36,7 @@ L_r = 0.15
 q_max = 5.0
 q_step = 0.01
 boresight_extension = 5.0
+profile_replay = true  # temporary: sim replay breakdown (or SATELLITE_SIM_PROFILE=1)
 
 [visualization]
 enabled = false
@@ -43,4 +44,4 @@ cone_u_steps = 24
 cone_v_steps = 32
 spiral_trail_steps = 120
 ribbon_v_steps = 8
-profile_frames = true  # temporary: per-frame timing overlay (or SATELLITE_VIZ_PROFILE=1)
+profile_frames = false  # temporary viz mesh timings (SATELLITE_VIZ_PROFILE=1 to enable)

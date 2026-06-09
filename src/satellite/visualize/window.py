@@ -6,11 +6,8 @@ import time
 
 import numpy as np
 
-from satellite.detection import beam_hits_dish_at_q, beam_missed_dish_fov_at_q
-from satellite.math3d import angle_between
 from satellite.schedule import SearchPhase
 from satellite.scenario import ScenarioResult
-from satellite.sda.satellite import build_phase2_transmitter
 from satellite.visualize.diagnostics import FrameProfiler
 
 
@@ -94,6 +91,7 @@ def run_visualizer(result: ScenarioResult, start_q: float = 0.0) -> None:
             self._playing = False
             self._log_lines: list[str] = []
             self._profiler = FrameProfiler.from_env(viz.profile_frames)
+            self._sim_profile_enabled = config.simulation.profile_replay
             self._replay_step_count = 0
 
             self._play_timer = QTimer(self)
@@ -166,7 +164,7 @@ def run_visualizer(result: ScenarioResult, start_q: float = 0.0) -> None:
             self._profile_label.setFont(QFont("Monospace", 9))
             self._profile_label.setStyleSheet("color: #555;")
             self._profile_label.setWordWrap(True)
-            if self._profiler.enabled:
+            if self._profiler.enabled or self._sim_profile_enabled:
                 layout.addWidget(self._profile_label)
 
         def resizeEvent(self, event) -> None:  # noqa: N802
@@ -186,240 +184,28 @@ def run_visualizer(result: ScenarioResult, start_q: float = 0.0) -> None:
             )
             self._log_frame.raise_()
 
-        def _count_replay_step(self) -> None:
-            self._replay_step_count += 1
+        def _update_profile_overlay(self) -> None:
+            parts: list[str] = []
+            sim = result.last_sim_profiler
+            if sim is not None and sim.enabled:
+                parts.append(sim.format_overlay())
+            if self._profiler.enabled:
+                parts.append(self._profiler.format_overlay())
+            self._profile_label.setText("\n\n".join(parts))
 
         def _phase_label(self, q: float) -> str:
             phase, _ = result.schedule.phase_at(q)
             return "Phase 1" if phase is SearchPhase.S1_TRANSMIT else "Phase 2"
 
-        def _format_rx_angles(
-            self,
-            q: float,
-            rx_name: str,
-            receiver,
-            transmitter,
-            dish_boresight: np.ndarray,
-            *,
-            prefix: str,
-        ) -> str:
-            dish_fov = config.satellite.dish_fov
-            toward_partner = receiver.nominal_boresight
-            local_q = result.local_q(q)
-            beam_axis = transmitter.boresight_at(local_q)
-            toward_source = -beam_axis / np.linalg.norm(beam_axis)
-
-            receiver_offset = np.degrees(angle_between(toward_partner, dish_boresight))
-            beam_offset = np.degrees(angle_between(toward_partner, beam_axis))
-            incident = np.degrees(angle_between(dish_boresight, toward_source))
-            fov_deg = np.degrees(dish_fov)
-
-            return (
-                f"{prefix} (q={q:.3f})\n"
-                f"  Receiver offset: {receiver_offset:.2f}°\n"
-                f"  Beam boresight offset: {beam_offset:.2f}°\n"
-                f"  Incident angle: {incident:.2f}° (FOV {fov_deg:.2f}°)"
-            )
-
         def _replay_to(self, q_end: float) -> None:
             """Replay coupled simulation to q_end and rebuild the event log."""
-            q_end = float(np.clip(q_end, 0.0, total_q))
-            q_max_local = q_max
-            self._replay_step_count = 0
-
-            s2 = result.s2.receiver
-            init_offset_deg = np.degrees(s2.initial_pointing_offset)
-            cfg_offset_deg = np.degrees(s2.configured_offset_magnitude)
-            log_lines = [
-                "S1 Search spiral started",
-                (
-                    f"S2 Initial receiver offset: {init_offset_deg:.2f}° "
-                    f"(θ/φ magnitude {cfg_offset_deg:.2f}°)"
-                ),
-            ]
-
-            result.s2.receiver.reset_dish_tracking()
-            s2_miss_logged = False
-            s2_first_detect: float | None = None
-            s2_slew_logged = False
-
-            with self._profiler.measure("replay_sim"):
-                q = 0.0
-                while q < q_max_local - 1e-12 and q <= q_end + 1e-12:
-                    tx = result.s1.transmitter
-                    had_seen = s2.has_seen_beam
-                    dish_boresight = s2.dish_boresight.copy()
-
-                    if not had_seen and not s2_miss_logged:
-                        missed = beam_missed_dish_fov_at_q(
-                            q,
-                            tx.position,
-                            s2.dish_mount,
-                            dish_boresight,
-                            s2.dish_fov,
-                            tx.boresight_at,
-                            tx.alpha,
-                            tx.beam_length,
-                        )
-                        if missed is not None:
-                            log_lines.append(
-                                self._format_rx_angles(
-                                    q,
-                                    "S2",
-                                    s2,
-                                    tx,
-                                    dish_boresight,
-                                    prefix="S2 Missed beam",
-                                )
-                            )
-                            s2_miss_logged = True
-
-                    in_cone = beam_hits_dish_at_q(
-                        q,
-                        tx.position,
-                        s2.dish_mount,
-                        dish_boresight,
-                        s2.dish_fov,
-                        tx.boresight_at,
-                        tx.alpha,
-                        tx.beam_length,
-                    )
-                    s2.observe_beam(in_cone, tx.boresight_at(q), q_step)
-                    self._count_replay_step()
-
-                    if s2.has_seen_beam and not had_seen:
-                        log_lines.append(
-                            self._format_rx_angles(
-                                q,
-                                "S2",
-                                s2,
-                                tx,
-                                dish_boresight,
-                                prefix="S2 Received",
-                            )
-                        )
-                        s2_first_detect = q
-
-                    if (
-                        s2_first_detect is not None
-                        and q > s2_first_detect + 1e-9
-                        and not s2_slew_logged
-                    ):
-                        log_lines.append("S2 Body slewing toward lock")
-                        s2_slew_logged = True
-
-                    q += q_step
-
-                if q_end >= q_max_local - 1e-12:
-                    while q < q_max_local - 1e-12:
-                        result._step_phase1(q)
-                        self._count_replay_step()
-                        q += q_step
-                    result.boresight_end = (
-                        result.s2.body.beam_boresight_inertial().copy()
-                    )
-                    center = "locked" if s2.has_seen_beam else "initial_aim"
-                    result.s2.phase2_transmitter = build_phase2_transmitter(
-                        result.s2,
-                        result.s1,
-                        result.boresight_end,
-                        config,
-                    )
-                    result._phase2_built = True
-
-                    log_lines.append("S1 Search spiral complete")
-                    if s2_first_detect is None:
-                        log_lines.append("S2 No beam acquisition")
-                    log_lines.append(
-                        f"S2 Search spiral started ({center})"
-                    )
-
-                    s1 = result.s1.receiver
-                    s1_init_deg = np.degrees(s1.initial_pointing_offset)
-                    log_lines.append(
-                        f"S1 Initial receiver offset: {s1_init_deg:.2f}°"
-                    )
-                    s1_miss_logged = False
-                    s1_first_detect: float | None = None
-                    s1_slew_logged = False
-
-                    s1.reset_dish_tracking()
-                    q = q_max_local
-                    tx2 = result.s2.phase2_transmitter
-                    while q <= q_end + 1e-12 and q < total_q - 1e-12:
-                        local_q = q - q_max_local
-                        had_seen = s1.has_seen_beam
-                        dish_boresight = s1.dish_boresight.copy()
-
-                        if not had_seen and not s1_miss_logged:
-                            missed = beam_missed_dish_fov_at_q(
-                                local_q,
-                                tx2.position,
-                                s1.dish_mount,
-                                dish_boresight,
-                                s1.dish_fov,
-                                tx2.boresight_at,
-                                tx2.alpha,
-                                tx2.beam_length,
-                            )
-                            if missed is not None:
-                                log_lines.append(
-                                    self._format_rx_angles(
-                                        q,
-                                        "S1",
-                                        s1,
-                                        tx2,
-                                        dish_boresight,
-                                        prefix="S1 Missed beam",
-                                    )
-                                )
-                                s1_miss_logged = True
-
-                        in_cone = beam_hits_dish_at_q(
-                            local_q,
-                            tx2.position,
-                            s1.dish_mount,
-                            dish_boresight,
-                            s1.dish_fov,
-                            tx2.boresight_at,
-                            tx2.alpha,
-                            tx2.beam_length,
-                        )
-                        s1.observe_beam(in_cone, tx2.boresight_at(local_q), q_step)
-                        self._count_replay_step()
-
-                        if s1.has_seen_beam and not had_seen:
-                            log_lines.append(
-                                self._format_rx_angles(
-                                    q,
-                                    "S1",
-                                    s1,
-                                    tx2,
-                                    dish_boresight,
-                                    prefix="S1 Received",
-                                )
-                            )
-                            s1_first_detect = q
-
-                        if (
-                            s1_first_detect is not None
-                            and q > s1_first_detect + 1e-9
-                            and not s1_slew_logged
-                        ):
-                            log_lines.append("S1 Body slewing toward lock")
-                            s1_slew_logged = True
-
-                        q += q_step
-
-                    if q_end >= total_q - 1e-12:
-                        log_lines.append("S2 Search spiral complete")
-                        if s1_first_detect is None:
-                            log_lines.append("S1 No beam acquisition")
-
+            log_lines: list[str] = []
+            result.replay_to(q_end, event_log=log_lines)
             self._log_lines = log_lines
-            with self._profiler.measure("replay_log_ui"):
-                self._log_label.setText("\n".join(log_lines))
-                self._position_log_overlay()
+            self._log_label.setText("\n".join(log_lines))
+            self._position_log_overlay()
+            if result.last_sim_profiler is not None:
+                self._replay_step_count = result.last_sim_profiler.step_count
 
         def showEvent(self, event) -> None:  # noqa: N802
             super().showEvent(event)
@@ -564,8 +350,7 @@ def run_visualizer(result: ScenarioResult, start_q: float = 0.0) -> None:
 
             self._profiler.record("frame_total", time.perf_counter() - frame_start)
             self._profiler.end_frame()
-            if self._profiler.enabled:
-                self._profile_label.setText(self._profiler.format_overlay())
+            self._update_profile_overlay()
 
         def _update_mesh_actor(
             self,
