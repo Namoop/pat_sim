@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+import numpy as np
+
 from satellite.geometry import (
     actual_target_plane_distance,
     cone_surface_mesh,
@@ -51,10 +53,13 @@ class ReceiverSDA:
         self.body_radius = body_radius
         self.dish_fov = dish_fov
         self.dish_slew_time = dish_slew_time
+        self.dish_theta_offset = dish_theta_offset
+        self.dish_phi_offset = dish_phi_offset
 
         self.d_circ = actual_target_plane_distance(p1, pt, l_r)
 
         toward_p1 = normalize(p1 - pt)
+        self._nominal_boresight = toward_p1.copy()
         u_look, u_t, u_b = receiver_basis(pt, p1)
         initial_boresight = direction_with_tangent_offset(
             u_look,
@@ -65,6 +70,21 @@ class ReceiverSDA:
         )
         self._initial_boresight = initial_boresight.copy()
         self.dish = ReceiverDishState(boresight=initial_boresight)
+
+    @property
+    def nominal_boresight(self) -> Vec3:
+        """True aim direction toward P_1 from P_t."""
+        return self._nominal_boresight
+
+    @property
+    def initial_pointing_offset(self) -> float:
+        """Angular offset of the dish from nominal aim at startup (rad)."""
+        return angle_between(self._nominal_boresight, self._initial_boresight)
+
+    @property
+    def configured_offset_magnitude(self) -> float:
+        """Configured offset magnitude hypot(theta, phi) in radians."""
+        return float(np.hypot(self.dish_theta_offset, self.dish_phi_offset))
 
     @property
     def dish_state(self) -> ReceiverDishState:

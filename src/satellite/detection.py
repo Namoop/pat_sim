@@ -25,7 +25,7 @@ def is_within_dish_fov(
     dish_fov: float,
 ) -> bool:
     """True when incoming beam lies within the dish full FOV (radians)."""
-    return angle_between(dish_boresight, incoming_direction) <= dish_fov / 2.0
+    return angle_between(dish_boresight, incoming_direction) <= dish_fov
 
 
 def point_in_transmitter_cone(
@@ -91,7 +91,7 @@ def beam_missed_dish_fov_at_q(
     ):
         return None
     incident = beam_incident_angle_at_q(q, dish_boresight, boresight_fn)
-    if incident <= dish_fov / 2.0:
+    if incident <= dish_fov:
         return None
     return incident
 

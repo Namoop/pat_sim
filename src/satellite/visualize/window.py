@@ -5,6 +5,7 @@ from __future__ import annotations
 import numpy as np
 
 from satellite.detection import beam_missed_dish_fov_at_q
+from satellite.math3d import angle_between
 from satellite.scenario import ScenarioResult
 
 
@@ -122,7 +123,7 @@ def run_visualizer(result: ScenarioResult, start_q: float = 0.0) -> None:
             self._log_label.setStyleSheet("color: #e2e2ee;")
             log_layout.addWidget(self._log_title)
             log_layout.addWidget(self._log_label)
-            self._log_frame.setMaximumWidth(340)
+            self._log_frame.setMaximumWidth(380)
             self._log_frame.raise_()
 
             layout.addWidget(self._plot_host, stretch=1)
@@ -156,7 +157,7 @@ def run_visualizer(result: ScenarioResult, start_q: float = 0.0) -> None:
         def _position_log_overlay(self) -> None:
             margin = 12
             self._log_frame.adjustSize()
-            w = min(self._log_frame.sizeHint().width(), 340)
+            w = min(self._log_frame.sizeHint().width(), 380)
             h = self._log_frame.sizeHint().height()
             self._log_frame.setGeometry(
                 self._plot_host.width() - w - margin,
@@ -166,31 +167,67 @@ def run_visualizer(result: ScenarioResult, start_q: float = 0.0) -> None:
             )
             self._log_frame.raise_()
 
+        def _format_s2_angles(
+            self,
+            q: float,
+            dish_boresight: np.ndarray,
+            *,
+            prefix: str,
+        ) -> str:
+            receiver = result.receiver
+            transmitter = result.transmitter
+            dish_fov = config.receiver.dish_fov
+            toward_p1 = receiver.nominal_boresight
+            beam_axis = transmitter.boresight_at(q)
+            toward_source = -beam_axis / np.linalg.norm(beam_axis)
+
+            receiver_offset = np.degrees(
+                angle_between(toward_p1, dish_boresight)
+            )
+            beam_offset = np.degrees(angle_between(toward_p1, beam_axis))
+            incident = np.degrees(angle_between(dish_boresight, toward_source))
+            fov_deg = np.degrees(dish_fov)
+
+            return (
+                f"{prefix} (q={q:.3f})\n"
+                f"  Receiver offset: {receiver_offset:.2f}°\n"
+                f"  Beam boresight offset: {beam_offset:.2f}°\n"
+                f"  Incident angle: {incident:.2f}° (FOV {fov_deg:.2f}°)"
+            )
+
         def _replay_to(self, q_end: float) -> None:
             """Replay dish tracking to q_end and rebuild the event log."""
             receiver = result.receiver
             transmitter = result.transmitter
             receiver.reset_dish_tracking()
 
-            log_lines = ["S1 Search spiral started"]
+            init_offset_deg = np.degrees(receiver.initial_pointing_offset)
+            cfg_offset_deg = np.degrees(receiver.configured_offset_magnitude)
+            log_lines = [
+                "S1 Search spiral started",
+                (
+                    f"S2 Initial receiver offset: {init_offset_deg:.2f}° "
+                    f"(θ/φ magnitude {cfg_offset_deg:.2f}°)"
+                ),
+            ]
             first_detect_q: float | None = None
             slew_logged = False
             miss_logged = False
             dish_fov = config.receiver.dish_fov
-            half_fov = dish_fov / 2.0
             alpha = config.sda.alpha
             beam_length = transmitter.beam_length
 
             q = 0.0
             while q <= q_end + 1e-12:
                 had_seen = receiver.dish.has_seen_beam
+                dish_boresight = receiver.dish.boresight.copy()
 
                 if not had_seen and not miss_logged:
                     missed_angle = beam_missed_dish_fov_at_q(
                         q,
                         result.p1,
                         receiver.dish_mount,
-                        receiver.dish.boresight,
+                        dish_boresight,
                         dish_fov,
                         transmitter.boresight_at,
                         alpha,
@@ -198,9 +235,11 @@ def run_visualizer(result: ScenarioResult, start_q: float = 0.0) -> None:
                     )
                     if missed_angle is not None:
                         log_lines.append(
-                            f"S2 Missed beam: angle [{missed_angle:.3f} rad] "
-                            f"> {half_fov:.3f} rad (FOV {dish_fov:.3f}) "
-                            f"(q={q:.3f})"
+                            self._format_s2_angles(
+                                q,
+                                dish_boresight,
+                                prefix="S2 Missed beam",
+                            )
                         )
                         miss_logged = True
 
@@ -212,9 +251,12 @@ def run_visualizer(result: ScenarioResult, start_q: float = 0.0) -> None:
                 )
 
                 if receiver.dish.has_seen_beam and not had_seen:
-                    incident_deg = np.degrees(receiver.dish.incident_angle or 0.0)
                     log_lines.append(
-                        f"S2 Received at angle [{incident_deg:.2f}°] (q={q:.3f})"
+                        self._format_s2_angles(
+                            q,
+                            dish_boresight,
+                            prefix="S2 Received",
+                        )
                     )
                     first_detect_q = q
 
