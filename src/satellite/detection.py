@@ -44,6 +44,58 @@ def point_in_transmitter_cone(
     return dot(normalize(axis), direction) >= np.cos(alpha)
 
 
+def beam_incident_angle_at_q(
+    q: float,
+    dish_boresight: Vec3,
+    boresight_fn: Callable[[float], Vec3],
+) -> float:
+    """Angle between dish boresight and incoming beam at q."""
+    toward_source = -normalize(boresight_fn(q))
+    return angle_between(dish_boresight, toward_source)
+
+
+def beam_illuminates_dish_mount_at_q(
+    q: float,
+    apex: Vec3,
+    dish_mount: Vec3,
+    boresight_fn: Callable[[float], Vec3],
+    alpha: float,
+    beam_length: float,
+) -> bool:
+    """True when the transmitter cone covers the dish mount point."""
+    return point_in_transmitter_cone(
+        apex,
+        boresight_fn(q),
+        alpha,
+        beam_length,
+        dish_mount,
+    )
+
+
+def beam_missed_dish_fov_at_q(
+    q: float,
+    apex: Vec3,
+    dish_mount: Vec3,
+    dish_boresight: Vec3,
+    dish_fov: float,
+    boresight_fn: Callable[[float], Vec3],
+    alpha: float,
+    beam_length: float,
+) -> float | None:
+    """
+    Return incident angle (rad) when the beam hits the mount but is outside
+    dish FOV, else None.
+    """
+    if not beam_illuminates_dish_mount_at_q(
+        q, apex, dish_mount, boresight_fn, alpha, beam_length
+    ):
+        return None
+    incident = beam_incident_angle_at_q(q, dish_boresight, boresight_fn)
+    if incident <= dish_fov / 2.0:
+        return None
+    return incident
+
+
 def beam_hits_dish_at_q(
     q: float,
     apex: Vec3,

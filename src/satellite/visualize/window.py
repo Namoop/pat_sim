@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import numpy as np
 
+from satellite.detection import beam_missed_dish_fov_at_q
 from satellite.scenario import ScenarioResult
 
 
@@ -174,11 +175,36 @@ def run_visualizer(result: ScenarioResult, start_q: float = 0.0) -> None:
             log_lines = ["S1 Search spiral started"]
             first_detect_q: float | None = None
             slew_logged = False
+            miss_logged = False
+            dish_fov = config.receiver.dish_fov
+            half_fov = dish_fov / 2.0
+            alpha = config.sda.alpha
+            beam_length = transmitter.beam_length
 
             q = 0.0
             while q <= q_end + 1e-12:
-                in_cone = result.in_cone_at_q(q)
                 had_seen = receiver.dish.has_seen_beam
+
+                if not had_seen and not miss_logged:
+                    missed_angle = beam_missed_dish_fov_at_q(
+                        q,
+                        result.p1,
+                        receiver.dish_mount,
+                        receiver.dish.boresight,
+                        dish_fov,
+                        transmitter.boresight_at,
+                        alpha,
+                        beam_length,
+                    )
+                    if missed_angle is not None:
+                        log_lines.append(
+                            f"S2 Missed beam: angle [{missed_angle:.3f} rad] "
+                            f"> {half_fov:.3f} rad (FOV {dish_fov:.3f}) "
+                            f"(q={q:.3f})"
+                        )
+                        miss_logged = True
+
+                in_cone = result.in_cone_at_q(q)
                 receiver.observe_beam(
                     in_cone,
                     transmitter.boresight_at(q),
