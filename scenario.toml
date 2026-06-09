@@ -43,3 +43,4 @@ cone_u_steps = 24
 cone_v_steps = 32
 spiral_trail_steps = 120
 ribbon_v_steps = 8
+profile_frames = true  # temporary: per-frame timing overlay (or SATELLITE_VIZ_PROFILE=1)
