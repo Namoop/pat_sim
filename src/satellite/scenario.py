@@ -40,6 +40,7 @@ class ScenarioResult:
     phase1_alignment: float
     phase2_alignment: float
     _phase2_built: bool = field(default=False, repr=False)
+    _replay_timeline: object | None = field(default=None, repr=False)
     last_sim_profiler: SimReplayProfiler | None = field(default=None, repr=False)
 
     @property
@@ -212,6 +213,14 @@ class ScenarioResult:
         )
         self._phase2_built = True
 
+    def ensure_replay_timeline(self):
+        """Build full per-step replay cache once (amortized O(1) scrubbing)."""
+        if self._replay_timeline is None:
+            from satellite.replay_timeline import build_replay_timeline
+
+            self._replay_timeline = build_replay_timeline(self)
+        return self._replay_timeline
+
     def replay_to(
         self,
         q_end: float,
@@ -223,6 +232,25 @@ class ScenarioResult:
         q_max = self.schedule.phase_duration
         q_end = float(np.clip(q_end, 0.0, self.schedule.total_duration))
         profiler = SimReplayProfiler.from_config(self.config.simulation.profile_replay)
+
+        if self._replay_timeline is not None:
+            with profiler.measure("replay_total"):
+                timeline = self._replay_timeline
+                idx = timeline.restore(self, q_end)
+                if event_log is not None:
+                    event_log.clear()
+                    include_final = (
+                        q_end >= self.schedule.total_duration - 1e-12
+                    )
+                    event_log.extend(
+                        timeline.event_log_up_to(
+                            idx,
+                            include_final=include_final,
+                        )
+                    )
+            self.last_sim_profiler = profiler
+            profiler.report(f"replay_to q<={q_end:.3f} (cached)")
+            return
 
         with profiler.measure("replay_total"):
             with profiler.measure("reset_s2"):

@@ -215,6 +215,8 @@ def run_visualizer(result: ScenarioResult, start_q: float = 0.0) -> None:
             QTimer.singleShot(0, self._init_scene)
 
         def _init_scene(self) -> None:
+            timeline = result.ensure_replay_timeline()
+            print(f"Replay timeline: {timeline.memory_summary()}")
             self._build_scene()
             self._set_q(self.current_q)
 
