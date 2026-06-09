@@ -414,13 +414,13 @@ class ScenarioResult:
         profiler.report(f"replay_to q<={q_end:.3f}")
 
     def dish_boresight_for_display(self, satellite: str, q: float) -> Vec3:
-        """Return dish boresight for viz; inactive satellite frozen at phase boundary."""
+        """Return bench dish boresight for viz (bench slew visible; FSM not drawn)."""
         phase, _ = self.schedule.phase_at(q)
         if satellite == "S1":
             if phase is SearchPhase.S1_TRANSMIT:
                 return self.s1.receiver.initial_dish_boresight
-            return self.s1.receiver.display_boresight()
-        return self.s2.receiver.display_boresight()
+            return self.s1.receiver.dish_boresight
+        return self.s2.receiver.dish_boresight
 
     def boresight_ray_length(self, satellite: str) -> float:
         sat = self.s1 if satellite == "S1" else self.s2
