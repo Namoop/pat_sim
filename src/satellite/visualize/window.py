@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from satellite.scenario import ScenarioResult, replay_dish_tracking
+from satellite.scenario import ScenarioResult
 
 
 def _configure_qt_platform() -> None:
@@ -40,8 +40,10 @@ def run_visualizer(result: ScenarioResult, start_q: float = 0.0) -> None:
 
     import pyvista as pv
     from PyQt6.QtCore import Qt, QTimer
+    from PyQt6.QtGui import QFont
     from PyQt6.QtWidgets import (
         QApplication,
+        QFrame,
         QHBoxLayout,
         QLabel,
         QMainWindow,
@@ -78,6 +80,7 @@ def run_visualizer(result: ScenarioResult, start_q: float = 0.0) -> None:
             self._dish_ray_length = float(np.linalg.norm(result.p1 - result.pt))
             self._scene_built = False
             self._playing = False
+            self._log_lines: list[str] = []
 
             self._play_timer = QTimer(self)
             self._play_timer.setInterval(50)
@@ -87,8 +90,41 @@ def run_visualizer(result: ScenarioResult, start_q: float = 0.0) -> None:
             self.setCentralWidget(central)
             layout = QVBoxLayout(central)
 
-            self.plotter = QtInteractor(central)
-            layout.addWidget(self.plotter.interactor, stretch=1)
+            self._plot_host = QWidget()
+            plot_host_layout = QVBoxLayout(self._plot_host)
+            plot_host_layout.setContentsMargins(0, 0, 0, 0)
+
+            self.plotter = QtInteractor(self._plot_host)
+            plot_host_layout.addWidget(self.plotter.interactor)
+
+            self._log_frame = QFrame(self._plot_host)
+            self._log_frame.setObjectName("eventLog")
+            self._log_frame.setStyleSheet(
+                "#eventLog {"
+                "  background-color: rgba(18, 18, 28, 215);"
+                "  border: 1px solid rgba(220, 220, 235, 90);"
+                "  border-radius: 4px;"
+                "}"
+            )
+            log_layout = QVBoxLayout(self._log_frame)
+            log_layout.setContentsMargins(10, 8, 10, 8)
+            self._log_title = QLabel("Event Log")
+            self._log_title.setStyleSheet(
+                "color: #f0f0f8; font-weight: bold; font-size: 12px;"
+            )
+            self._log_label = QLabel()
+            self._log_label.setAlignment(
+                Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft
+            )
+            self._log_label.setWordWrap(True)
+            self._log_label.setFont(QFont("Monospace", 10))
+            self._log_label.setStyleSheet("color: #e2e2ee;")
+            log_layout.addWidget(self._log_title)
+            log_layout.addWidget(self._log_label)
+            self._log_frame.setMaximumWidth(340)
+            self._log_frame.raise_()
+
+            layout.addWidget(self._plot_host, stretch=1)
 
             controls = QHBoxLayout()
             self.time_label = QLabel()
@@ -111,6 +147,69 @@ def run_visualizer(result: ScenarioResult, start_q: float = 0.0) -> None:
             controls.addWidget(self.play_btn)
             controls.addWidget(self.next_btn)
             layout.addLayout(controls)
+
+        def resizeEvent(self, event) -> None:  # noqa: N802
+            super().resizeEvent(event)
+            self._position_log_overlay()
+
+        def _position_log_overlay(self) -> None:
+            margin = 12
+            self._log_frame.adjustSize()
+            w = min(self._log_frame.sizeHint().width(), 340)
+            h = self._log_frame.sizeHint().height()
+            self._log_frame.setGeometry(
+                self._plot_host.width() - w - margin,
+                margin,
+                w,
+                h,
+            )
+            self._log_frame.raise_()
+
+        def _replay_to(self, q_end: float) -> None:
+            """Replay dish tracking to q_end and rebuild the event log."""
+            receiver = result.receiver
+            transmitter = result.transmitter
+            receiver.reset_dish_tracking()
+
+            log_lines = ["S1 Search spiral started"]
+            first_detect_q: float | None = None
+            slew_logged = False
+
+            q = 0.0
+            while q <= q_end + 1e-12:
+                in_cone = result.in_cone_at_q(q)
+                had_seen = receiver.dish.has_seen_beam
+                receiver.observe_beam(
+                    in_cone,
+                    transmitter.boresight_at(q),
+                    q_step,
+                )
+
+                if receiver.dish.has_seen_beam and not had_seen:
+                    incident_deg = np.degrees(receiver.dish.incident_angle or 0.0)
+                    log_lines.append(
+                        f"S2 Received at angle [{incident_deg:.2f}°] (q={q:.3f})"
+                    )
+                    first_detect_q = q
+
+                if (
+                    first_detect_q is not None
+                    and q > first_detect_q + 1e-9
+                    and not slew_logged
+                ):
+                    log_lines.append("S2 Dish slewing toward lock")
+                    slew_logged = True
+
+                q += q_step
+
+            if q_end >= q_max - 1e-9:
+                log_lines.append("S1 Search spiral complete")
+                if first_detect_q is None:
+                    log_lines.append("S2 No beam acquisition")
+
+            self._log_lines = log_lines
+            self._log_label.setText("\n".join(log_lines))
+            self._position_log_overlay()
 
         def showEvent(self, event) -> None:  # noqa: N802
             super().showEvent(event)
@@ -232,13 +331,7 @@ def run_visualizer(result: ScenarioResult, start_q: float = 0.0) -> None:
             self.slider.setValue(int(q / q_step))
             self.slider.blockSignals(False)
 
-            replay_dish_tracking(
-                result.receiver,
-                result.transmitter,
-                result.in_cone_at_q,
-                q,
-                q_step,
-            )
+            self._replay_to(q)
             self._update_scene()
 
         def _update_mesh_actor(
