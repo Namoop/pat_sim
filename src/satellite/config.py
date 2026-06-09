@@ -6,28 +6,40 @@ import tomllib
 from dataclasses import dataclass
 from pathlib import Path
 
-import numpy as np
-
 from satellite.math3d import Vec3, as_vec3
 
 
 @dataclass(frozen=True)
-class PositionsConfig:
-    p1: Vec3
-    p2: Vec3
-    pt: Vec3 | None
+class SatelliteInstanceConfig:
+    """Per-spacecraft pose and pointing offsets ([s1] / [s2])."""
+
+    position: Vec3
+    body_theta_offset: float
+    body_phi_offset: float
+    beam_theta_offset: float
+    beam_phi_offset: float
+    dish_theta_offset: float
+    dish_phi_offset: float
 
 
 @dataclass(frozen=True)
-class OffsetsConfig:
-    theta_jumble: float
-    phi_jumble: float
+class SharedSatelliteConfig:
+    """Shared spacecraft hardware ([satellite])."""
+
+    body_radius: float
+    dish_fov: float
+    dish_slew_time: float
+    beam_width_mrad: float
+
+    @property
+    def alpha(self) -> float:
+        """Transmitter cone half-angle in radians."""
+        return self.beam_width_mrad * 1e-3
 
 
 @dataclass(frozen=True)
 class SdaConfig:
     k: float
-    alpha: float
     gamma: float
     beta: float
     omega_r: float
@@ -39,15 +51,7 @@ class SimulationConfig:
     q_max: float
     q_step: float
     beam_length: float | None
-
-
-@dataclass(frozen=True)
-class ReceiverConfig:
-    dish_theta_offset: float
-    dish_phi_offset: float
-    body_radius: float
-    dish_fov: float
-    dish_slew_time: float
+    boresight_extension: float
 
 
 @dataclass(frozen=True)
@@ -62,11 +66,11 @@ class VisualizationConfig:
 @dataclass(frozen=True)
 class ScenarioConfig:
     name: str
-    positions: PositionsConfig
-    offsets: OffsetsConfig
+    s1: SatelliteInstanceConfig
+    s2: SatelliteInstanceConfig
+    satellite: SharedSatelliteConfig
     sda: SdaConfig
     simulation: SimulationConfig
-    receiver: ReceiverConfig
     visualization: VisualizationConfig
 
 
@@ -76,6 +80,21 @@ def _vec3_from_list(values: list[float], field: str) -> Vec3:
     return as_vec3(values)
 
 
+def _load_satellite_instance(
+    data: dict,
+    section: str,
+) -> SatelliteInstanceConfig:
+    return SatelliteInstanceConfig(
+        position=_vec3_from_list(data["position"], f"{section}.position"),
+        body_theta_offset=float(data.get("body_theta_offset", 0.0)),
+        body_phi_offset=float(data.get("body_phi_offset", 0.0)),
+        beam_theta_offset=float(data.get("beam_theta_offset", 0.0)),
+        beam_phi_offset=float(data.get("beam_phi_offset", 0.0)),
+        dish_theta_offset=float(data.get("dish_theta_offset", 0.08)),
+        dish_phi_offset=float(data.get("dish_phi_offset", 0.06)),
+    )
+
+
 def load_config(path: str | Path) -> ScenarioConfig:
     """Load and validate a scenario TOML file."""
     config_path = Path(path)
@@ -83,15 +102,12 @@ def load_config(path: str | Path) -> ScenarioConfig:
         data = tomllib.load(f)
 
     scenario = data.get("scenario", {})
-    positions = data.get("positions", {})
-    offsets = data.get("offsets", {})
+    s1 = data.get("s1", {})
+    s2 = data.get("s2", {})
+    satellite = data.get("satellite", {})
     sda = data.get("sda", {})
     simulation = data.get("simulation", {})
-    receiver = data.get("receiver", {})
     visualization = data.get("visualization", {})
-
-    pt_raw = positions.get("pt")
-    pt = _vec3_from_list(pt_raw, "positions.pt") if pt_raw is not None else None
 
     beam_length = simulation.get("beam_length")
     if beam_length is not None:
@@ -99,18 +115,16 @@ def load_config(path: str | Path) -> ScenarioConfig:
 
     return ScenarioConfig(
         name=str(scenario.get("name", "unnamed")),
-        positions=PositionsConfig(
-            p1=_vec3_from_list(positions["p1"], "positions.p1"),
-            p2=_vec3_from_list(positions["p2"], "positions.p2"),
-            pt=pt,
-        ),
-        offsets=OffsetsConfig(
-            theta_jumble=float(offsets.get("theta_jumble", 0.0)),
-            phi_jumble=float(offsets.get("phi_jumble", 0.0)),
+        s1=_load_satellite_instance(s1, "s1"),
+        s2=_load_satellite_instance(s2, "s2"),
+        satellite=SharedSatelliteConfig(
+            body_radius=float(satellite.get("body_radius", 0.5)),
+            dish_fov=float(satellite.get("dish_fov", 0.002)),
+            dish_slew_time=float(satellite.get("dish_slew_time", 0.3)),
+            beam_width_mrad=float(satellite["beam_width"]),
         ),
         sda=SdaConfig(
             k=float(sda["k"]),
-            alpha=float(sda["alpha"]),
             gamma=float(sda["gamma"]),
             beta=float(sda["beta"]),
             omega_r=float(sda["omega_r"]),
@@ -120,13 +134,7 @@ def load_config(path: str | Path) -> ScenarioConfig:
             q_max=float(simulation["q_max"]),
             q_step=float(simulation["q_step"]),
             beam_length=beam_length,
-        ),
-        receiver=ReceiverConfig(
-            dish_theta_offset=float(receiver.get("dish_theta_offset", 0.08)),
-            dish_phi_offset=float(receiver.get("dish_phi_offset", 0.06)),
-            body_radius=float(receiver.get("body_radius", 0.5)),
-            dish_fov=float(receiver.get("dish_fov", 0.002)),
-            dish_slew_time=float(receiver.get("dish_slew_time", 0.3)),
+            boresight_extension=float(simulation.get("boresight_extension", 5.0)),
         ),
         visualization=VisualizationConfig(
             enabled=bool(visualization.get("enabled", False)),
@@ -138,15 +146,14 @@ def load_config(path: str | Path) -> ScenarioConfig:
     )
 
 
-def resolve_actual_position(config: ScenarioConfig) -> Vec3:
-    """Return P_t, computing from jumble offsets when not explicit in TOML."""
-    if config.positions.pt is not None:
-        return config.positions.pt
-    from satellite.geometry import actual_position_from_jumble
+def default_beam_length(
+    position: Vec3,
+    partner: Vec3,
+    simulation: SimulationConfig,
+) -> float:
+    """Default TX cone length: link range plus boresight extension."""
+    from satellite.math3d import distance
 
-    return actual_position_from_jumble(
-        config.positions.p1,
-        config.positions.p2,
-        config.offsets.theta_jumble,
-        config.offsets.phi_jumble,
-    )
+    if simulation.beam_length is not None:
+        return simulation.beam_length
+    return distance(position, partner) + simulation.boresight_extension

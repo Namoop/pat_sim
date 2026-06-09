@@ -1,33 +1,41 @@
 [scenario]
 name = "desmos_default"
 
-[positions]
-p1 = [0.0, 0.0, 0.0]
-p2 = [0.0, 0.5, 10.5]
-pt = [0, 0.0, 10]
+[s1]
+position = [0.0, 0.0, 0.0]
+body_theta_offset = 0.015
+body_phi_offset = 0.015
+beam_theta_offset = 0.01
+beam_phi_offset = 0.01
+dish_theta_offset = 0.0
+dish_phi_offset = 0.0
 
-[offsets]
-theta_jumble = 0.0
-phi_jumble = 0.0
+[s2]
+position = [0.0, 50.0, 1000.0]
+body_theta_offset = 0.01
+body_phi_offset = 0.01
+beam_theta_offset = 0.0
+beam_phi_offset = 0.0
+dish_theta_offset = 0.0
+dish_phi_offset = 0.0
+
+[satellite]
+body_radius = 0.5
+dish_fov = 0.2
+dish_slew_time = 0.3
+beam_width = 5.0  # milliradians (cone half-angle alpha)
 
 [sda]
 k = 10.0
-alpha = 0.005 # from SIM config 
 gamma = 0.5
 beta = 0.5
-omega_r = 10.0 #ideally pi_k / alpha
+omega_r = 10.0  # ideally pi * k / alpha
 L_r = 0.15
 
 [simulation]
 q_max = 5.0
 q_step = 0.01
-
-[receiver]
-dish_theta_offset = 0.52
-dish_phi_offset = 0.36
-body_radius = 0.5
-dish_fov = 0.002
-dish_slew_time = 0.3
+boresight_extension = 5.0
 
 [visualization]
 enabled = false
