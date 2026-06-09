@@ -9,17 +9,25 @@ from satellite.math3d import Vec3, angle_between, cross, dot, norm, normalize, s
 
 
 def _offsets_to_target(bench_boresight: Vec3, target: Vec3) -> tuple[float, float]:
-    """Tangent-plane offsets on bench_boresight that steer toward target."""
+    """
+    Exact tangent-plane offsets so direction_with_tangent_offset reaches target.
+
+    direction_with_tangent_offset rotates base by |w| around axis cross(base, w)
+    where w = theta*u_x + phi*u_y. For rotation by tilt toward target, set
+    cross(base, w) = tilt * n with n = normalize(cross(base, target)), hence
+    w = tilt * cross(n, base).
+    """
     base = normalize(bench_boresight)
     aim = normalize(target)
     tilt = angle_between(base, aim)
     if tilt < 1e-15:
         return 0.0, 0.0
-    rot_axis = cross(base, aim)
-    if norm(rot_axis) < 1e-15:
+    axis_perp = cross(base, aim)
+    if norm(axis_perp) < 1e-15:
         return 0.0, 0.0
+    n = normalize(axis_perp)
+    w = tilt * cross(n, base)
     u_x, u_y, _ = transmitter_basis(*spherical_angles_from_direction(base))
-    w = normalize(rot_axis) * tilt
     return float(dot(w, u_x)), float(dot(w, u_y))
 
 
