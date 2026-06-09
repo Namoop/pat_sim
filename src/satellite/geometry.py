@@ -500,20 +500,20 @@ def spiral_trail_on_plane(
 
 def actual_position_from_jumble(
     p1: Vec3,
-    p2: Vec3,
+    believed_boresight: Vec3,
+    link_range: float,
     theta_jumble: float,
     phi_jumble: float,
 ) -> Vec3:
     """
     Compute actual receiver position by applying launch jumble offsets to the
-    believed direction at believed range.
+    believed direction at link_range.
     """
-    d = believed_distance(p1, p2)
-    theta_0, phi_0 = spherical_angles_from_direction(believed_direction(p1, p2))
+    theta_0, phi_0 = spherical_angles_from_direction(believed_boresight)
     theta_actual = theta_0 + theta_jumble
     phi_actual = phi_0 + phi_jumble
     direction = spherical_to_cartesian(theta_actual, phi_actual)
-    return p1 + d * direction
+    return p1 + link_range * direction
 
 
 def wobble_normal(

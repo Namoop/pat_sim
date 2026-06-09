@@ -7,8 +7,6 @@ import math
 import numpy as np
 
 from satellite.geometry import (
-    believed_direction,
-    believed_distance,
     cone_surface_mesh,
     global_spiral_frame,
     ribbon_swept_mesh,
@@ -16,38 +14,65 @@ from satellite.geometry import (
     spiral_trail_on_plane,
     transmitter_basis,
 )
-from satellite.math3d import Vec3, distance, spherical_angles_from_direction
+from satellite.math3d import Vec3, distance, normalize, spherical_angles_from_direction
 
 
 class TransmitterSDA:
-    """Transmitter-side SDA spiral search around believed target P_2."""
+    """Transmitter-side SDA spiral search around a believed boresight."""
 
     def __init__(
         self,
-        p1: Vec3,
-        p2: Vec3,
-        pt: Vec3,
+        position: Vec3,
+        believed_boresight: Vec3,
+        partner_actual: Vec3,
         k: float,
         alpha: float,
-        beam_length: float | None = None,
+        beam_length: float,
     ) -> None:
-        self.p1 = p1
-        self.p2 = p2
-        self.pt = pt
+        self.position = position
+        self.believed_boresight = normalize(believed_boresight)
+        self.partner_actual = partner_actual
         self.k = k
         self.alpha = alpha
         self.w = k * alpha / math.pi
 
-        direction = believed_direction(p1, p2)
+        direction = self.believed_boresight
         self.theta_0, self.phi_0 = spherical_angles_from_direction(direction)
         self.u_x, self.u_y, self.u_z = transmitter_basis(self.theta_0, self.phi_0)
         self.nominal_boresight = self.u_z
 
-        self.beam_length = (
-            beam_length if beam_length is not None else believed_distance(p1, p2)
+        self.believed_range = distance(position, partner_actual)
+        self.actual_target_range = self.believed_range
+        self.beam_length = beam_length
+
+    @classmethod
+    def from_boresight(
+        cls,
+        position: Vec3,
+        believed_boresight: Vec3,
+        partner_actual: Vec3,
+        k: float,
+        alpha: float,
+        beam_length: float | None = None,
+        *,
+        boresight_extension: float = 5.0,
+    ) -> TransmitterSDA:
+        link_range = distance(position, partner_actual)
+        length = (
+            beam_length
+            if beam_length is not None
+            else link_range + boresight_extension
         )
-        self.believed_range = believed_distance(p1, p2)
-        self.actual_target_range = distance(p1, pt)
+        return cls(position, believed_boresight, partner_actual, k, alpha, length)
+
+    # Backward-compat aliases
+    @property
+    def p1(self) -> Vec3:
+        return self.position
+
+    @property
+    def pt(self) -> Vec3:
+        return self.partner_actual
 
     def frame_at(self, q: float) -> tuple[Vec3, Vec3, Vec3]:
         return global_spiral_frame(
@@ -71,7 +96,7 @@ class TransmitterSDA:
     ) -> tuple[np.ndarray, np.ndarray]:
         a_s, b_s, c_s = self.frame_at(q)
         return cone_surface_mesh(
-            self.p1,
+            self.position,
             a_s,
             b_s,
             c_s,
@@ -83,7 +108,7 @@ class TransmitterSDA:
 
     def spiral_path_up_to(self, q: float, num_steps: int) -> np.ndarray:
         return spiral_path_on_target_plane(
-            self.p1,
+            self.position,
             q,
             self.boresight_at,
             self.nominal_boresight,
@@ -100,7 +125,7 @@ class TransmitterSDA:
     ) -> tuple[np.ndarray, np.ndarray]:
         """3D ribbon R(u,v) at target range along each boresight."""
         return ribbon_swept_mesh(
-            self.p1,
+            self.position,
             q,
             self.frame_at,
             self.alpha,
@@ -110,12 +135,12 @@ class TransmitterSDA:
         )
 
     def believed_target_at(self, q: float) -> Vec3:
-        """Beam-axis point at believed range — equals P_2 at q=0."""
-        return self.p1 + self.believed_range * self.boresight_at(q)
+        """Beam-axis point at believed range along boresight at q."""
+        return self.position + self.believed_range * self.boresight_at(q)
 
     def spiral_point_at_actual_range(self, q: float) -> Vec3:
         """K cap center at actual-target height along boresight at q."""
-        return self.p1 + self.actual_target_range * self.boresight_at(q)
+        return self.position + self.actual_target_range * self.boresight_at(q)
 
     def spiral_trail(
         self,
@@ -123,7 +148,7 @@ class TransmitterSDA:
         num_steps: int,
     ) -> np.ndarray:
         return spiral_trail_on_plane(
-            self.p1,
+            self.position,
             q_max,
             self.boresight_at,
             self.believed_range,
