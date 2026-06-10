@@ -7,9 +7,7 @@ from typing import TYPE_CHECKING, Literal
 
 from satellite.mapviz.frames import direction_to_tangent_angles, point_in_disc
 from satellite.math3d import normalize
-from satellite.schedule import SearchPhase, SearchSchedule
 from satellite.sda.satellite import Satellite
-from satellite.sda.transmitter import TransmitterSDA
 
 if TYPE_CHECKING:
     from satellite.scenario import ScenarioResult
@@ -58,32 +56,7 @@ def _partner_direction(viewer: Satellite, other: Satellite) -> object:
 
 
 def _map_origin(sat: Satellite) -> object:
-    """Fixed belief frame: origin is where this satellite thinks its partner is."""
     return sat.bench.initial_boresight
-
-
-def _fov_boresight(result: ScenarioResult, satellite: SatelliteName, q: float) -> object:
-    """Bench dish aim for FOV disc — matches 3D viz phase rules."""
-    phase, _ = result.schedule.phase_at(q)
-    sat = _satellite(result, satellite)
-    if satellite == "S1" and phase is SearchPhase.S1_TRANSMIT:
-        return sat.receiver.initial_dish_boresight
-    return sat.receiver.dish_boresight
-
-
-def _panel_aim_direction(
-    result: ScenarioResult,
-    satellite: SatelliteName,
-    q: float,
-    *,
-    is_tx: bool,
-    tx: TransmitterSDA | None,
-    tx_local_q: float,
-) -> object:
-    """Bench-co-aligned aim: active TX spiral boresight, otherwise dish boresight."""
-    if is_tx and tx is not None:
-        return tx.boresight_at(tx_local_q)
-    return _fov_boresight(result, satellite, q)
 
 
 def build_panel(
@@ -91,42 +64,23 @@ def build_panel(
     satellite: SatelliteName,
     q: float,
 ) -> MapPanel:
+    result.replay_to(q)
     sat = _satellite(result, satellite)
-    phase, _local_q = result.schedule.phase_at(q)
     origin = _map_origin(sat)
 
     other = _other_satellite(result, satellite)
     partner_dir = _partner_direction(sat, other)
     partner = direction_to_tangent_angles(origin, partner_dir)
 
-    is_tx = SearchSchedule.transmitting_satellite(phase) == satellite
-    tx: TransmitterSDA | None = None
-    tx_local_q = 0.0
-    if is_tx:
-        tx = result.active_transmitter(q)
-        tx_local_q = result.local_q(q)
-    else:
-        tx = sat.transmitter
-
-    beam: MapDisc | None = None
-    fov: MapDisc | None = None
-    aim_dir = _panel_aim_direction(
-        result,
-        satellite,
-        q,
-        is_tx=is_tx,
-        tx=tx,
-        tx_local_q=tx_local_q,
-    )
+    aim_dir = sat.bench.bench_boresight
     center_theta, center_phi = direction_to_tangent_angles(origin, aim_dir)
     alpha = result.config.satellite.alpha
     dish_fov = result.config.satellite.dish_fov
 
-    if tx is not None:
-        beam = MapDisc(center_theta, center_phi, alpha)
+    beam = MapDisc(center_theta, center_phi, alpha)
     fov = MapDisc(center_theta, center_phi, dish_fov)
 
-    partner_in_beam = beam is not None and point_in_disc(
+    partner_in_beam = point_in_disc(
         partner,
         (center_theta, center_phi),
         alpha,
@@ -137,8 +91,6 @@ def build_panel(
         dish_fov,
     )
 
-    phase_label = "Phase 1" if phase is SearchPhase.S1_TRANSMIT else "Phase 2"
-
     return MapPanel(
         satellite=satellite,
         partner=partner,
@@ -146,19 +98,17 @@ def build_panel(
         fov=fov,
         partner_in_beam=partner_in_beam,
         partner_in_fov=partner_in_fov,
-        is_transmitting=is_tx,
-        phase_label=phase_label,
+        is_transmitting=True,
+        phase_label=result.epoch_label(q),
     )
 
 
 def build_scene(result: ScenarioResult, q: float) -> MapScene:
+    result.replay_to(q)
     s1 = build_panel(result, "S1", q)
     s2 = build_panel(result, "S2", q)
 
-    phase, _ = result.schedule.phase_at(q)
-    if phase is SearchPhase.S1_TRANSMIT:
-        capture = s1.partner_in_beam and s2.partner_in_fov
-    else:
-        capture = s2.partner_in_beam and s1.partner_in_fov
+    hit_12, hit_21 = result.bidirectional_lock(q)
+    capture = hit_12 or hit_21
 
     return MapScene(q=q, s1=s1, s2=s2, capture_active=capture)

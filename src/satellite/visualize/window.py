@@ -6,8 +6,8 @@ import time
 
 import numpy as np
 
-from satellite.schedule import SearchPhase
 from satellite.scenario import ScenarioResult
+from satellite.viz_geometry import cone_mesh_for_aim
 from satellite.visualize.diagnostics import FrameProfiler
 
 
@@ -59,10 +59,10 @@ def run_visualizer(result: ScenarioResult, start_q: float = 0.0) -> None:
 
     config = result.config
     viz = config.visualization
-    q_max = config.simulation.q_max
     total_q = result.schedule.total_duration
     q_step = config.simulation.q_step
     body_radius = config.satellite.body_radius
+    alpha = config.satellite.alpha
 
     app = QApplication.instance() or QApplication([])
 
@@ -75,6 +75,8 @@ def run_visualizer(result: ScenarioResult, start_q: float = 0.0) -> None:
             self.current_q = float(np.clip(start_q, 0.0, total_q))
             self._cone_poly: pv.PolyData | None = None
             self._cone_actor = None
+            self._s2_cone_poly: pv.PolyData | None = None
+            self._s2_cone_actor = None
             self._swept_poly: pv.PolyData | None = None
             self._swept_actor = None
             self._s1_body_actor = None
@@ -194,8 +196,7 @@ def run_visualizer(result: ScenarioResult, start_q: float = 0.0) -> None:
             self._profile_label.setText("\n\n".join(parts))
 
         def _phase_label(self, q: float) -> str:
-            phase, _ = result.schedule.phase_at(q)
-            return "Phase 1" if phase is SearchPhase.S1_TRANSMIT else "Phase 2"
+            return result.epoch_label(q)
 
         def _replay_to(self, q_end: float) -> None:
             """Replay coupled simulation to q_end and rebuild the event log."""
@@ -267,27 +268,22 @@ def run_visualizer(result: ScenarioResult, start_q: float = 0.0) -> None:
             )
             return pv.PolyData(verts, faces_pv)
 
-        def _cone_mesh(self, q: float) -> pv.PolyData:
-            tx = result.active_transmitter(q)
-            local_q = result.local_q(q)
-            verts, faces = tx.cone_mesh_at(
-                local_q,
+        def _cone_mesh(self, satellite: str, q: float) -> pv.PolyData:
+            sat = result.s1 if satellite == "S1" else result.s2
+            aim = result.bench_aim(satellite, q)
+            beam_len = result.beam_length(satellite)
+            verts, faces = cone_mesh_for_aim(
+                sat.position,
+                aim,
+                alpha,
+                beam_len,
                 viz.cone_u_steps,
                 viz.cone_v_steps,
             )
             return self._to_polydata(verts, faces)
 
         def _swept_area_mesh(self, q: float) -> pv.PolyData:
-            tx = result.active_transmitter(q)
-            rx = result.active_receiver(q)
-            local_q = result.local_q(q)
-            verts, faces = tx.swept_area_mesh_up_to(
-                local_q,
-                viz.spiral_trail_steps,
-                viz.ribbon_v_steps,
-                target_range=rx.dish_range_from_partner(),
-            )
-            return self._to_polydata(verts, faces)
+            return pv.PolyData()
 
         def _dish_mesh(self, satellite: str, q: float) -> pv.PolyData:
             rx = result.s1.receiver if satellite == "S1" else result.s2.receiver
@@ -392,17 +388,29 @@ def run_visualizer(result: ScenarioResult, start_q: float = 0.0) -> None:
 
         def _update_scene(self) -> None:
             q = self.current_q
-            phase, _ = result.schedule.phase_at(q)
 
-            with self._profiler.measure("mesh_cone"):
-                cone_mesh = self._cone_mesh(q)
-            with self._profiler.measure("actor_cone"):
+            with self._profiler.measure("mesh_cone_s1"):
+                s1_cone = self._cone_mesh("S1", q)
+            with self._profiler.measure("actor_cone_s1"):
                 self._update_mesh_actor(
-                    cone_mesh,
+                    s1_cone,
                     "_cone_poly",
                     "_cone_actor",
                     color="crimson",
                     opacity=0.45,
+                    label="S1 beam",
+                )
+
+            with self._profiler.measure("mesh_cone_s2"):
+                s2_cone = self._cone_mesh("S2", q)
+            with self._profiler.measure("actor_cone_s2"):
+                self._update_mesh_actor(
+                    s2_cone,
+                    "_s2_cone_poly",
+                    "_s2_cone_actor",
+                    color="salmon",
+                    opacity=0.35,
+                    label="S2 beam",
                 )
 
             with self._profiler.measure("mesh_swept"):
@@ -419,14 +427,13 @@ def run_visualizer(result: ScenarioResult, start_q: float = 0.0) -> None:
 
             with self._profiler.measure("active_in_cone"):
                 in_cone = result.active_in_cone(q)
-            active_rx = "S2" if phase is SearchPhase.S1_TRANSMIT else "S1"
             with self._profiler.measure("actor_body_color"):
                 for sat_name, actor in (
                     ("S1", self._s1_body_actor),
                     ("S2", self._s2_body_actor),
                 ):
                     base = "blue" if sat_name == "S1" else "red"
-                    color = "limegreen" if in_cone and sat_name == active_rx else base
+                    color = "limegreen" if in_cone else base
                     prop = actor.GetProperty()
                     prop.SetColor(*pv.Color(color).float_rgb)
 

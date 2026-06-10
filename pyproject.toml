@@ -24,6 +24,9 @@ mapviz = [
 perf = [
     "numba>=0.59",
 ]
+dev = [
+    "pytest>=8.0",
+]
 
 [project.scripts]
 satellite = "satellite.__main__:main"

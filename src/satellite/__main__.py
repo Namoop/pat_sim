@@ -47,6 +47,8 @@ def main(argv: list[str] | None = None) -> int:
     result = run_scenario(config)
     print(format_summary(result))
 
+    exit_code = 0 if result.success else 1
+
     viz_mode = args.visualize
     if viz_mode is None and config.visualization.enabled:
         viz_mode = "3d"
@@ -68,7 +70,7 @@ def main(argv: list[str] | None = None) -> int:
             print("Interrupted.", file=sys.stderr)
             return 130
 
-    return 0
+    return exit_code
 
 
 if __name__ == "__main__":
