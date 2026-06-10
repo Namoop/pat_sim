@@ -23,7 +23,7 @@ pip install -e ".[perf]"
 # Interactive 3D visualization
 pip install -e ".[viz]"
 
-# Angular map visualization (satellite-eye θ/φ view)
+# Angular map visualization (QPainter θ/φ view, PyQt6 only)
 pip install -e ".[mapviz]"
 ```
 
@@ -40,6 +40,9 @@ python -m satellite --config scenario.toml --visualize
 
 # Angular map view (two side-by-side θ/φ panels)
 python -m satellite --config scenario.toml --visualize map
+
+# Benchmark map render path (QPainter p50/p95 timings)
+python -m satellite.mapviz.bench_render --config scenario.toml
 
 # Start visualization at a specific time
 python -m satellite --config scenario.toml --visualize 3d --q 2.5
@@ -86,7 +89,7 @@ src/satellite/
   sda/            — TransmitterSDA, ReceiverSDA, Satellite
   scenario.py     — orchestration and coupled replay
   visualize/      — PyVista + Qt 3D (lazy-loaded)
-  mapviz/         — matplotlib + Qt angular map (lazy-loaded)
+  mapviz/         — QPainter + Qt angular map (lazy-loaded)
 ```
 
 ## Model summary

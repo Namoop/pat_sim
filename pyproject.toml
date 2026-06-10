@@ -19,7 +19,6 @@ viz = [
     "PyQt6>=6.6",
 ]
 mapviz = [
-    "matplotlib>=3.8",
     "PyQt6>=6.6",
 ]
 perf = [

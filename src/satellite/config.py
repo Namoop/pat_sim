@@ -65,8 +65,8 @@ class VisualizationConfig:
 @dataclass(frozen=True)
 class MapVisualizationConfig:
     axis_limit: float
-    disc_segments: int
-    spiral_trail_steps: int
+    profile_frames: bool
+    slider_debounce_ms: int
 
 
 @dataclass(frozen=True)
@@ -157,8 +157,8 @@ def load_config(path: str | Path) -> ScenarioConfig:
         ),
         map_visualization=MapVisualizationConfig(
             axis_limit=float(map_visualization.get("axis_limit", 0.1)),
-            disc_segments=int(map_visualization.get("disc_segments", 64)),
-            spiral_trail_steps=int(map_visualization.get("spiral_trail_steps", 200)),
+            profile_frames=bool(map_visualization.get("profile_frames", False)),
+            slider_debounce_ms=int(map_visualization.get("slider_debounce_ms", 16)),
         ),
     )
 
