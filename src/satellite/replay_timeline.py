@@ -7,10 +7,14 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 
-from satellite.sda.receiver import ReceiverSDA
+from satellite.strategy.base import StrategyContext, link_established
+from satellite.strategy.movements import Reset, build_aim_context
+from satellite.strategy.runner import FrameRunner
+from satellite.strategy.schedule import ScheduledEpoch
 
 if TYPE_CHECKING:
     from satellite.scenario import ScenarioResult
+    from satellite.sda.receiver import ReceiverSDA
 
 
 @dataclass
@@ -25,6 +29,65 @@ class ReceiverSnapshot:
     acq_track_target: np.ndarray | None
     bench_slew_rate: float | None
     acq_fsm_locked: bool
+
+
+@dataclass
+class _SatEpochState:
+    ctx: object
+    epoch_key: tuple[str, int]
+
+
+@dataclass
+class _ReplayDriver:
+    ctx: StrategyContext
+    q_step: float
+    s1_state: _SatEpochState | None = None
+    s2_state: _SatEpochState | None = None
+    current_key: tuple[str, int] | None = None
+    global_q: float = 0.0
+
+    def _ensure_epoch(self, epoch: ScheduledEpoch) -> None:
+        key = (epoch.strategy_name, epoch.epoch_index)
+        if self.current_key == key:
+            return
+        self.current_key = key
+        self.s1_state = _SatEpochState(
+            ctx=build_aim_context(
+                self.ctx.s1,
+                reset=isinstance(epoch.s1_action.movement, Reset),
+            ),
+            epoch_key=key,
+        )
+        self.s2_state = _SatEpochState(
+            ctx=build_aim_context(
+                self.ctx.s2,
+                reset=isinstance(epoch.s2_action.movement, Reset),
+            ),
+            epoch_key=key,
+        )
+
+    def step_frame(
+        self,
+        epoch: ScheduledEpoch,
+        local_t: float,
+    ) -> tuple[bool, bool]:
+        self._ensure_epoch(epoch)
+        runner = FrameRunner(self.ctx)
+        aim1 = runner._apply_aim(
+            self.ctx.s1,
+            epoch.s1_action.movement,
+            self.s1_state,
+            local_t,
+            epoch.duration,
+        )
+        aim2 = runner._apply_aim(
+            self.ctx.s2,
+            epoch.s2_action.movement,
+            self.s2_state,
+            local_t,
+            epoch.duration,
+        )
+        return runner._bidirectional_lock(aim1, aim2, self.q_step)
 
 
 def _capture_receiver(rx: ReceiverSDA) -> ReceiverSnapshot:
@@ -77,13 +140,10 @@ def _restore_receiver(rx: ReceiverSDA, snap: ReceiverSnapshot) -> None:
 
 @dataclass
 class ReplayTimeline:
-    """Dense per-step receiver state and sparse event log."""
-
     q_values: np.ndarray
     s1_snapshots: list[ReceiverSnapshot]
     s2_snapshots: list[ReceiverSnapshot]
-    boresight_end: np.ndarray
-    phase2_handoff_index: int
+    hit_at_q: float | None
     event_steps: list[int] = field(default_factory=list)
     event_lines: list[str] = field(default_factory=list)
 
@@ -101,9 +161,8 @@ class ReplayTimeline:
         return int(np.clip(idx, 0, self.step_count - 1))
 
     def memory_bytes(self) -> int:
-        """Approximate heap size of the timeline."""
         n = self.step_count
-        vec_bytes = n * 3 * 8 * 4  # bench + optional track targets
+        vec_bytes = n * 3 * 8 * 4
         snap_bytes = n * 2 * 192
         event_bytes = sum(len(s.encode("utf-8")) for s in self.event_lines)
         return int(self.q_values.nbytes + vec_bytes + snap_bytes + event_bytes)
@@ -116,15 +175,6 @@ class ReplayTimeline:
         idx = self.index_for_q(q_end)
         _restore_receiver(result.s1.receiver, self.s1_snapshots[idx])
         _restore_receiver(result.s2.receiver, self.s2_snapshots[idx])
-
-        if idx >= self.phase2_handoff_index:
-            result.boresight_end = self.boresight_end.copy()
-            if not result._phase2_built:
-                result._ensure_phase2_transmitter()
-        else:
-            result.s2.phase2_transmitter = None
-            result._phase2_built = False
-
         return idx
 
     def event_log_up_to(
@@ -141,229 +191,175 @@ class ReplayTimeline:
         ]
 
 
-def _append_event(
-    timeline: ReplayTimeline,
-    step_index: int,
-    line: str,
-) -> None:
+def _append_event(timeline: ReplayTimeline, step_index: int, line: str) -> None:
     timeline.event_steps.append(step_index)
     timeline.event_lines.append(line)
 
 
-def build_replay_timeline(result: ScenarioResult) -> ReplayTimeline:
-    """Run the coupled simulation once and record state at every step."""
-    from satellite.detection import beam_missed_dish_fov_at_q
-    from satellite.scenario import _format_rx_angles
+def _fresh_context(result: ScenarioResult) -> StrategyContext:
+    from satellite.sda.satellite import Satellite
 
+    cfg = result.config
+    s1 = Satellite.build("S1", cfg.s1, cfg.s2.position, cfg)
+    s2 = Satellite.build("S2", cfg.s2, cfg.s1.position, cfg)
+    return StrategyContext(s1=s1, s2=s2, config=cfg)
+
+
+def replay_to_q(
+    result: ScenarioResult,
+    q_end: float,
+    *,
+    event_log: list[str] | None = None,
+) -> None:
+    """Replay coupled simulation from q=0 through q_end."""
+    if result._replay_timeline is not None:
+        timeline = result._replay_timeline
+        idx = timeline.restore(result, q_end)
+        if event_log is not None:
+            event_log.clear()
+            include_final = q_end >= result.schedule.total_duration - 1e-12
+            event_log.extend(
+                timeline.event_log_up_to(idx, include_final=include_final)
+            )
+        return
+
+    if result._stepper is None:
+        ctx = _fresh_context(result)
+        result._stepper = _ReplayDriver(
+            ctx=ctx,
+            q_step=result.config.simulation.q_step,
+        )
+        result.s1.receiver.reset_dish_tracking()
+        result.s2.receiver.reset_dish_tracking()
+        ctx.s1.receiver.reset_dish_tracking()
+        ctx.s2.receiver.reset_dish_tracking()
+
+    driver: _ReplayDriver = result._stepper
+    q_step = driver.q_step
+    q_end = float(np.clip(q_end, 0.0, result.schedule.total_duration))
+
+    if abs(driver.global_q - q_end) < 1e-9:
+        return
+
+    if driver.global_q > q_end + 1e-12:
+        driver.ctx = _fresh_context(result)
+        driver.s1_state = None
+        driver.s2_state = None
+        driver.current_key = None
+        driver.global_q = 0.0
+        driver._prev_strategy = None
+        result.s1.receiver.reset_dish_tracking()
+        result.s2.receiver.reset_dish_tracking()
+        driver.ctx.s1.receiver.reset_dish_tracking()
+        driver.ctx.s2.receiver.reset_dish_tracking()
+
+    prev_strategy: str | None = getattr(driver, "_prev_strategy", None)
+
+    while True:
+        epoch, local_t = result.schedule.epoch_at(driver.global_q)
+        if prev_strategy is not None and epoch.strategy_name != prev_strategy:
+            driver.ctx.s1.receiver.reset_dish_tracking()
+            driver.ctx.s2.receiver.reset_dish_tracking()
+            driver.s1_state = None
+            driver.s2_state = None
+            driver.current_key = None
+        prev_strategy = epoch.strategy_name
+        driver.step_frame(epoch, local_t)
+        if driver.global_q >= q_end - 1e-12:
+            break
+        driver.global_q += q_step
+
+    driver._prev_strategy = prev_strategy
+
+    for src, dst in (
+        (driver.ctx.s1, result.s1),
+        (driver.ctx.s2, result.s2),
+    ):
+        dst.bench.bench_boresight = src.bench.bench_boresight.copy()
+        dst.bench._invalidate_geometry_cache()
+        dst.receiver.fsm.theta_offset = src.receiver.fsm.theta_offset
+        dst.receiver.fsm.phi_offset = src.receiver.fsm.phi_offset
+        dst.receiver.fsm.locked = src.receiver.fsm.locked
+        dst.receiver.fsm.track_target = (
+            src.receiver.fsm.track_target.copy()
+            if src.receiver.fsm.track_target is not None
+            else None
+        )
+        acq_src = src.bench.acquisition
+        acq_dst = dst.bench.acquisition
+        acq_dst.has_seen_beam = acq_src.has_seen_beam
+        acq_dst.incident_angle = acq_src.incident_angle
+        acq_dst.track_target = (
+            acq_src.track_target.copy() if acq_src.track_target is not None else None
+        )
+        acq_dst.bench_slew_rate = acq_src.bench_slew_rate
+        acq_dst.fsm_locked = acq_src.fsm_locked
+
+    driver.global_q = q_end
+
+
+def build_replay_timeline(result: ScenarioResult) -> ReplayTimeline:
+    """Run full schedule and record receiver state at every step."""
     q_step = result.config.simulation.q_step
-    q_max = result.schedule.phase_duration
     total = result.schedule.total_duration
+
+    ctx = _fresh_context(result)
+    driver = _ReplayDriver(ctx=ctx, q_step=q_step)
 
     q_values: list[float] = []
     s1_snaps: list[ReceiverSnapshot] = []
     s2_snaps: list[ReceiverSnapshot] = []
+    hit_at_q: float | None = None
 
     timeline = ReplayTimeline(
         q_values=np.array([], dtype=np.float64),
         s1_snapshots=[],
         s2_snapshots=[],
-        boresight_end=result.s2.bench.initial_beam_boresight.copy(),
-        phase2_handoff_index=0,
+        hit_at_q=None,
     )
 
     step_index = 0
-
-    def record(q: float) -> None:
-        q_values.append(q)
-        s1_snaps.append(_capture_receiver(result.s1.receiver))
-        s2_snaps.append(_capture_receiver(result.s2.receiver))
-
-    result.s2.receiver.reset_dish_tracking()
-    s2 = result.s2.receiver
-    _append_event(timeline, 0, "S1 Search spiral started")
-    _append_event(
-        timeline,
-        0,
-        (
-            f"S2 Initial receiver offset: "
-            f"{np.degrees(s2.initial_pointing_offset):.2f}° "
-            f"(θ/φ magnitude "
-            f"{np.degrees(s2.configured_offset_magnitude):.2f}°)"
-        ),
-    )
-
-    s2_miss_logged = False
-    s2_first_detect: float | None = None
-    s2_slew_logged = False
-
     q = 0.0
-    while q < q_max - 1e-12:
-        rx = result.s2.receiver
-        tx = result.s1.transmitter
-        had_seen = rx.has_seen_beam
-        dish_boresight = rx.dish_boresight.copy()
-        if not had_seen and not s2_miss_logged:
-            missed = beam_missed_dish_fov_at_q(
-                q,
-                tx.position,
-                rx.dish_mount,
-                dish_boresight,
-                rx.dish_fov,
-                tx.boresight_at,
-                tx.alpha,
-                tx.beam_length,
-            )
-            if missed is not None:
-                _append_event(
-                    timeline,
-                    step_index,
-                    _format_rx_angles(
-                        q,
-                        rx,
-                        tx,
-                        dish_boresight,
-                        result.local_q(q),
-                        result.config.satellite.dish_fov,
-                        prefix="S2 Missed beam",
-                    ),
-                )
-                s2_miss_logged = True
+    prev_epoch_key: tuple[str, int] | None = None
+    prev_strategy: str | None = None
 
-        result._step_phase1(q)
-        record(q)
-
-        if rx.has_seen_beam and not had_seen:
+    while q <= total + 1e-12:
+        epoch, local_t = result.schedule.epoch_at(q)
+        if prev_strategy is not None and epoch.strategy_name != prev_strategy:
+            ctx.s1.receiver.reset_dish_tracking()
+            ctx.s2.receiver.reset_dish_tracking()
+            driver.s1_state = None
+            driver.s2_state = None
+            driver.current_key = None
+        prev_strategy = epoch.strategy_name
+        epoch_key = (epoch.strategy_name, epoch.epoch_index)
+        if prev_epoch_key != epoch_key:
             _append_event(
                 timeline,
                 step_index,
-                _format_rx_angles(
-                    q,
-                    rx,
-                    tx,
-                    dish_boresight,
-                    result.local_q(q),
-                    result.config.satellite.dish_fov,
-                    prefix="S2 Received",
-                ),
+                f"{epoch.strategy_name}: {epoch.label or 'epoch'} started",
             )
-            _append_event(timeline, step_index, "S2 FSM centered beam on camera")
-            s2_first_detect = q
-        if (
-            s2_first_detect is not None
-            and q > s2_first_detect + 1e-9
-            and not s2_slew_logged
-        ):
-            _append_event(timeline, step_index, "S2 Bench slewing toward lock")
-            s2_slew_logged = True
+            prev_epoch_key = epoch_key
 
+        hit_12, hit_21 = driver.step_frame(epoch, local_t)
+        if hit_at_q is None and (hit_12 or hit_21):
+            hit_at_q = q
+            direction = "S1→S2" if hit_12 else "S2→S1"
+            if hit_12 and hit_21:
+                direction = "both"
+            _append_event(timeline, step_index, f"Lock ({direction}) at q={q:.3f}")
+
+        q_values.append(q)
+        s1_snaps.append(_capture_receiver(ctx.s1.receiver))
+        s2_snaps.append(_capture_receiver(ctx.s2.receiver))
+
+        if q >= total - 1e-12:
+            break
         step_index += 1
         q += q_step
-
-    while q < q_max - 1e-12:
-        result._step_phase1(q)
-        record(q)
-        step_index += 1
-        q += q_step
-
-    handoff_step = step_index
-    timeline.phase2_handoff_index = handoff_step
-    timeline.boresight_end = result.s2.bench.beam_boresight_inertial().copy()
-    result.boresight_end = timeline.boresight_end.copy()
-    result._ensure_phase2_transmitter()
-
-    _append_event(timeline, handoff_step, "S1 Search spiral complete")
-    if s2_first_detect is None:
-        _append_event(timeline, handoff_step, "S2 No beam acquisition")
-    center = "locked" if result.s2.receiver.has_seen_beam else "initial_aim"
-    _append_event(
-        timeline,
-        handoff_step,
-        f"S2 Search spiral started ({center})",
-    )
-    s1 = result.s1.receiver
-    _append_event(
-        timeline,
-        handoff_step,
-        f"S1 Initial receiver offset: "
-        f"{np.degrees(s1.initial_pointing_offset):.2f}°",
-    )
-
-    result.s1.receiver.reset_dish_tracking()
-
-    s1_miss_logged = False
-    s1_first_detect: float | None = None
-    s1_slew_logged = False
-    q = q_max
-    tx2 = result.s2.phase2_transmitter
-    while q < total - 1e-12:
-        rx = result.s1.receiver
-        had_seen = rx.has_seen_beam
-        dish_boresight = rx.dish_boresight.copy()
-        if tx2 is not None and not had_seen and not s1_miss_logged:
-            local_q = result.local_q(q)
-            missed = beam_missed_dish_fov_at_q(
-                local_q,
-                tx2.position,
-                rx.dish_mount,
-                dish_boresight,
-                rx.dish_fov,
-                tx2.boresight_at,
-                tx2.alpha,
-                tx2.beam_length,
-            )
-            if missed is not None:
-                _append_event(
-                    timeline,
-                    step_index,
-                    _format_rx_angles(
-                        q,
-                        rx,
-                        tx2,
-                        dish_boresight,
-                        local_q,
-                        result.config.satellite.dish_fov,
-                        prefix="S1 Missed beam",
-                    ),
-                )
-                s1_miss_logged = True
-
-        result._step_phase2(q)
-        record(q)
-
-        if tx2 is not None:
-            if rx.has_seen_beam and not had_seen:
-                _append_event(
-                    timeline,
-                    step_index,
-                    _format_rx_angles(
-                        q,
-                        rx,
-                        tx2,
-                        dish_boresight,
-                        result.local_q(q),
-                        result.config.satellite.dish_fov,
-                        prefix="S1 Received",
-                    ),
-                )
-                _append_event(timeline, step_index, "S1 FSM centered beam on camera")
-                s1_first_detect = q
-            if (
-                s1_first_detect is not None
-                and q > s1_first_detect + 1e-9
-                and not s1_slew_logged
-            ):
-                _append_event(timeline, step_index, "S1 Bench slewing toward lock")
-                s1_slew_logged = True
-
-        step_index += 1
-        q += q_step
-
-    final_step = step_index
-    _append_event(timeline, final_step, "S2 Search spiral complete")
-    if s1_first_detect is None:
-        _append_event(timeline, final_step, "S1 No beam acquisition")
 
     timeline.q_values = np.asarray(q_values, dtype=np.float64)
     timeline.s1_snapshots = s1_snaps
     timeline.s2_snapshots = s2_snaps
+    timeline.hit_at_q = hit_at_q
     return timeline

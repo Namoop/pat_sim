@@ -70,6 +70,39 @@ class MapVisualizationConfig:
 
 
 @dataclass(frozen=True)
+class MinorOffsetStrategyConfig:
+    duration: float
+    max_spiral_radius: str | float
+    spiral_speed: float
+
+
+@dataclass(frozen=True)
+class SingleMissStrategyConfig:
+    epoch1_duration: float
+    a_spiral_radius: str | float
+    reset_duration: float
+    epoch2_duration: float
+    b_spiral_radius: str | float
+    spiral_speed: float
+
+
+@dataclass(frozen=True)
+class StrategyConfig:
+    chain: tuple[str, ...]
+    minor_offset: MinorOffsetStrategyConfig
+    single_miss: SingleMissStrategyConfig
+
+    def spiral_w(self, config: ScenarioConfig) -> float:
+        return config.sda.k * config.satellite.alpha / 3.141592653589793
+
+    @staticmethod
+    def resolve_radius(value: str | float, dish_fov: float) -> float:
+        if isinstance(value, str) and value.lower() == "fov":
+            return dish_fov
+        return float(value)
+
+
+@dataclass(frozen=True)
 class ScenarioConfig:
     name: str
     s1: SatelliteInstanceConfig
@@ -79,6 +112,7 @@ class ScenarioConfig:
     simulation: SimulationConfig
     visualization: VisualizationConfig
     map_visualization: MapVisualizationConfig
+    strategy: StrategyConfig
 
 
 def _vec3_from_list(values: list[float], field: str) -> Vec3:
@@ -112,10 +146,34 @@ def load_config(path: str | Path) -> ScenarioConfig:
     simulation = data.get("simulation", {})
     visualization = data.get("visualization", {})
     map_visualization = data.get("map_visualization", {})
+    strategy = data.get("strategy", {})
+    minor_offset_cfg = strategy.get("minor_offset", {})
+    single_miss_cfg = strategy.get("single_miss", {})
 
     beam_length = simulation.get("beam_length")
     if beam_length is not None:
         beam_length = float(beam_length)
+
+    q_max = float(simulation["q_max"])
+    q_step = float(simulation["q_step"])
+    dish_fov = float(satellite.get("dish_fov", 0.002))
+
+    strategy_config = StrategyConfig(
+        chain=tuple(strategy.get("chain", ["minor_offset", "single_miss"])),
+        minor_offset=MinorOffsetStrategyConfig(
+            duration=float(minor_offset_cfg.get("duration", q_max)),
+            max_spiral_radius=minor_offset_cfg.get("max_spiral_radius", "fov"),
+            spiral_speed=float(minor_offset_cfg.get("spiral_speed", 1.0)),
+        ),
+        single_miss=SingleMissStrategyConfig(
+            epoch1_duration=float(single_miss_cfg.get("epoch1_duration", q_max)),
+            a_spiral_radius=single_miss_cfg.get("a_spiral_radius", 0.05),
+            reset_duration=float(single_miss_cfg.get("reset_duration", 0.0)),
+            epoch2_duration=float(single_miss_cfg.get("epoch2_duration", q_max)),
+            b_spiral_radius=single_miss_cfg.get("b_spiral_radius", 0.05),
+            spiral_speed=float(single_miss_cfg.get("spiral_speed", 1.0)),
+        ),
+    )
 
     return ScenarioConfig(
         name=str(scenario.get("name", "unnamed")),
@@ -123,7 +181,7 @@ def load_config(path: str | Path) -> ScenarioConfig:
         s2=_load_satellite_instance(s2, "s2"),
         satellite=SharedSatelliteConfig(
             body_radius=float(satellite.get("body_radius", 0.5)),
-            dish_fov=float(satellite.get("dish_fov", 0.002)),
+            dish_fov=dish_fov,
             bench_slew_time=float(
                 satellite.get(
                     "bench_slew_time",
@@ -141,8 +199,8 @@ def load_config(path: str | Path) -> ScenarioConfig:
             L_r=float(sda["L_r"]),
         ),
         simulation=SimulationConfig(
-            q_max=float(simulation["q_max"]),
-            q_step=float(simulation["q_step"]),
+            q_max=q_max,
+            q_step=q_step,
             beam_length=beam_length,
             boresight_extension=float(simulation.get("boresight_extension", 5.0)),
             profile_replay=bool(simulation.get("profile_replay", False)),
@@ -160,6 +218,7 @@ def load_config(path: str | Path) -> ScenarioConfig:
             profile_frames=bool(map_visualization.get("profile_frames", False)),
             slider_debounce_ms=int(map_visualization.get("slider_debounce_ms", 16)),
         ),
+        strategy=strategy_config,
     )
 
 
