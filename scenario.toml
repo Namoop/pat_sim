@@ -13,7 +13,7 @@ bench_phi_offset = 0.01
 
 [satellite]
 body_radius = 0.5
-dish_fov = 0.2
+dish_fov = 0.02
 bench_slew_time = 0.3
 fsm_settle_time = 0.0
 beam_width = 5.0  # milliradians (cone half-angle alpha)
@@ -41,5 +41,4 @@ profile_frames = false
 
 [map_visualization]
 axis_limit = 0.1
-disc_segments = 64
-spiral_trail_steps = 200
+slider_debounce_ms = 16
