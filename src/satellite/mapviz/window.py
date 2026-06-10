@@ -141,11 +141,7 @@ def run_map_visualizer(result: ScenarioResult, start_q: float = 0.0) -> None:
             self.current_q = q
 
             result.replay_to(q)
-            scene = build_scene(
-                result,
-                q,
-                spiral_trail_steps=map_cfg.spiral_trail_steps,
-            )
+            scene = build_scene(result, q)
 
             self.time_label.setText(
                 f"q = {q:.3f} / {total_q:.3f} ({scene.s1.phase_label})"
@@ -199,19 +195,26 @@ def run_map_visualizer(result: ScenarioResult, start_q: float = 0.0) -> None:
             ax.add_patch(boundary)
 
             if panel.fov is not None:
-                self._draw_disc(ax, panel.fov, "#4488ff", alpha=0.15, edge="#2266cc")
+                self._draw_disc(
+                    ax,
+                    panel.fov,
+                    "#4488ff",
+                    alpha=0.08,
+                    edge="#1155cc",
+                    linewidth=2.0,
+                    fill=True,
+                )
 
             if panel.beam is not None:
                 color = "#ff8800" if panel.is_transmitting else "#ffcc88"
-                self._draw_disc(ax, panel.beam, color, alpha=0.25, edge="#cc6600")
-
-            if len(panel.spiral_trail) > 1:
-                ax.plot(
-                    panel.spiral_trail[:, 0],
-                    panel.spiral_trail[:, 1],
-                    color="#ff6600",
+                self._draw_disc(
+                    ax,
+                    panel.beam,
+                    color,
+                    alpha=0.45,
+                    edge="#cc6600",
                     linewidth=1.5,
-                    alpha=0.85,
+                    fill=True,
                 )
 
             partner_color = "#22aa22" if partner_label == "S2" else "#cc2222"
@@ -225,7 +228,17 @@ def run_map_visualizer(result: ScenarioResult, start_q: float = 0.0) -> None:
             )
             ax.legend(loc="upper right", fontsize=8)
 
-        def _draw_disc(self, ax, disc, facecolor: str, *, alpha: float, edge: str) -> None:
+        def _draw_disc(
+            self,
+            ax,
+            disc,
+            facecolor: str,
+            *,
+            alpha: float,
+            edge: str,
+            linewidth: float = 1.0,
+            fill: bool = True,
+        ) -> None:
             poly = Polygon(
                 tangent_disc(
                     disc.center_theta,
@@ -234,10 +247,10 @@ def run_map_visualizer(result: ScenarioResult, start_q: float = 0.0) -> None:
                     map_cfg.disc_segments,
                 ),
                 closed=True,
-                facecolor=facecolor,
+                facecolor=facecolor if fill else "none",
                 edgecolor=edge,
-                alpha=alpha,
-                linewidth=1.0,
+                alpha=alpha if fill else 1.0,
+                linewidth=linewidth,
             )
             ax.add_patch(poly)
 
