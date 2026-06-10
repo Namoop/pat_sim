@@ -71,6 +71,21 @@ def _fov_boresight(result: ScenarioResult, satellite: SatelliteName, q: float) -
     return sat.receiver.dish_boresight
 
 
+def _panel_aim_direction(
+    result: ScenarioResult,
+    satellite: SatelliteName,
+    q: float,
+    *,
+    is_tx: bool,
+    tx: TransmitterSDA | None,
+    tx_local_q: float,
+) -> object:
+    """Bench-co-aligned aim: active TX spiral boresight, otherwise dish boresight."""
+    if is_tx and tx is not None:
+        return tx.boresight_at(tx_local_q)
+    return _fov_boresight(result, satellite, q)
+
+
 def build_panel(
     result: ScenarioResult,
     satellite: SatelliteName,
@@ -94,36 +109,32 @@ def build_panel(
         tx = sat.transmitter
 
     beam: MapDisc | None = None
-    if tx is not None:
-        local_for_beam = tx_local_q if is_tx else 0.0
-        beam_dir = tx.boresight_at(local_for_beam)
-        beam_theta, beam_phi = direction_to_tangent_angles(origin, beam_dir)
-        beam = MapDisc(
-            beam_theta,
-            beam_phi,
-            result.config.satellite.alpha,
-        )
+    fov: MapDisc | None = None
+    aim_dir = _panel_aim_direction(
+        result,
+        satellite,
+        q,
+        is_tx=is_tx,
+        tx=tx,
+        tx_local_q=tx_local_q,
+    )
+    center_theta, center_phi = direction_to_tangent_angles(origin, aim_dir)
+    alpha = result.config.satellite.alpha
+    dish_fov = result.config.satellite.dish_fov
 
-    # FOV follows bench dish aim (co-linear with beam at t=0).
-    fov_theta, fov_phi = direction_to_tangent_angles(
-        origin,
-        _fov_boresight(result, satellite, q),
-    )
-    fov = MapDisc(
-        fov_theta,
-        fov_phi,
-        result.config.satellite.dish_fov,
-    )
+    if tx is not None:
+        beam = MapDisc(center_theta, center_phi, alpha)
+    fov = MapDisc(center_theta, center_phi, dish_fov)
 
     partner_in_beam = beam is not None and point_in_disc(
         partner,
-        (beam.center_theta, beam.center_phi),
-        beam.radius,
+        (center_theta, center_phi),
+        alpha,
     )
     partner_in_fov = point_in_disc(
         partner,
-        (fov.center_theta, fov.center_phi),
-        fov.radius,
+        (center_theta, center_phi),
+        dish_fov,
     )
 
     phase_label = "Phase 1" if phase is SearchPhase.S1_TRANSMIT else "Phase 2"
