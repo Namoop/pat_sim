@@ -22,8 +22,14 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument(
         "--visualize",
-        action="store_true",
-        help="Open interactive 3D visualization window",
+        nargs="?",
+        const="3d",
+        choices=("3d", "map"),
+        default=None,
+        help=(
+            "Open interactive visualization: 3d (PyVista) or map (angular θ/φ view). "
+            "Use --visualize or --visualize 3d for the 3D window."
+        ),
     )
     parser.add_argument(
         "--q",
@@ -41,12 +47,23 @@ def main(argv: list[str] | None = None) -> int:
     result = run_scenario(config)
     print(format_summary(result))
 
-    visualize = args.visualize or config.visualization.enabled
-    if visualize:
+    viz_mode = args.visualize
+    if viz_mode is None and config.visualization.enabled:
+        viz_mode = "3d"
+
+    if viz_mode == "3d":
         from satellite.visualize import run_visualizer
 
         try:
             run_visualizer(result, start_q=args.q)
+        except KeyboardInterrupt:
+            print("Interrupted.", file=sys.stderr)
+            return 130
+    elif viz_mode == "map":
+        from satellite.mapviz import run_map_visualizer
+
+        try:
+            run_map_visualizer(result, start_q=args.q)
         except KeyboardInterrupt:
             print("Interrupted.", file=sys.stderr)
             return 130

@@ -22,6 +22,9 @@ pip install -e ".[perf]"
 
 # Interactive 3D visualization
 pip install -e ".[viz]"
+
+# Angular map visualization (satellite-eye θ/φ view)
+pip install -e ".[mapviz]"
 ```
 
 ## Run
@@ -30,11 +33,16 @@ pip install -e ".[viz]"
 # Fast headless — prints hit summary
 python -m satellite --config scenario.toml
 
-# Interactive 3D window (orbit/pan, time slider, Play/Pause, Next scenario stub)
+# Interactive 3D window (orbit/pan, time slider, Play/Pause)
+python -m satellite --config scenario.toml --visualize 3d
+# or shorthand:
 python -m satellite --config scenario.toml --visualize
 
+# Angular map view (two side-by-side θ/φ panels)
+python -m satellite --config scenario.toml --visualize map
+
 # Start visualization at a specific time
-python -m satellite --config scenario.toml --visualize --q 2.5
+python -m satellite --config scenario.toml --visualize 3d --q 2.5
 ```
 
 ### Linux visualization troubleshooting
@@ -42,7 +50,8 @@ python -m satellite --config scenario.toml --visualize --q 2.5
 If you see `BadWindow` or `vtkXOpenGLRenderWindow` errors (common on **Wayland**), force Qt to use X11:
 
 ```bash
-QT_QPA_PLATFORM=xcb python -m satellite --config scenario.toml --visualize
+QT_QPA_PLATFORM=xcb python -m satellite --config scenario.toml --visualize 3d
+QT_QPA_PLATFORM=xcb python -m satellite --config scenario.toml --visualize map
 ```
 
 The visualizer also sets `QT_QPA_PLATFORM=xcb` automatically on Linux when the variable is unset.
@@ -57,7 +66,8 @@ Edit [`scenario.toml`](scenario.toml):
 | `satellite` | `body_radius`, `dish_fov`, `bench_slew_time`, `fsm_settle_time`, `beam_width` (milliradians) |
 | `sda` | `k`, `gamma`, `beta`, `omega_r`, `L_r` |
 | `simulation` | `q_max` (one phase), `q_step`, `boresight_extension` (default 5), optional `beam_length` |
-| `visualization` | `enabled`, mesh resolution settings |
+| `visualization` | `enabled`, mesh resolution settings (3D PyVista) |
+| `map_visualization` | `axis_limit`, `disc_segments`, `spiral_trail_steps` (angular map) |
 
 `q_max` is the duration of **one** spiral phase; the full search runs for `2 * q_max`.
 
@@ -75,7 +85,8 @@ src/satellite/
   schedule.py     — two-phase SearchSchedule
   sda/            — TransmitterSDA, ReceiverSDA, Satellite
   scenario.py     — orchestration and coupled replay
-  visualize/      — PyVista + Qt (lazy-loaded)
+  visualize/      — PyVista + Qt 3D (lazy-loaded)
+  mapviz/         — matplotlib + Qt angular map (lazy-loaded)
 ```
 
 ## Model summary

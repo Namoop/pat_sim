@@ -3,12 +3,12 @@ name = "desmos_default"
 
 [s1]
 position = [0.0, 0.0, 0.0]
-bench_theta_offset = 0.015
+bench_theta_offset = 0.02
 bench_phi_offset = 0.015
 
 [s2]
 position = [0.0, 50.0, 1000.0]
-bench_theta_offset = 0.01
+bench_theta_offset = 0.02
 bench_phi_offset = 0.01
 
 [satellite]
@@ -38,3 +38,8 @@ cone_v_steps = 32
 spiral_trail_steps = 120
 ribbon_v_steps = 8
 profile_frames = false
+
+[map_visualization]
+axis_limit = 0.1
+disc_segments = 64
+spiral_trail_steps = 200

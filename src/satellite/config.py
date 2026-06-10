@@ -63,6 +63,13 @@ class VisualizationConfig:
 
 
 @dataclass(frozen=True)
+class MapVisualizationConfig:
+    axis_limit: float
+    disc_segments: int
+    spiral_trail_steps: int
+
+
+@dataclass(frozen=True)
 class ScenarioConfig:
     name: str
     s1: SatelliteInstanceConfig
@@ -71,6 +78,7 @@ class ScenarioConfig:
     sda: SdaConfig
     simulation: SimulationConfig
     visualization: VisualizationConfig
+    map_visualization: MapVisualizationConfig
 
 
 def _vec3_from_list(values: list[float], field: str) -> Vec3:
@@ -103,6 +111,7 @@ def load_config(path: str | Path) -> ScenarioConfig:
     sda = data.get("sda", {})
     simulation = data.get("simulation", {})
     visualization = data.get("visualization", {})
+    map_visualization = data.get("map_visualization", {})
 
     beam_length = simulation.get("beam_length")
     if beam_length is not None:
@@ -145,6 +154,11 @@ def load_config(path: str | Path) -> ScenarioConfig:
             spiral_trail_steps=int(visualization.get("spiral_trail_steps", 80)),
             ribbon_v_steps=int(visualization.get("ribbon_v_steps", 4)),
             profile_frames=bool(visualization.get("profile_frames", False)),
+        ),
+        map_visualization=MapVisualizationConfig(
+            axis_limit=float(map_visualization.get("axis_limit", 0.1)),
+            disc_segments=int(map_visualization.get("disc_segments", 64)),
+            spiral_trail_steps=int(map_visualization.get("spiral_trail_steps", 200)),
         ),
     )
 
