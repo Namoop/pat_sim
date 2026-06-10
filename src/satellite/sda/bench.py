@@ -58,6 +58,11 @@ class OpticalBench:
         self.acquisition = AcquisitionState()
         self._invalidate_geometry_cache()
 
+    def set_bench_aim(self, direction: Vec3) -> None:
+        """Set shared dish/transmit boresight (collinear on bench)."""
+        self.bench_boresight = normalize(direction)
+        self._invalidate_geometry_cache()
+
     @property
     def initial_boresight(self) -> Vec3:
         return self._initial_bench_boresight

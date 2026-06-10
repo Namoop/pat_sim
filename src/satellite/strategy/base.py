@@ -1,0 +1,95 @@
+"""Strategy ABC, context, and link detection."""
+
+from __future__ import annotations
+
+from abc import ABC, abstractmethod
+from dataclasses import dataclass, field
+from typing import TYPE_CHECKING
+
+from satellite.config import ScenarioConfig, default_beam_length
+from satellite.detection import beam_hits_dish
+from satellite.math3d import Vec3
+from satellite.strategy.actions import ActionScript
+
+if TYPE_CHECKING:
+    from satellite.sda.satellite import Satellite
+
+
+@dataclass
+class StrategyContext:
+    s1: Satellite
+    s2: Satellite
+    config: ScenarioConfig
+
+    @property
+    def q_step(self) -> float:
+        return self.config.simulation.q_step
+
+    def reset_satellites(self) -> None:
+        self.s1.receiver.reset_dish_tracking()
+        self.s2.receiver.reset_dish_tracking()
+
+    def clone_fresh(self) -> StrategyContext:
+        from satellite.sda.satellite import Satellite
+
+        s1 = Satellite.build("S1", self.config.s1, self.config.s2.position, self.config)
+        s2 = Satellite.build("S2", self.config.s2, self.config.s1.position, self.config)
+        return StrategyContext(s1=s1, s2=s2, config=self.config)
+
+
+@dataclass
+class StrategyResult:
+    success: bool
+    strategy_name: str
+    hit_at_q: float | None
+    script: ActionScript
+    elapsed_q: float
+    skipped_reason: str | None = None
+    metadata: dict = field(default_factory=dict)
+
+
+class SearchStrategy(ABC):
+    name: str
+
+    @abstractmethod
+    def build_script(self, ctx: StrategyContext) -> ActionScript:
+        """Return timed epoch script (no offset-aware branching)."""
+
+    def try_run(self, ctx: StrategyContext, global_q_start: float) -> StrategyResult:
+        from satellite.strategy.runner import FrameRunner
+
+        script = self.build_script(ctx)
+        script = ActionScript(epochs=script.epochs, strategy_name=self.name)
+        run = FrameRunner(ctx).execute(script, global_q_start=global_q_start)
+        return StrategyResult(
+            success=run.success,
+            strategy_name=self.name,
+            hit_at_q=run.hit_at_q,
+            script=script,
+            elapsed_q=script.total_duration,
+            metadata=run.metadata,
+        )
+
+
+def beam_length_for(tx: Satellite, config: ScenarioConfig) -> float:
+    return default_beam_length(tx.position, tx.partner_actual, config.simulation)
+
+
+def link_established(
+    tx_sat: Satellite,
+    rx_sat: Satellite,
+    beam_axis: Vec3,
+    config: ScenarioConfig,
+) -> bool:
+    geom = rx_sat.receiver.geometry_snapshot()
+    alpha = config.satellite.alpha
+    beam_length = beam_length_for(tx_sat, config)
+    return beam_hits_dish(
+        tx_sat.position,
+        geom.mount,
+        geom.dish_boresight,
+        rx_sat.receiver.dish_fov,
+        beam_axis,
+        alpha,
+        beam_length,
+    )
