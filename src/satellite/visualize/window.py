@@ -63,6 +63,7 @@ def run_visualizer(result: ScenarioResult, start_q: float = 0.0) -> None:
     q_step = config.simulation.q_step
     body_radius = config.satellite.body_radius
     alpha = config.satellite.alpha
+    dish_fov = config.satellite.dish_fov
 
     app = QApplication.instance() or QApplication([])
 
@@ -77,6 +78,10 @@ def run_visualizer(result: ScenarioResult, start_q: float = 0.0) -> None:
             self._cone_actor = None
             self._s2_cone_poly: pv.PolyData | None = None
             self._s2_cone_actor = None
+            self._s1_fov_poly: pv.PolyData | None = None
+            self._s1_fov_actor = None
+            self._s2_fov_poly: pv.PolyData | None = None
+            self._s2_fov_actor = None
             self._swept_poly: pv.PolyData | None = None
             self._swept_actor = None
             self._s1_body_actor = None
@@ -282,6 +287,21 @@ def run_visualizer(result: ScenarioResult, start_q: float = 0.0) -> None:
             )
             return self._to_polydata(verts, faces)
 
+        def _fov_cone_mesh(self, satellite: str, q: float) -> pv.PolyData:
+            rx = result.s1.receiver if satellite == "S1" else result.s2.receiver
+            aim = result.bench_aim(satellite, q)
+            mount = rx.dish_mount_for_boresight(aim)
+            ray_len = result.boresight_ray_length(satellite)
+            verts, faces = cone_mesh_for_aim(
+                mount,
+                aim,
+                dish_fov,
+                ray_len,
+                viz.cone_u_steps,
+                viz.cone_v_steps,
+            )
+            return self._to_polydata(verts, faces)
+
         def _swept_area_mesh(self, q: float) -> pv.PolyData:
             return pv.PolyData()
 
@@ -411,6 +431,30 @@ def run_visualizer(result: ScenarioResult, start_q: float = 0.0) -> None:
                     color="salmon",
                     opacity=0.35,
                     label="S2 beam",
+                )
+
+            with self._profiler.measure("mesh_fov_s1"):
+                s1_fov = self._fov_cone_mesh("S1", q)
+            with self._profiler.measure("actor_fov_s1"):
+                self._update_mesh_actor(
+                    s1_fov,
+                    "_s1_fov_poly",
+                    "_s1_fov_actor",
+                    color="skyblue",
+                    opacity=0.12,
+                    label="S1 FOV",
+                )
+
+            with self._profiler.measure("mesh_fov_s2"):
+                s2_fov = self._fov_cone_mesh("S2", q)
+            with self._profiler.measure("actor_fov_s2"):
+                self._update_mesh_actor(
+                    s2_fov,
+                    "_s2_fov_poly",
+                    "_s2_fov_actor",
+                    color="skyblue",
+                    opacity=0.12,
+                    label="S2 FOV",
                 )
 
             with self._profiler.measure("mesh_swept"):
