@@ -20,6 +20,53 @@ class View3DFrameInfo:
 
 
 @dataclass(frozen=True)
+class CenterCameraPose:
+    focal_point: tuple[float, float, float]
+    position: tuple[float, float, float]
+    up: tuple[float, float, float]
+    view_angle: float = 30.0
+
+
+def center_camera_pose(
+    p1: np.ndarray,
+    p2: np.ndarray,
+    *,
+    body_radius: float,
+    view_angle: float = 30.0,
+    margin: float = 0.78,
+) -> CenterCameraPose:
+    """Camera pose framing both satellites from the midpoint between them."""
+    midpoint = 0.5 * (p1 + p2)
+    sep = p2 - p1
+    sep_len = float(np.linalg.norm(sep))
+    world_up = np.array([0.0, 0.0, 1.0], dtype=np.float64)
+
+    if sep_len > 1e-12:
+        sep_unit = sep / sep_len
+        side = np.cross(sep_unit, world_up)
+        side_len = float(np.linalg.norm(side))
+        if side_len < 1e-12:
+            side = np.array([0.0, 1.0, 0.0], dtype=np.float64)
+        else:
+            side = side / side_len
+        view_dir = normalize(-side + 0.35 * world_up)
+    else:
+        view_dir = normalize(np.array([0.0, 1.0, 0.35], dtype=np.float64))
+
+    half_extent = 0.5 * sep_len + body_radius
+    fov_rad = np.radians(view_angle)
+    cam_distance = margin * half_extent / np.tan(fov_rad / 2.0)
+    position = midpoint + view_dir * cam_distance
+
+    return CenterCameraPose(
+        focal_point=tuple(midpoint),
+        position=tuple(position),
+        up=(0.0, 0.0, 1.0),
+        view_angle=view_angle,
+    )
+
+
+@dataclass(frozen=True)
 class _CameraPreset:
     """Camera pose relative to a focal satellite (partner for S1 views, S1 for S2)."""
 
@@ -30,7 +77,7 @@ class _CameraPreset:
 
 
 # Calibrated at inter-satellite distance 1000 m; offsets are focal-relative.
-# S2 presets mirror S1 through 180° about Z (flip x,y of offset and up).
+# S2 presets mirror S1 through 180° about Z, then horizontally (negate y).
 _CAMERA_PRESETS: dict[str, _CameraPreset] = {
     "s1_close": _CameraPreset(
         focal_satellite="S2",
@@ -44,13 +91,13 @@ _CAMERA_PRESETS: dict[str, _CameraPreset] = {
     ),
     "s2_close": _CameraPreset(
         focal_satellite="S1",
-        position_offset=(-134.33, 15.9782, -1.86303),
-        up=(0.0802431, 0.751044, -0.655358),
+        position_offset=(-134.33, -15.9782, -1.86303),
+        up=(0.0802431, -0.751044, -0.655358),
     ),
     "s2_far": _CameraPreset(
         focal_satellite="S1",
-        position_offset=(1101.251, -12.9602, -0.0900143),
-        up=(-0.00865572, -0.740161, -0.672374),
+        position_offset=(1101.251, 12.9602, -0.0900143),
+        up=(-0.00865572, 0.740161, -0.672374),
     ),
 }
 
@@ -115,14 +162,20 @@ class View3DPanel:
 
         self._camera_preset_buttons: dict[str, QPushButton] = {}
         for key, label in (
+            ("center", "Center"),
             ("s1_close", "S1 close"),
             ("s1_far", "S1 far"),
             ("s2_close", "S2 close"),
             ("s2_far", "S2 far"),
         ):
             btn = QPushButton(label, self._plot_host)
-            btn.setToolTip(f"Jump to {label} camera preset")
-            btn.clicked.connect(lambda _checked=False, k=key: self._on_camera_preset(k))
+            if key == "center":
+                btn.setToolTip(
+                    "Frame both satellites from the midpoint between them"
+                )
+            else:
+                btn.setToolTip(f"Jump to {label} camera preset")
+            btn.clicked.connect(lambda _checked=False, k=key: self._on_camera_button(k))
             self._style_camera_button(btn)
             btn.raise_()
             self._camera_preset_buttons[key] = btn
@@ -282,20 +335,54 @@ class View3DPanel:
             return np.asarray(result.p1, dtype=np.float64)
         return np.asarray(result.pt, dtype=np.float64)
 
-    def _apply_camera_preset(self, preset_key: str) -> None:
+    def _apply_camera_pose(
+        self,
+        *,
+        focal_point: np.ndarray,
+        position: np.ndarray,
+        up: np.ndarray,
+        view_angle: float,
+    ) -> None:
         if not self._scene_built or self.plotter is None:
             return
-        preset = _CAMERA_PRESETS[preset_key]
-        focal = self._focal_position(preset.focal_satellite)
         cam = self.plotter.camera
-        cam.focal_point = focal
-        cam.position = focal + np.asarray(preset.position_offset, dtype=np.float64)
-        cam.up = np.asarray(preset.up, dtype=np.float64)
-        cam.view_angle = preset.view_angle
+        cam.focal_point = focal_point
+        cam.position = position
+        cam.up = up
+        cam.view_angle = view_angle
         self.plotter.render()
 
-    def _on_camera_preset(self, preset_key: str) -> None:
-        self._apply_camera_preset(preset_key)
+    def _apply_camera_preset(self, preset_key: str) -> None:
+        preset = _CAMERA_PRESETS[preset_key]
+        focal = self._focal_position(preset.focal_satellite)
+        self._apply_camera_pose(
+            focal_point=focal,
+            position=focal + np.asarray(preset.position_offset, dtype=np.float64),
+            up=np.asarray(preset.up, dtype=np.float64),
+            view_angle=preset.view_angle,
+        )
+
+    def _apply_center_camera(self) -> None:
+        result = self._result
+        if result is None:
+            return
+        pose = center_camera_pose(
+            self._focal_position("S1"),
+            self._focal_position("S2"),
+            body_radius=result.config.satellite.body_radius,
+        )
+        self._apply_camera_pose(
+            focal_point=np.asarray(pose.focal_point, dtype=np.float64),
+            position=np.asarray(pose.position, dtype=np.float64),
+            up=np.asarray(pose.up, dtype=np.float64),
+            view_angle=pose.view_angle,
+        )
+
+    def _on_camera_button(self, key: str) -> None:
+        if key == "center":
+            self._apply_center_camera()
+        else:
+            self._apply_camera_preset(key)
 
     def _position_overlays(self) -> None:
         self._position_log_overlay()
@@ -306,7 +393,7 @@ class View3DPanel:
         gap = 6
         x = margin
         y = margin
-        for key in ("s1_close", "s1_far", "s2_close", "s2_far"):
+        for key in ("center", "s1_close", "s1_far", "s2_close", "s2_far"):
             btn = self._camera_preset_buttons[key]
             btn.adjustSize()
             btn.setGeometry(x, y, btn.sizeHint().width(), btn.sizeHint().height())
@@ -375,14 +462,7 @@ class View3DPanel:
                 label=label,
             )
 
-        p.reset_camera()
-        cam = p.camera
-        old_focal = np.array(cam.focal_point, dtype=np.float64)
-        new_focal = np.asarray(result.pt, dtype=np.float64)
-        cam.focal_point = new_focal
-        cam.position = np.array(cam.position, dtype=np.float64) + (
-            new_focal - old_focal
-        )
+        self._apply_center_camera()
 
     def _to_polydata(self, verts: np.ndarray, faces: np.ndarray):
         pv = self._pv
