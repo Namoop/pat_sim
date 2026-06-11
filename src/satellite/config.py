@@ -75,12 +75,19 @@ class MinorOffsetStrategyConfig:
 
 @dataclass(frozen=True)
 class SingleMissStrategyConfig:
-    epoch1_duration: float
+    phase1_duration: float
     a_spiral_radius: str | float
     reset_duration: float
-    epoch2_duration: float
+    phase2_duration: float
     b_spiral_radius: str | float
     spiral_speed: float
+
+
+@dataclass(frozen=True)
+class AsymmetricProbeStrategyConfig:
+    probe_duration: float
+    spiral_radius: str | float
+    spiral_speed: float = 1.0
 
 
 @dataclass(frozen=True)
@@ -89,6 +96,7 @@ class StrategyConfig:
     chain: tuple[str, ...]
     minor_offset: MinorOffsetStrategyConfig
     single_miss: SingleMissStrategyConfig
+    asymmetric_probe: AsymmetricProbeStrategyConfig
 
     def spiral_w(self, satellite: SharedSatelliteConfig) -> float:
         return self.k * satellite.alpha / 3.141592653589793
@@ -220,10 +228,12 @@ def _load_strategy(data: dict) -> StrategyConfig:
         raise ValueError("[strategy].k is required")
     if "duration" not in minor_offset_cfg:
         raise ValueError("[strategy.minor_offset].duration is required")
-    if "epoch1_duration" not in single_miss_cfg:
-        raise ValueError("[strategy.single_miss].epoch1_duration is required")
-    if "epoch2_duration" not in single_miss_cfg:
-        raise ValueError("[strategy.single_miss].epoch2_duration is required")
+    if "phase1_duration" not in single_miss_cfg:
+        raise ValueError("[strategy.single_miss].phase1_duration is required")
+    if "phase2_duration" not in single_miss_cfg:
+        raise ValueError("[strategy.single_miss].phase2_duration is required")
+
+    asymmetric_probe_cfg = data.get("asymmetric_probe", {})
 
     return StrategyConfig(
         k=float(data["k"]),
@@ -234,12 +244,25 @@ def _load_strategy(data: dict) -> StrategyConfig:
             spiral_speed=float(minor_offset_cfg.get("spiral_speed", 1.0)),
         ),
         single_miss=SingleMissStrategyConfig(
-            epoch1_duration=float(single_miss_cfg["epoch1_duration"]),
+            phase1_duration=float(single_miss_cfg["phase1_duration"]),
             a_spiral_radius=single_miss_cfg.get("a_spiral_radius", 0.05),
             reset_duration=float(single_miss_cfg.get("reset_duration", 0.0)),
-            epoch2_duration=float(single_miss_cfg["epoch2_duration"]),
+            phase2_duration=float(single_miss_cfg["phase2_duration"]),
             b_spiral_radius=single_miss_cfg.get("b_spiral_radius", 0.05),
             spiral_speed=float(single_miss_cfg.get("spiral_speed", 1.0)),
+        ),
+        asymmetric_probe=AsymmetricProbeStrategyConfig(
+            probe_duration=float(
+                asymmetric_probe_cfg.get(
+                    "probe_duration",
+                    single_miss_cfg.get("phase1_duration", 3.15),
+                )
+            ),
+            spiral_radius=asymmetric_probe_cfg.get(
+                "spiral_radius",
+                single_miss_cfg.get("a_spiral_radius", 0.05),
+            ),
+            spiral_speed=float(asymmetric_probe_cfg.get("spiral_speed", 1.0)),
         ),
     )
 

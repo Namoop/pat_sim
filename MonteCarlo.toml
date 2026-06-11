@@ -20,9 +20,14 @@ max_spiral_radius = "fov"
 spiral_speed = 1.0
 
 [strategy.single_miss]
-epoch1_duration = 3.15
+phase1_duration = 3.15
 a_spiral_radius = 0.05
-reset_duration = 0.0
-epoch2_duration = 3.15
+reset_duration = 0.3
+phase2_duration = 3.15
 b_spiral_radius = 0.05
+spiral_speed = 1.0
+
+[strategy.asymmetric_probe]
+probe_duration = 3.15
+spiral_radius = 0.05
 spiral_speed = 1.0
