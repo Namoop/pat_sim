@@ -60,7 +60,26 @@ def main(argv: list[str] | None = None) -> int:
         default=0.0,
         help="Starting time q for visualization (default: 0)",
     )
+    parser.add_argument(
+        "--autoplay",
+        nargs="?",
+        const=1.0,
+        type=float,
+        default=None,
+        metavar="SPEED",
+        help=(
+            "Monte Carlo visualization: auto-scrub at play speed × SPEED "
+            "(default 1), advance to the next run when each finishes; "
+            "stops on Pause or when done"
+        ),
+    )
     args = parser.parse_args(argv)
+
+    if args.autoplay is not None:
+        if args.monte_carlo is None:
+            parser.error("--autoplay requires --monte-carlo")
+        if args.autoplay <= 0:
+            parser.error("--autoplay SPEED must be positive")
 
     if args.monte_carlo is not None:
         if not args.monte_carlo.exists():
@@ -69,6 +88,10 @@ def main(argv: list[str] | None = None) -> int:
         mc = load_monte_carlo_config(args.monte_carlo)
         sim = load_simulation_config(mc.simulation_path)
         viz_mode = args.visualize
+        if args.autoplay is not None and viz_mode is None and not sim.visualization.enabled:
+            parser.error(
+                "--autoplay requires visualization (--visualize or visualization.enabled)"
+            )
         if viz_mode is not None or sim.visualization.enabled:
             from satellite.visualize import run_visualizer
             from satellite.visualize.session import MonteCarloVizSession
@@ -79,6 +102,7 @@ def main(argv: list[str] | None = None) -> int:
                     session,
                     default_tab=viz_mode or "3d",
                     start_q=args.q,
+                    autoplay_speed=args.autoplay,
                 )
             except KeyboardInterrupt:
                 print("Interrupted.", file=sys.stderr)
