@@ -119,11 +119,12 @@ class OpticalBench:
         *,
         dish_mount: Vec3,
         dish_at_step_start: Vec3 | None = None,
-    ) -> Vec3:
+    ) -> tuple[Vec3, list[str]]:
         """
         On acquisition: FSM snaps to center beam on camera; bench slews slowly
         afterward to recenter the FSM while maintaining lock.
         """
+        events: list[str] = []
         acq = self.acquisition
         dish = (
             dish_at_step_start
@@ -132,23 +133,34 @@ class OpticalBench:
         )
         just_detected = False
         slewed = False
+        was_complete = acq.slew_complete
 
         if in_cone and not acq.has_seen_beam:
             toward_source = normalize(source_position - dish_mount)
             acq.incident_angle = angle_between(dish, toward_source)
-            acq.track_target = self.toward_partner.copy()
+            acq.track_target = normalize(source_position - self.position)
             acq.has_seen_beam = True
             acq.fsm_locked = True
+            acq.slew_complete = False
             fsm.snap_to(self.bench_boresight, toward_source)
             bench_incident = angle_between(self.bench_boresight, acq.track_target)
             if self.bench_slew_time > 0.0:
                 acq.bench_slew_rate = bench_incident / self.bench_slew_time
             else:
                 acq.bench_slew_rate = float("inf")
+                self.bench_boresight = acq.track_target.copy()
+                self._invalidate_geometry_cache()
+                acq.slew_complete = True
             just_detected = True
 
-        if acq.has_seen_beam and not just_detected and acq.track_target is not None:
+        if (
+            acq.has_seen_beam
+            and not just_detected
+            and not acq.slew_complete
+            and acq.track_target is not None
+        ):
             max_step = (acq.bench_slew_rate or 0.0) * dq
+            remaining = angle_between(self.bench_boresight, acq.track_target)
             self.bench_boresight = rotate_toward(
                 self.bench_boresight,
                 acq.track_target,
@@ -156,8 +168,15 @@ class OpticalBench:
             )
             self._invalidate_geometry_cache()
             fsm.update_with_bench(self.bench_boresight)
+            if remaining <= max_step + 1e-12:
+                self.bench_boresight = acq.track_target.copy()
+                self._invalidate_geometry_cache()
+                acq.slew_complete = True
             slewed = True
 
+        if acq.slew_complete and not was_complete:
+            events.append("Slew complete")
+
         if slewed:
-            return self.dish_boresight_inertial()
-        return dish
+            return self.dish_boresight_inertial(), events
+        return dish, events

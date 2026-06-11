@@ -14,3 +14,4 @@ class AcquisitionState:
     track_target: Vec3 | None = None
     bench_slew_rate: float | None = None
     fsm_locked: bool = False
+    slew_complete: bool = False

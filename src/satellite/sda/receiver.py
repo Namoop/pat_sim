@@ -106,7 +106,7 @@ class ReceiverSDA:
         dq: float,
         *,
         dish_at_step_start: Vec3 | None = None,
-    ) -> Vec3:
+    ) -> tuple[Vec3, list[str]]:
         dish = (
             dish_at_step_start
             if dish_at_step_start is not None
