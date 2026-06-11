@@ -87,6 +87,9 @@ def main(argv: list[str] | None = None) -> int:
 
         summary = run_monte_carlo(mc)
         print(format_monte_carlo_summary(summary))
+        if summary.interrupted:
+            print("Interrupted.", file=sys.stderr)
+            return 130
         return 0
 
     for label, path in (

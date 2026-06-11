@@ -53,7 +53,12 @@ class MonteCarloVizSession:
     def current(self) -> ScenarioResult:
         if self._current is None:
             run = run_monte_carlo_single(
-                self._mc, self._sim, self._rng, self._run_index
+                self._mc,
+                self._sim,
+                self._rng,
+                self._run_index,
+                report=True,
+                total_runs=self._mc.runs,
             )
             self._current = run.result
         return self._current
@@ -66,7 +71,12 @@ class MonteCarloVizSession:
             return None
         self._run_index += 1
         run = run_monte_carlo_single(
-            self._mc, self._sim, self._rng, self._run_index
+            self._mc,
+            self._sim,
+            self._rng,
+            self._run_index,
+            report=True,
+            total_runs=self._mc.runs,
         )
         self._current = run.result
         return self._current
