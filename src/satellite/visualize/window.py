@@ -7,6 +7,8 @@ import time
 import numpy as np
 
 from satellite.scenario import ScenarioResult
+from satellite.geometry import axis_perpendicular_basis
+from satellite.math3d import normalize
 from satellite.viz_geometry import cone_mesh_for_aim
 from satellite.visualize.diagnostics import FrameProfiler
 
@@ -287,20 +289,30 @@ def run_visualizer(result: ScenarioResult, start_q: float = 0.0) -> None:
             )
             return self._to_polydata(verts, faces)
 
-        def _fov_cone_mesh(self, satellite: str, q: float) -> pv.PolyData:
-            rx = result.s1.receiver if satellite == "S1" else result.s2.receiver
+        def _fov_circle(self, satellite: str, q: float) -> pv.PolyData:
+            sat = result.s1 if satellite == "S1" else result.s2
+            rx = sat.receiver
             aim = result.bench_aim(satellite, q)
             mount = rx.dish_mount_for_boresight(aim)
-            ray_len = result.boresight_ray_length(satellite)
-            verts, faces = cone_mesh_for_aim(
-                mount,
-                aim,
-                dish_fov,
-                ray_len,
-                viz.cone_u_steps,
-                viz.cone_v_steps,
+            axis = normalize(aim)
+            dist_along_aim = float(
+                np.dot(sat.partner_actual - mount, axis)
             )
-            return self._to_polydata(verts, faces)
+            base_center = mount + axis * dist_along_aim
+            base_radius = abs(dist_along_aim) * np.tan(dish_fov)
+            u, v = axis_perpendicular_basis(axis)
+            angles = np.linspace(
+                0.0,
+                2.0 * np.pi,
+                viz.cone_v_steps,
+                endpoint=False,
+                dtype=np.float64,
+            )
+            ring = base_center + base_radius * (
+                np.cos(angles)[:, np.newaxis] * u
+                + np.sin(angles)[:, np.newaxis] * v
+            )
+            return pv.lines_from_points(ring, close=True)
 
         def _swept_area_mesh(self, q: float) -> pv.PolyData:
             return pv.PolyData()
@@ -434,26 +446,26 @@ def run_visualizer(result: ScenarioResult, start_q: float = 0.0) -> None:
                 )
 
             with self._profiler.measure("mesh_fov_s1"):
-                s1_fov = self._fov_cone_mesh("S1", q)
+                s1_fov = self._fov_circle("S1", q)
             with self._profiler.measure("actor_fov_s1"):
-                self._update_mesh_actor(
+                self._update_line_actor(
                     s1_fov,
                     "_s1_fov_poly",
                     "_s1_fov_actor",
                     color="skyblue",
-                    opacity=0.12,
+                    line_width=2,
                     label="S1 FOV",
                 )
 
             with self._profiler.measure("mesh_fov_s2"):
-                s2_fov = self._fov_cone_mesh("S2", q)
+                s2_fov = self._fov_circle("S2", q)
             with self._profiler.measure("actor_fov_s2"):
-                self._update_mesh_actor(
+                self._update_line_actor(
                     s2_fov,
                     "_s2_fov_poly",
                     "_s2_fov_actor",
                     color="skyblue",
-                    opacity=0.12,
+                    line_width=2,
                     label="S2 FOV",
                 )
 
@@ -504,28 +516,28 @@ def run_visualizer(result: ScenarioResult, start_q: float = 0.0) -> None:
                     label="S2 dish",
                 )
 
-            with self._profiler.measure("mesh_ray_s1"):
-                s1_ray = self._dish_boresight_line("S1", q)
-            with self._profiler.measure("actor_ray_s1"):
-                self._update_line_actor(
-                    s1_ray,
-                    "_s1_ray_poly",
-                    "_s1_ray_actor",
-                    color="cyan",
-                    line_width=3,
-                    label="S1 boresight",
-                )
-            with self._profiler.measure("mesh_ray_s2"):
-                s2_ray = self._dish_boresight_line("S2", q)
-            with self._profiler.measure("actor_ray_s2"):
-                self._update_line_actor(
-                    s2_ray,
-                    "_s2_ray_poly",
-                    "_s2_ray_actor",
-                    color="cyan",
-                    line_width=3,
-                    label="S2 boresight",
-                )
+            # with self._profiler.measure("mesh_ray_s1"):
+            #     s1_ray = self._dish_boresight_line("S1", q)
+            # with self._profiler.measure("actor_ray_s1"):
+            #     self._update_line_actor(
+            #         s1_ray,
+            #         "_s1_ray_poly",
+            #         "_s1_ray_actor",
+            #         color="cyan",
+            #         line_width=3,
+            #         label="S1 boresight",
+            #     )
+            # with self._profiler.measure("mesh_ray_s2"):
+            #     s2_ray = self._dish_boresight_line("S2", q)
+            # with self._profiler.measure("actor_ray_s2"):
+            #     self._update_line_actor(
+            #         s2_ray,
+            #         "_s2_ray_poly",
+            #         "_s2_ray_actor",
+            #         color="cyan",
+            #         line_width=3,
+            #         label="S2 boresight",
+            #     )
 
             if self.isVisible():
                 with self._profiler.measure("render"):
