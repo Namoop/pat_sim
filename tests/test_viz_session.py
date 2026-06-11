@@ -1,0 +1,85 @@
+"""Visualization session tests."""
+
+from __future__ import annotations
+
+from dataclasses import replace
+from pathlib import Path
+
+import numpy as np
+
+from satellite.config import load_monte_carlo_config, load_simulation_config, load_single_scenario
+from satellite.monte_carlo import run_monte_carlo_single
+from satellite.scenario import run_scenario
+from satellite.visualize.session import MonteCarloVizSession, SingleResultSession
+
+FIXTURES = Path(__file__).parent / "fixtures"
+REPO_ROOT = Path(__file__).resolve().parents[1]
+
+
+def _mc_fixture():
+    mc = load_monte_carlo_config(FIXTURES / "MonteCarlo_success.toml")
+    return replace(mc, simulation_path=(REPO_ROOT / "Simulation.toml").resolve())
+
+
+def test_single_result_session_advance_closes():
+    cfg = load_single_scenario(
+        REPO_ROOT / "default.toml",
+        REPO_ROOT / "Simulation.toml",
+        REPO_ROOT / "MonteCarlo.toml",
+    )
+    result = run_scenario(cfg)
+    session = SingleResultSession(result)
+    assert session.current() is result
+    assert session.has_next() is False
+    assert session.advance() is None
+
+
+def test_monte_carlo_viz_session_first_run_reproducible():
+    mc = _mc_fixture()
+    mc = replace(mc, runs=3)
+    sim = load_simulation_config(mc.simulation_path)
+    rng = np.random.default_rng(mc.seed)
+    expected = run_monte_carlo_single(mc, sim, rng, 0)
+
+    session = MonteCarloVizSession(mc)
+    first = session.current()
+    assert first.config.name == "mc_run_0"
+    np.testing.assert_allclose(
+        first.config.s1.bench_theta_offset,
+        expected.s1_theta,
+    )
+    assert session.has_next() is True
+    assert "1/3" in session.status_label()
+
+
+def test_monte_carlo_viz_session_advance_and_last_returns_none():
+    mc = _mc_fixture()
+    mc = replace(mc, runs=3)
+    session = MonteCarloVizSession(mc)
+
+    r0 = session.current()
+    r1 = session.advance()
+    assert r1 is not None
+    assert r1.config.name == "mc_run_1"
+    assert r1 is not r0
+
+    r2 = session.advance()
+    assert r2 is not None
+    assert r2.config.name == "mc_run_2"
+    assert session.has_next() is False
+
+    assert session.advance() is None
+
+
+def test_monte_carlo_viz_session_offsets_match_batch():
+    mc = _mc_fixture()
+    mc = replace(mc, runs=2)
+    sim = load_simulation_config(mc.simulation_path)
+    rng = np.random.default_rng(mc.seed)
+    batch = [run_monte_carlo_single(mc, sim, rng, i) for i in range(2)]
+
+    session = MonteCarloVizSession(mc)
+    assert session.current().config.s1.bench_theta_offset == batch[0].s1_theta
+    second = session.advance()
+    assert second is not None
+    assert second.config.s1.bench_theta_offset == batch[1].s1_theta
