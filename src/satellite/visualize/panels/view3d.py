@@ -295,7 +295,7 @@ class View3DPanel:
         total_q = result.schedule.total_duration
         q = float(np.clip(q, 0.0, total_q))
         self._current_q = q
-        phase_str = result.epoch_label(q)
+        phase_str = result.step_label(q)
         frame_start = time.perf_counter()
 
         with self._profiler.measure("replay"):
@@ -661,8 +661,8 @@ class View3DPanel:
                 label="swept area",
             )
 
-        with self._profiler.measure("active_in_cone"):
-            in_cone = result.active_in_cone(q)
+        with self._profiler.measure("mutual_lock"):
+            in_cone = result.mutual_lock(q)
         with self._profiler.measure("actor_body_color"):
             for sat_name, actor in (
                 ("S1", self._s1_body_actor),

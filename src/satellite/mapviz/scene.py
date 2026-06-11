@@ -91,6 +91,10 @@ def build_panel(
         dish_fov,
     )
 
+    scheduled, local_t = result.schedule.script_at(q)
+    timeline = scheduled.script.s1 if satellite == "S1" else scheduled.script.s2
+    beam_enabled, _ = timeline.hardware_state_at(local_t)
+
     return MapPanel(
         satellite=satellite,
         partner=partner,
@@ -98,8 +102,8 @@ def build_panel(
         fov=fov,
         partner_in_beam=partner_in_beam,
         partner_in_fov=partner_in_fov,
-        is_transmitting=True,
-        phase_label=result.epoch_label(q),
+        is_transmitting=beam_enabled,
+        phase_label=result.step_label(q),
     )
 
 
@@ -108,7 +112,6 @@ def build_scene(result: ScenarioResult, q: float) -> MapScene:
     s1 = build_panel(result, "S1", q)
     s2 = build_panel(result, "S2", q)
 
-    hit_12, hit_21 = result.bidirectional_lock(q)
-    capture = hit_12 or hit_21
+    capture = result.mutual_lock(q)
 
     return MapScene(q=q, s1=s1, s2=s2, capture_active=capture)
