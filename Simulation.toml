@@ -1,0 +1,24 @@
+[satellite]
+body_radius = 0.5
+dish_fov = 0.02
+bench_slew_time = 0.3
+fsm_settle_time = 0.0
+beam_width = 5.0
+
+[simulation]
+distance = 1000.0
+q_step = 0.01
+boresight_extension = 5.0
+profile_replay = false
+
+[visualization]
+enabled = false
+cone_u_steps = 24
+cone_v_steps = 32
+spiral_trail_steps = 120
+ribbon_v_steps = 8
+profile_frames = false
+
+[map_visualization]
+axis_limit = 0.1
+slider_debounce_ms = 16

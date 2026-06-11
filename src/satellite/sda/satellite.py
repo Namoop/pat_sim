@@ -7,7 +7,6 @@ from dataclasses import dataclass, field
 from satellite.config import ScenarioConfig, SatelliteInstanceConfig, default_beam_length
 from satellite.math3d import Vec3
 from satellite.sda.bench import OpticalBench
-from satellite.sda.boresight_table import BoresightTable
 from satellite.sda.fsm import FastSteeringMirror
 from satellite.sda.receiver import ReceiverSDA
 from satellite.sda.transmitter import TransmitterSDA
@@ -49,20 +48,14 @@ class Satellite:
             position,
             bench.initial_beam_boresight,
             partner_actual,
-            config.sda.k,
+            config.strategy.k,
             hw.alpha,
             beam_length,
             boresight_extension=config.simulation.boresight_extension,
-            q_max=config.simulation.q_max,
-            q_step=config.simulation.q_step,
         )
         receiver = ReceiverSDA(
             bench=bench,
             fsm=fsm,
-            gamma=config.sda.gamma,
-            beta=config.sda.beta,
-            omega_r=config.sda.omega_r,
-            l_r=config.sda.L_r,
             body_radius=hw.body_radius,
             dish_fov=hw.dish_fov,
         )
@@ -74,24 +67,3 @@ class Satellite:
             transmitter=transmitter,
             receiver=receiver,
         )
-
-
-def build_phase2_transmitter(
-    s2: Satellite,
-    s1: Satellite,
-    beam_boresight_end: Vec3,
-    config: ScenarioConfig,
-) -> TransmitterSDA:
-    """S2 phase-2 spiral centered on end-of-phase-1 bench boresight."""
-    beam_length = default_beam_length(s2.position, s1.position, config.simulation)
-    return TransmitterSDA.from_boresight(
-        s2.position,
-        beam_boresight_end,
-        s1.position,
-        config.sda.k,
-        config.satellite.alpha,
-        beam_length,
-        boresight_extension=config.simulation.boresight_extension,
-        q_max=config.simulation.q_max,
-        q_step=config.simulation.q_step,
-    )

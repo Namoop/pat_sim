@@ -3,13 +3,12 @@
 from __future__ import annotations
 
 import argparse
-import statistics
 import sys
 import time
 
 import numpy as np
 
-from satellite.config import load_config
+from satellite.config import load_single_scenario
 from satellite.mapviz.panel_widget import AngularMapPanel
 from satellite.mapviz.scene import build_scene
 from satellite.scenario import run_scenario
@@ -27,7 +26,9 @@ def _percentile(sorted_vals: list[float], p: float) -> float:
 
 
 def run_benchmark(
-    config_path: str,
+    scenario_path: str,
+    simulation_path: str,
+    strategy_path: str,
     *,
     samples: int = 1000,
     seed: int = 0,
@@ -35,14 +36,13 @@ def run_benchmark(
     from PyQt6.QtCore import Qt
     from PyQt6.QtWidgets import QApplication
 
-    config = load_config(config_path)
+    config = load_single_scenario(scenario_path, simulation_path, strategy_path)
     result = run_scenario(config)
     result.ensure_replay_timeline()
     total_q = result.schedule.total_duration
     map_cfg = config.map_visualization
 
     app = QApplication.instance() or QApplication([])
-
     panel_s1 = AngularMapPanel(axis_limit=map_cfg.axis_limit)
     panel_s2 = AngularMapPanel(axis_limit=map_cfg.axis_limit)
     for panel in (panel_s1, panel_s2):
@@ -104,9 +104,19 @@ def run_benchmark(
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Benchmark mapviz QPainter render.")
     parser.add_argument(
-        "--config",
-        default="scenario.toml",
-        help="Scenario TOML path",
+        "--scenario",
+        default="default.toml",
+        help="Scenario instance TOML",
+    )
+    parser.add_argument(
+        "--simulation",
+        default="Simulation.toml",
+        help="Simulation base TOML",
+    )
+    parser.add_argument(
+        "--strategy",
+        default="MonteCarlo.toml",
+        help="Strategy chain TOML",
     )
     parser.add_argument(
         "--samples",
@@ -116,7 +126,13 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument("--seed", type=int, default=0)
     args = parser.parse_args(argv)
-    return run_benchmark(args.config, samples=args.samples, seed=args.seed)
+    return run_benchmark(
+        args.scenario,
+        args.simulation,
+        args.strategy,
+        samples=args.samples,
+        seed=args.seed,
+    )
 
 
 if __name__ == "__main__":

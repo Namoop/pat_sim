@@ -6,7 +6,8 @@ import argparse
 import sys
 from pathlib import Path
 
-from satellite.config import load_config
+from satellite.config import load_single_scenario
+from satellite.monte_carlo import format_monte_carlo_summary, run_monte_carlo_from_path
 from satellite.scenario import format_summary, run_scenario
 
 
@@ -15,10 +16,28 @@ def main(argv: list[str] | None = None) -> int:
         description="Run a satellite SDA communication scenario.",
     )
     parser.add_argument(
-        "--config",
+        "--monte-carlo",
         type=Path,
-        default=Path("scenario.toml"),
-        help="Path to scenario TOML file (default: scenario.toml)",
+        default=None,
+        help="Run Monte Carlo batch from MonteCarlo.toml",
+    )
+    parser.add_argument(
+        "--scenario",
+        type=Path,
+        default=Path("default.toml"),
+        help="Scenario instance TOML (bench offsets, optional distance override)",
+    )
+    parser.add_argument(
+        "--simulation",
+        type=Path,
+        default=Path("Simulation.toml"),
+        help="Simulation base TOML (physics, timing, visualization)",
+    )
+    parser.add_argument(
+        "--strategy",
+        type=Path,
+        default=Path("MonteCarlo.toml"),
+        help="Strategy chain TOML (strategy section; default: MonteCarlo.toml)",
     )
     parser.add_argument(
         "--visualize",
@@ -39,11 +58,24 @@ def main(argv: list[str] | None = None) -> int:
     )
     args = parser.parse_args(argv)
 
-    if not args.config.exists():
-        print(f"Config not found: {args.config}", file=sys.stderr)
-        return 1
+    if args.monte_carlo is not None:
+        if not args.monte_carlo.exists():
+            print(f"Monte Carlo config not found: {args.monte_carlo}", file=sys.stderr)
+            return 1
+        summary = run_monte_carlo_from_path(str(args.monte_carlo))
+        print(format_monte_carlo_summary(summary))
+        return 0
 
-    config = load_config(args.config)
+    for label, path in (
+        ("Scenario", args.scenario),
+        ("Simulation", args.simulation),
+        ("Strategy", args.strategy),
+    ):
+        if not path.exists():
+            print(f"{label} config not found: {path}", file=sys.stderr)
+            return 1
+
+    config = load_single_scenario(args.scenario, args.simulation, args.strategy)
     result = run_scenario(config)
     print(format_summary(result))
 

@@ -33,8 +33,8 @@ class MetaStrategy:
     @classmethod
     def from_config(cls, config: ScenarioConfig) -> MetaStrategy:
         sc = config.strategy
-        w = sc.spiral_w(config)
-        k = config.sda.k
+        w = sc.spiral_w(config.satellite)
+        k = sc.k
         dish_fov = config.satellite.dish_fov
 
         registry: dict[str, SearchStrategy] = {

@@ -1,103 +1,72 @@
-# Satellite Communication — SDA Two-Phase Search
+# Satellite Communication — SDA Meta-Strategy Search
 
-Monte Carlo satellite link-establishment simulation. Two satellites alternate transmitting a spiral search cone on a shared clock:
-
-| Global time `q` | Transmitter | Receiver |
-|-----------------|-------------|----------|
-| `[0, q_max)` | S1 | S2 |
-| `[q_max, 2·q_max)` | S2 | S1 |
-
-Each satellite carries both a transmitter and receiver. Satellites never communicate; they follow the synchronized schedule only. Phase 2 for S2 spirals around the **bench boresight** at the end of phase 1 (locked direction if the beam was acquired, otherwise initial mispoint).
+Monte Carlo satellite link-establishment simulation. Two satellites search using a **meta-strategy chain** (`minor_offset`, `single_miss`, …). Each frame, both directions are checked for bidirectional lock; the first hit stops the run.
 
 The spacecraft body is assumed correctly pointed. Launch mispoint is modeled as **optical-bench rotation**; dish and TX beam share the bench boresight.
 
 ## Install
 
 ```bash
-# Headless (fast batch runs)
 pip install -e .
-
-# Optional Numba-accelerated detection
-pip install -e ".[perf]"
-
-# Interactive 3D visualization
-pip install -e ".[viz]"
-
-# Angular map visualization (QPainter θ/φ view, PyQt6 only)
-pip install -e ".[mapviz]"
+pip install -e ".[perf]"    # optional Numba-accelerated detection
+pip install -e ".[viz]"      # interactive 3D (PyVista)
+pip install -e ".[mapviz]"   # angular map (PyQt6)
 ```
 
 ## Run
 
 ```bash
-# Fast headless — prints hit summary
-python -m satellite --config scenario.toml
+# Single scenario
+python -m satellite --scenario default.toml --simulation Simulation.toml
 
-# Interactive 3D window (orbit/pan, time slider, Play/Pause)
-python -m satellite --config scenario.toml --visualize 3d
-# or shorthand:
-python -m satellite --config scenario.toml --visualize
+# Monte Carlo batch
+python -m satellite --monte-carlo MonteCarlo.toml
 
-# Angular map view (two side-by-side θ/φ panels)
-python -m satellite --config scenario.toml --visualize map
+# Visualization
+python -m satellite --scenario default.toml --visualize map
+python -m satellite --scenario default.toml --visualize 3d --q 2.5
 
-# Benchmark map render path (QPainter p50/p95 timings)
-python -m satellite.mapviz.bench_render --config scenario.toml
-
-# Start visualization at a specific time
-python -m satellite --config scenario.toml --visualize 3d --q 2.5
+# Map render benchmark
+python -m satellite.mapviz.bench_render --scenario default.toml
 ```
 
-### Linux visualization troubleshooting
+Defaults: `--scenario default.toml`, `--simulation Simulation.toml`, `--strategy MonteCarlo.toml` (strategy chain loaded from the strategy section of MonteCarlo.toml).
 
-If you see `BadWindow` or `vtkXOpenGLRenderWindow` errors (common on **Wayland**), force Qt to use X11:
+### Linux visualization
 
 ```bash
-QT_QPA_PLATFORM=xcb python -m satellite --config scenario.toml --visualize 3d
-QT_QPA_PLATFORM=xcb python -m satellite --config scenario.toml --visualize map
+QT_QPA_PLATFORM=xcb python -m satellite --scenario default.toml --visualize 3d
 ```
-
-The visualizer also sets `QT_QPA_PLATFORM=xcb` automatically on Linux when the variable is unset.
 
 ## Configuration
 
-Edit [`scenario.toml`](scenario.toml):
+| File | Purpose |
+|------|---------|
+| [`Simulation.toml`](Simulation.toml) | Hardware, `distance`, `q_step`, visualization |
+| [`default.toml`](default.toml) | Per-run bench offsets; optional `[scenario].distance` override |
+| [`MonteCarlo.toml`](MonteCarlo.toml) | MC runs, error distribution, strategy chain |
 
-| Section | Key fields |
-|---------|------------|
-| `s1`, `s2` | `position`, `bench_theta_offset`, `bench_phi_offset` |
-| `satellite` | `body_radius`, `dish_fov`, `bench_slew_time`, `fsm_settle_time`, `beam_width` (milliradians) |
-| `sda` | `k`, `gamma`, `beta`, `omega_r`, `L_r` |
-| `simulation` | `q_max` (one phase), `q_step`, `boresight_extension` (default 5), optional `beam_length` |
-| `visualization` | `enabled`, mesh resolution settings (3D PyVista) |
-| `map_visualization` | `axis_limit`, `disc_segments`, `spiral_trail_steps` (angular map) |
+Satellites are placed on the **x axis**: S1 at origin, S2 at `[distance, 0, 0]`.
 
-`q_max` is the duration of **one** spiral phase; the full search runs for `2 * q_max`.
+Strategy epoch durations are explicit in `[strategy.*]` (total sim time = sum of epoch durations in the winning attempt chain).
 
 `beam_width` is the transmitter cone half-angle in **milliradians** (e.g. `5.0` → α = 0.005 rad).
-
-Default beam length and boresight ray length = link range + `boresight_extension` (5 units unless overridden).
 
 ## Project layout
 
 ```
 src/satellite/
-  math3d.py       — vector helpers
-  geometry.py     — frames, cone surfaces, spiral trail
-  detection.py    — dish FOV hit test
-  schedule.py     — two-phase SearchSchedule
-  sda/            — TransmitterSDA, ReceiverSDA, Satellite
-  scenario.py     — orchestration and coupled replay
-  visualize/      — PyVista + Qt 3D (lazy-loaded)
-  mapviz/         — QPainter + Qt angular map (lazy-loaded)
+  config.py       — Simulation / scenario / MC loaders
+  monte_carlo.py  — error sampling and batch runner
+  strategy/       — meta-strategy, movements, frame runner
+  sda/            — bench, transmitter, receiver
+  scenario.py     — orchestration and replay
+  visualize/      — PyVista 3D
+  mapviz/         — QPainter angular map
 ```
 
 ## Model summary
 
-- **Body:** assumed correctly pointed at the partner (no body slew).
-- **Optical bench:** per-satellite `bench_theta/phi_offset` is the sole launch mispoint; dish and TX beam are co-aligned on the bench (spiral center).
-- **Acquisition:** on detect, the **FSM** (fast steering mirror) snaps to center the beam on the camera; the **bench** then slews slowly to recenter the FSM.
-- **Detection:** transmitter cone illuminates dish mount; incoming angle must be within `dish_fov`.
-- **Phase 2 handoff:** S2 builds a new spiral centered on `boresight_end` (end-of-phase-1 bench boresight).
-- **Replay:** headless and visualizer share one coupled replay loop — no separate static-dish scan.
-- **Performance:** spiral boresights are precomputed per phase; optional Numba kernel for detection (`pip install -e ".[perf]"`).
+- **Detection:** transmit cone hits dish mount; incoming direction from transmitter body must fall within `dish_fov`.
+- **Search:** movement patterns set shared bench aim (dish == beam); FSM snaps on acquisition.
+- **Replay:** headless and visualizer share one coupled replay timeline.

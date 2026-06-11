@@ -1,0 +1,10 @@
+[scenario]
+name = "default"
+
+[s1]
+bench_theta_offset = 0.01
+bench_phi_offset = 0.01
+
+[s2]
+bench_theta_offset = 0.02
+bench_phi_offset = 0.015
