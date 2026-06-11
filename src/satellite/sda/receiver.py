@@ -4,14 +4,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from satellite.geometry import (
-    actual_target_plane_distance,
-    cone_surface_mesh,
-    dish_aperture_radius,
-    dish_disc_mesh,
-    receiver_global_frame,
-    receiver_basis,
-)
+from satellite.geometry import dish_aperture_radius, dish_disc_mesh
 from satellite.math3d import Vec3
 from satellite.sda.bench import BenchGeometry, OpticalBench
 from satellite.sda.fsm import FastSteeringMirror
@@ -24,27 +17,15 @@ class ReceiverSDA:
         self,
         bench: OpticalBench,
         fsm: FastSteeringMirror,
-        gamma: float,
-        beta: float,
-        omega_r: float,
-        l_r: float,
+        *,
         body_radius: float,
         dish_fov: float,
     ) -> None:
         self.bench = bench
         self.fsm = fsm
-        self.gamma = gamma
-        self.beta = beta
-        self.omega_r = omega_r
-        self.l_r = l_r
         self.body_radius = body_radius
         self.dish_fov = dish_fov
 
-        self.d_circ = actual_target_plane_distance(
-            bench.partner_position, bench.position, l_r
-        )
-
-    # Backward-compat aliases
     @property
     def position(self) -> Vec3:
         return self.bench.position
@@ -67,7 +48,6 @@ class ReceiverSDA:
 
     @property
     def nominal_boresight(self) -> Vec3:
-        """True aim direction toward the partner."""
         return self.bench.toward_partner
 
     @property
@@ -116,25 +96,29 @@ class ReceiverSDA:
 
         return distance(self.partner_position, self.dish_mount)
 
-    def dish_range_from_p1(self) -> float:
-        return self.dish_range_from_partner()
-
     def dish_aperture_radius(self) -> float:
         return dish_aperture_radius(self.body_radius, self.dish_fov)
 
     def observe_beam(
         self,
         in_cone: bool,
-        beam_direction: Vec3,
+        source_position: Vec3,
         dq: float,
         *,
         dish_at_step_start: Vec3 | None = None,
     ) -> Vec3:
+        dish = (
+            dish_at_step_start
+            if dish_at_step_start is not None
+            else self.dish_boresight
+        )
+        mount = self.dish_mount_for_boresight(dish)
         return self.bench.observe_beam(
             self.fsm,
             in_cone,
-            beam_direction,
+            source_position,
             dq,
+            dish_mount=mount,
             dish_at_step_start=dish_at_step_start,
         )
 
@@ -152,50 +136,3 @@ class ReceiverSDA:
             self.dish_aperture_radius(),
             segments,
         )
-
-    def frame_at(self, t: float) -> tuple[Vec3, Vec3, Vec3]:
-        return receiver_global_frame(
-            self.position, self.partner_position, self.beta, self.omega_r, t
-        )
-
-    def receiver_cone_mesh_at(
-        self,
-        q: float,
-        u_steps: int,
-        v_steps: int,
-    ) -> tuple[np.ndarray, np.ndarray]:
-        a_rec, b_rec, c_rec = self.frame_at(q)
-        return cone_surface_mesh(
-            self.position,
-            a_rec,
-            b_rec,
-            c_rec,
-            self.gamma,
-            self.l_r,
-            u_steps,
-            v_steps,
-        )
-
-    def receiver_cap_mesh_at(
-        self,
-        q: float,
-        u_steps: int,
-        v_steps: int,
-    ) -> tuple[np.ndarray, np.ndarray]:
-        a_rec, b_rec, c_rec = self.frame_at(q)
-        return cone_surface_mesh(
-            self.position,
-            a_rec,
-            b_rec,
-            c_rec,
-            self.gamma,
-            self.l_r,
-            u_steps,
-            v_steps,
-        )
-
-    def is_target_in_aperture(self, _direction: Vec3, _t: float) -> bool:
-        raise NotImplementedError("Receiver aperture detection not yet implemented")
-
-    def basis(self) -> tuple[Vec3, Vec3, Vec3]:
-        return receiver_basis(self.position, self.partner_position)

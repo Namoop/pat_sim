@@ -32,6 +32,11 @@ def is_within_dish_fov(
     return angle_between(dish_boresight, incoming_direction) <= dish_fov
 
 
+def incoming_from_source(apex: Vec3, dish_mount: Vec3) -> Vec3:
+    """Unit direction from dish mount toward the transmitter apex."""
+    return normalize(apex - dish_mount)
+
+
 def point_in_transmitter_cone(
     apex: Vec3,
     axis: Vec3,
@@ -49,12 +54,12 @@ def point_in_transmitter_cone(
 
 
 def beam_incident_angle_at_q(
-    q: float,
+    apex: Vec3,
+    dish_mount: Vec3,
     dish_boresight: Vec3,
-    boresight_fn: Callable[[float], Vec3],
 ) -> float:
-    """Angle between dish boresight and incoming beam at q."""
-    toward_source = -normalize(boresight_fn(q))
+    """Angle between dish boresight and incoming radiation from apex."""
+    toward_source = incoming_from_source(apex, dish_mount)
     return angle_between(dish_boresight, toward_source)
 
 
@@ -94,7 +99,7 @@ def beam_missed_dish_fov_at_q(
         q, apex, dish_mount, boresight_fn, alpha, beam_length
     ):
         return None
-    incident = beam_incident_angle_at_q(q, dish_boresight, boresight_fn)
+    incident = beam_incident_angle_at_q(apex, dish_mount, dish_boresight)
     if incident <= dish_fov:
         return None
     return incident
@@ -123,7 +128,7 @@ def beam_hits_dish(
             alpha,
             beam_length,
         )
-    toward_source = -normalize(beam_axis)
+    toward_source = incoming_from_source(apex, dish_mount)
     if not is_within_dish_fov(dish_boresight, toward_source, dish_fov):
         return False
     return point_in_transmitter_cone(apex, beam_axis, alpha, beam_length, dish_mount)
@@ -149,40 +154,3 @@ def beam_hits_dish_at_q(
         alpha,
         beam_length,
     )
-
-
-def scan_dish_hits_up_to(
-    q_max: float,
-    q_step: float,
-    apex: Vec3,
-    dish_mount: Vec3,
-    dish_boresight: Vec3,
-    dish_fov: float,
-    boresight_fn: Callable[[float], Vec3],
-    alpha: float,
-    beam_length: float,
-) -> tuple[bool, float | None]:
-    """
-    Scan from 0 to q_max for dish detection.
-
-    Returns (hit, hit_at_q). hit_at_q is the first q where the beam is
-    visible to the dish (transmitter cone on mount and within dish FOV).
-    """
-    hit_at_q: float | None = None
-    q = 0.0
-    while q <= q_max + 1e-12:
-        if beam_hits_dish_at_q(
-            q,
-            apex,
-            dish_mount,
-            dish_boresight,
-            dish_fov,
-            boresight_fn,
-            alpha,
-            beam_length,
-        ):
-            hit_at_q = q
-            break
-        q += q_step
-
-    return hit_at_q is not None, hit_at_q

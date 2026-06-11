@@ -147,14 +147,14 @@ class FrameRunner:
         if hit_12:
             s2.receiver.observe_beam(
                 True,
-                aim1,
+                s1.position,
                 q_step,
                 dish_at_step_start=geom2.dish_boresight,
             )
         if hit_21:
             s1.receiver.observe_beam(
                 True,
-                aim2,
+                s2.position,
                 q_step,
                 dish_at_step_start=geom1.dish_boresight,
             )

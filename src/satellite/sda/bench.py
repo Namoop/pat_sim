@@ -114,9 +114,10 @@ class OpticalBench:
         self,
         fsm: FastSteeringMirror,
         in_cone: bool,
-        beam_direction: Vec3,
+        source_position: Vec3,
         dq: float,
         *,
+        dish_mount: Vec3,
         dish_at_step_start: Vec3 | None = None,
     ) -> Vec3:
         """
@@ -133,7 +134,7 @@ class OpticalBench:
         slewed = False
 
         if in_cone and not acq.has_seen_beam:
-            toward_source = -normalize(beam_direction)
+            toward_source = normalize(source_position - dish_mount)
             acq.incident_angle = angle_between(dish, toward_source)
             acq.track_target = self.toward_partner.copy()
             acq.has_seen_beam = True

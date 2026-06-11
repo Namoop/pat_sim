@@ -23,15 +23,17 @@ def _beam_hits_dish_numpy(
     cos_alpha: float,
     beam_length: float,
 ) -> bool:
-    toward = -beam_axis / norm(beam_axis)
+    to_point = dish_mount - apex
+    dist = norm(to_point)
+    if dist <= 0.0:
+        return False
+    toward = to_point / dist
     dish_u = dish_boresight / norm(dish_boresight)
     if float(np.arccos(np.clip(np.dot(dish_u, toward), -1.0, 1.0))) > np.arccos(cos_fov):
         return False
-    to_point = dish_mount - apex
-    dist = norm(to_point)
-    if dist <= 0.0 or dist > beam_length:
+    if dist > beam_length:
         return False
-    direction = to_point / dist
+    direction = toward
     beam_u = beam_axis / norm(beam_axis)
     return float(np.dot(beam_u, direction)) >= cos_alpha
 
@@ -48,9 +50,11 @@ if _HAS_NUMBA:
         cos_alpha: float,
         beam_length: float,
     ) -> bool:
-        bx, by, bz = beam_axis[0], beam_axis[1], beam_axis[2]
-        bnorm = (bx * bx + by * by + bz * bz) ** 0.5
-        tx, ty, tz = -bx / bnorm, -by / bnorm, -bz / bnorm
+        px, py, pz = dish_mount[0] - apex[0], dish_mount[1] - apex[1], dish_mount[2] - apex[2]
+        dist = (px * px + py * py + pz * pz) ** 0.5
+        if dist <= 0.0:
+            return False
+        tx, ty, tz = px / dist, py / dist, pz / dist
         dx, dy, dz = dish_boresight[0], dish_boresight[1], dish_boresight[2]
         dnorm = (dx * dx + dy * dy + dz * dz) ** 0.5
         dx, dy, dz = dx / dnorm, dy / dnorm, dz / dnorm
@@ -62,12 +66,11 @@ if _HAS_NUMBA:
         incident = np.arccos(dot_dt)
         if incident > np.arccos(cos_fov):
             return False
-        px, py, pz = dish_mount[0] - apex[0], dish_mount[1] - apex[1], dish_mount[2] - apex[2]
-        dist = (px * px + py * py + pz * pz) ** 0.5
-        if dist <= 0.0 or dist > beam_length:
+        if dist > beam_length:
             return False
-        px, py, pz = px / dist, py / dist, pz / dist
-        dot_bp = (bx / bnorm) * px + (by / bnorm) * py + (bz / bnorm) * pz
+        bx, by, bz = beam_axis[0], beam_axis[1], beam_axis[2]
+        bnorm = (bx * bx + by * by + bz * bz) ** 0.5
+        dot_bp = (bx / bnorm) * tx + (by / bnorm) * ty + (bz / bnorm) * tz
         return dot_bp >= cos_alpha
 
 else:
