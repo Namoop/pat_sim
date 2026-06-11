@@ -1,6 +1,6 @@
 # Satellite Communication — SDA Meta-Strategy Search
 
-Monte Carlo satellite link-establishment simulation. Two satellites search using a **meta-strategy chain** (`minor_offset`, `single_miss`, …). Each frame, both directions are checked for bidirectional lock; the first hit stops the run.
+Monte Carlo satellite link-establishment simulation. Two satellites search using a **meta-strategy chain** (`minor_offset`, `asymmetric_probe`, `single_miss`, …). Success requires **mutual lock**: both beams enabled, both receivers enabled, both bench slews complete, and simultaneous bidirectional visibility.
 
 The spacecraft body is assumed correctly pointed. Launch mispoint is modeled as **optical-bench rotation**; dish and TX beam share the bench boresight.
 
@@ -35,7 +35,7 @@ Scenario instance TOML: bench offsets and optional `[scenario].distance` overrid
 Simulation base TOML: hardware, timing, distance, `q_step`, and visualization defaults.
 
 `--strategy STRATEGY` (default: `MonteCarlo.toml`)  
-Strategy chain TOML. The `[strategy]` section (and nested epoch tables) is read from this file.
+Strategy chain TOML. The `[strategy]` section and per-strategy parameter tables are read from this file.
 
 `--q Q` (default: `0`)  
 Starting time `q` when opening a visualizer.
@@ -91,9 +91,19 @@ QT_QPA_PLATFORM=xcb python -m satellite [...]
 
 Satellites are placed on the **x axis**: S1 at origin, S2 at `[distance, 0, 0]`.
 
-Strategy epoch durations are explicit in `[strategy.*]` (total sim time = sum of epoch durations in the winning attempt chain).
+Strategy step durations are explicit in `[strategy.*]` tables (total sim time = sum of attempt script durations in the chain). Movement `duration=0` is only valid for a no-op bench reset when already at the initial boresight; future work will auto-compute durations from beam-director max slew rate.
 
 `beam_width` is the transmitter cone half-angle in **milliradians** (e.g. `5.0` → α = 0.005 rad).
+
+### Built-in strategies
+
+| Name | Behavior |
+|------|----------|
+| `minor_offset` | Both TX/RX on; S1 FOV spiral, S2 holds |
+| `single_miss` | Alternating wide spirals with bench reset between phases |
+| `asymmetric_probe` | S1 probes with RX off; reciprocal lock after B acquires (opt-in via `chain`) |
+
+Custom strategies use the Python DSL in `strategy/actions.py`; TOML configures built-in chain parameters only.
 
 ## Project layout
 
@@ -101,7 +111,12 @@ Strategy epoch durations are explicit in `[strategy.*]` (total sim time = sum of
 src/satellite/
   config.py       — Simulation / scenario / MC loaders
   monte_carlo.py  — error sampling and batch runner
-  strategy/       — meta-strategy, movements, frame runner
+  strategy/
+    actions.py    — timeline DSL and StrategyScript
+    runner.py     — frame runner
+    schedule.py   — compiled timeline for replay
+    meta.py       — strategy chain orchestrator
+    strategies/   — built-in strategy implementations
   sda/            — bench, transmitter, receiver
   scenario.py     — orchestration and replay
   visualize/      — unified 3D + map visualizer
@@ -111,5 +126,7 @@ src/satellite/
 ## Model summary
 
 - **Detection:** transmit cone hits dish mount; incoming direction from transmitter body must fall within `dish_fov`.
-- **Search:** movement patterns set shared bench aim (dish == beam); FSM snaps on acquisition.
+- **Search:** independent per-satellite timelines (hold, spiral, reset, …) with optional beam/receiver enable states; FSM snaps on acquisition.
+- **Lock:** both satellites transmitting and receiving, both slews complete, simultaneous `visible_12 ∧ visible_21`.
+- **Partial acquisition:** if one satellite acquires the other before a strategy times out, the acquirer keeps tracking and ignores later scripted search; the non-acquired satellite continues the strategy chain normally.
 - **Replay:** headless and visualizer share one coupled replay timeline.
