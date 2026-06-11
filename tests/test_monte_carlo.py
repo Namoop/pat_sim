@@ -90,6 +90,7 @@ def test_monte_carlo_run_progress_messages():
         s2_theta=0.03,
         s2_phi=0.04,
         result=result,
+        computation_time_ms=12.5,
     )
     start = format_monte_carlo_run_start(1, 10, 0.01, -0.02, 0.03, 0.04)
     assert start == (
@@ -105,6 +106,31 @@ def test_monte_carlo_run_progress_messages():
     else:
         assert " Failed after t=" in complete
         assert "timeout (tried " in complete
+
+
+def test_monte_carlo_summary_statistics_formatting():
+    from satellite.monte_carlo import MonteCarloSummary
+    
+    summary = MonteCarloSummary(
+        runs=10,
+        planned_runs=10,
+        interrupted=False,
+        successes=5,
+        success_rate=0.5,
+        by_strategy={"strat1": 5},
+        run_results=(),
+        mean_t=100.0,
+        median_t=90.0,
+        mean_computation_ms=50.0,
+        median_computation_ms=45.0,
+        total_computation_ms=500.0,
+    )
+    
+    text = format_monte_carlo_summary(summary)
+    assert "Monte Carlo: 5/10 succeeded (50.0%)" in text
+    assert "Success sim-t: mean=100.000, median=90.000" in text
+    assert "Computation: mean=50.0ms, median=45.0ms, total=0.50s" in text
+    assert "Winning strategies: strat1: 5" in text
 
 
 def test_monte_carlo_graceful_interrupt(monkeypatch):

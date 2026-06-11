@@ -29,6 +29,7 @@ class MonteCarloRunResult:
     s2_theta: float
     s2_phi: float
     result: ScenarioResult
+    computation_time_ms: float
 
 
 @dataclass(frozen=True)
@@ -40,6 +41,11 @@ class MonteCarloSummary:
     success_rate: float
     by_strategy: dict[str, int]
     run_results: tuple[MonteCarloRunResult, ...]
+    mean_t: float | None
+    median_t: float | None
+    mean_computation_ms: float
+    median_computation_ms: float
+    total_computation_ms: float
 
 
 def _sample_component(rng: np.random.Generator, error: ErrorDistributionConfig) -> tuple[float, float]:
@@ -145,6 +151,7 @@ def run_monte_carlo_single(
         s2_theta=s2_off.bench_theta_offset,
         s2_phi=s2_off.bench_phi_offset,
         result=result,
+        computation_time_ms=elapsed_ms,
     )
     if report:
         print(
@@ -161,14 +168,29 @@ def _build_monte_carlo_summary(
     interrupted: bool,
 ) -> MonteCarloSummary:
     by_strategy: dict[str, int] = {}
+    success_ts = []
+    comp_times = []
     for run_result in run_results:
         result = run_result.result
-        if result.success and result.strategy_name:
-            by_strategy[result.strategy_name] = (
-                by_strategy.get(result.strategy_name, 0) + 1
-            )
+        comp_times.append(run_result.computation_time_ms)
+        if result.success:
+            if result.strategy_name:
+                by_strategy[result.strategy_name] = (
+                    by_strategy.get(result.strategy_name, 0) + 1
+                )
+            if result.hit_at_t is not None:
+                success_ts.append(result.hit_at_t)
+
     completed = len(run_results)
-    successes = sum(1 for r in run_results if r.result.success)
+    successes = len(success_ts)
+    
+    mean_t = float(np.mean(success_ts)) if success_ts else None
+    median_t = float(np.median(success_ts)) if success_ts else None
+    
+    mean_comp = float(np.mean(comp_times)) if comp_times else 0.0
+    median_comp = float(np.median(comp_times)) if comp_times else 0.0
+    total_comp = float(np.sum(comp_times)) if comp_times else 0.0
+
     return MonteCarloSummary(
         runs=completed,
         planned_runs=mc.runs,
@@ -177,6 +199,11 @@ def _build_monte_carlo_summary(
         success_rate=successes / completed if completed else 0.0,
         by_strategy=by_strategy,
         run_results=tuple(run_results),
+        mean_t=mean_t,
+        median_t=median_t,
+        mean_computation_ms=mean_comp,
+        median_computation_ms=median_comp,
+        total_computation_ms=total_comp,
     )
 
 
@@ -212,6 +239,15 @@ def format_monte_carlo_summary(summary: MonteCarloSummary) -> str:
     lines.append(
         f"Monte Carlo: {summary.successes}/{summary.runs} succeeded "
         f"({100.0 * summary.success_rate:.1f}%)",
+    )
+    if summary.mean_t is not None:
+        lines.append(
+            f"Success sim-t: mean={summary.mean_t:.3f}, median={summary.median_t:.3f}"
+        )
+    lines.append(
+        f"Computation: mean={summary.mean_computation_ms:.1f}ms, "
+        f"median={summary.median_computation_ms:.1f}ms, "
+        f"total={summary.total_computation_ms / 1000.0:.2f}s"
     )
     if summary.by_strategy:
         parts = ", ".join(
