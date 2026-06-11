@@ -17,10 +17,10 @@ from satellite.strategy.patterns import (
 
 @dataclass
 class AimContext:
-    """Per-satellite per-epoch aim state (set at epoch boundary)."""
+    """Per-satellite per-step aim state (set at movement step boundary)."""
 
     center: Vec3
-    epoch_start_aim: Vec3
+    step_start_aim: Vec3
     u_x: Vec3
     u_y: Vec3
     u_z: Vec3
@@ -29,18 +29,18 @@ class AimContext:
 class MovementPattern(ABC):
     @abstractmethod
     def aim_at(self, local_t: float, duration: float, ctx: AimContext) -> Vec3:
-        """Return inertial unit aim direction at local_t within epoch."""
+        """Return inertial unit aim direction at local_t within the step."""
 
 
 @dataclass(frozen=True)
 class Hold(MovementPattern):
     def aim_at(self, local_t: float, duration: float, ctx: AimContext) -> Vec3:
-        return ctx.epoch_start_aim
+        return ctx.step_start_aim
 
 
 @dataclass(frozen=True)
 class Reset(MovementPattern):
-    """Reset bench to initial offset at epoch start, then hold."""
+    """Reset bench to initial offset at step start, then hold."""
 
     def aim_at(self, local_t: float, duration: float, ctx: AimContext) -> Vec3:
         return ctx.center
@@ -127,7 +127,7 @@ def build_aim_context(satellite, *, reset: bool = False) -> AimContext:
     u_x, u_y, u_z = basis_at_direction(center)
     return AimContext(
         center=center,
-        epoch_start_aim=sat.bench.bench_boresight.copy(),
+        step_start_aim=sat.bench.bench_boresight.copy(),
         u_x=u_x,
         u_y=u_y,
         u_z=u_z,
