@@ -16,26 +16,70 @@ pip install -e ".[mapviz]"   # angular map (PyQt6)
 ## Run
 
 ```bash
-# Single scenario
-python -m satellite --scenario default.toml --simulation Simulation.toml
-
-# Monte Carlo batch
-python -m satellite --monte-carlo MonteCarlo.toml
-
-# Visualization
-python -m satellite --scenario default.toml --visualize map
-python -m satellite --scenario default.toml --visualize 3d --q 2.5
-
-# Map render benchmark
-python -m satellite.mapviz.bench_render --scenario default.toml
+python -m satellite [options]
 ```
 
-Defaults: `--scenario default.toml`, `--simulation Simulation.toml`, `--strategy MonteCarlo.toml` (strategy chain loaded from the strategy section of MonteCarlo.toml).
+Run a satellite SDA communication scenario. Pass `--help` for the same option list in the terminal.
 
-### Linux visualization
+**Options**
+
+`--monte-carlo MONTE_CARLO`  
+Run Monte Carlo batch from `MonteCarlo.toml`. When set, single-scenario mode is skipped and a batch summary is printed.
+
+`--scenario SCENARIO` (default: `default.toml`)  
+Scenario instance TOML: bench offsets and optional `[scenario].distance` override.
+
+`--simulation SIMULATION` (default: `Simulation.toml`)  
+Simulation base TOML: hardware, timing, distance, `q_step`, and visualization defaults.
+
+`--strategy STRATEGY` (default: `MonteCarlo.toml`)  
+Strategy chain TOML. The `[strategy]` section (and nested epoch tables) is read from this file.
+
+`--visualize [{3d,map}]`  
+Open interactive visualization after the run: `3d` (PyVista) or `map` (angular θ/φ view). `--visualize` alone is equivalent to `--visualize 3d`. If omitted, 3D opens when `[visualization].enabled` is true in the simulation config.
+
+`--q Q` (default: `0`)  
+Starting time `q` when opening a visualizer.
+
+**Examples**
 
 ```bash
-QT_QPA_PLATFORM=xcb python -m satellite --scenario default.toml --visualize 3d
+python -m satellite
+python -m satellite --monte-carlo MonteCarlo.toml
+python -m satellite --visualize map --q 2.5
+```
+
+### Map render benchmark
+
+```bash
+python -m satellite.mapviz.bench_render [options]
+```
+
+Benchmark mapviz QPainter render path (headless Qt). Pass `--help` for options.
+
+**Options**
+
+`--scenario SCENARIO` (default: `default.toml`)  
+Scenario instance TOML.
+
+`--simulation SIMULATION` (default: `Simulation.toml`)  
+Simulation base TOML.
+
+`--strategy STRATEGY` (default: `MonteCarlo.toml`)  
+Strategy chain TOML.
+
+`--samples N` (default: `1000`)  
+Number of random `q` samples.
+
+`--seed N` (default: `0`)  
+RNG seed for sample times.
+
+### Linux+Wayland visualization
+
+On Linux with Wayland, Qt windows (map visualizer) may fail to open or render incorrectly. Force the X11 backend via `QT_QPA_PLATFORM=xcb`:
+
+```bash
+QT_QPA_PLATFORM=xcb python -m satellite [...]
 ```
 
 ## Configuration
