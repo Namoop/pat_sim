@@ -31,3 +31,4 @@ spiral_speed = 1.0
 probe_duration = 3.15
 spiral_radius = 0.05
 spiral_speed = 1.0
+reset_duration = 0.3

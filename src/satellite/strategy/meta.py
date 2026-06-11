@@ -74,6 +74,7 @@ class MetaStrategy:
                     dish_fov,
                 ),
                 spiral_speed=sc.asymmetric_probe.spiral_speed,
+                reset_duration=sc.asymmetric_probe.reset_duration,
                 w=w,
                 k=k,
             ),

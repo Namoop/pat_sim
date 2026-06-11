@@ -14,6 +14,10 @@ def test_partial_acquisition_continues_chain_for_naive_satellite():
     cfg = base_config(
         chain=("asymmetric_probe", "single_miss"),
         step_duration=2.0,
+        s1_theta=0.001,
+        s1_phi=0.001,
+        s2_theta=0.02,
+        s2_phi=0.02,
     )
     result = run_scenario(cfg)
     names = [a.strategy_name for a in result.meta.attempts]
@@ -25,6 +29,10 @@ def test_partial_acquisition_preserves_tracker_state():
     cfg = base_config(
         chain=("asymmetric_probe", "single_miss"),
         step_duration=2.0,
+        s1_theta=0.001,
+        s1_phi=0.001,
+        s2_theta=0.02,
+        s2_phi=0.02,
     )
     result = run_scenario(cfg)
     assert result.s2.receiver.has_seen_beam or result.s1.receiver.has_seen_beam

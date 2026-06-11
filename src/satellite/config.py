@@ -88,6 +88,7 @@ class AsymmetricProbeStrategyConfig:
     probe_duration: float
     spiral_radius: str | float
     spiral_speed: float = 1.0
+    reset_duration: float = 0.0
 
 
 @dataclass(frozen=True)
@@ -263,6 +264,12 @@ def _load_strategy(data: dict) -> StrategyConfig:
                 single_miss_cfg.get("a_spiral_radius", 0.05),
             ),
             spiral_speed=float(asymmetric_probe_cfg.get("spiral_speed", 1.0)),
+            reset_duration=float(
+                asymmetric_probe_cfg.get(
+                    "reset_duration",
+                    single_miss_cfg.get("reset_duration", 0.0),
+                )
+            ),
         ),
     )
 

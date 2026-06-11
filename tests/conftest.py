@@ -87,6 +87,7 @@ def base_config(
                 probe_duration=step_duration,
                 spiral_radius=0.05,
                 spiral_speed=1.0,
+                reset_duration=reset_duration,
             ),
         ),
     )
