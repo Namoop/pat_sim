@@ -15,7 +15,7 @@ from satellite.strategy.base import StrategyContext, link_established
 from satellite.strategy.meta import MetaStrategy, MetaStrategyResult
 from satellite.strategy.movements import Reset, build_aim_context
 from satellite.strategy.runner import FrameRunner
-from satellite.strategy.schedule import LegSchedule, ScheduledStep
+from satellite.strategy.schedule import LegSchedule
 
 if TYPE_CHECKING:
     from satellite.diagnostics import SimReplayProfiler
@@ -108,16 +108,6 @@ class ScenarioResult:
     def local_q(self, q: float) -> float:
         _, local = self.schedule.step_at(q)
         return local
-
-    def scheduled_step(self, q: float) -> ScheduledStep:
-        step, _ = self.schedule.step_at(q)
-        return step
-
-    def step_label(self, q: float) -> str:
-        step = self.scheduled_step(q)
-        name = step.strategy_name or "search"
-        label = step.label or f"step {step.step_index + 1}"
-        return f"{name}: {label}"
 
     def bench_aim(self, satellite: str, q: float) -> Vec3:
         self.replay_to(q)

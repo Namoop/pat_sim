@@ -16,7 +16,8 @@ from satellite.visualize.diagnostics import FrameProfiler
 
 @dataclass(frozen=True)
 class View3DFrameInfo:
-    phase_label: str
+    capture_active: bool
+    event_log: tuple[str, ...]
 
 
 @dataclass(frozen=True)
@@ -107,11 +108,7 @@ class View3DPanel:
 
     def __init__(self, parent) -> None:
         import pyvista as pv
-        from PyQt6.QtCore import Qt
-        from PyQt6.QtGui import QFont
         from PyQt6.QtWidgets import (
-            QFrame,
-            QLabel,
             QPushButton,
             QVBoxLayout,
             QWidget,
@@ -132,33 +129,6 @@ class View3DPanel:
 
         self.plotter = QtInteractor(self._plot_host)
         plot_host_layout.addWidget(self.plotter.interactor)
-
-        self._log_frame = QFrame(self._plot_host)
-        self._log_frame.setObjectName("eventLog")
-        self._log_frame.setStyleSheet(
-            "#eventLog {"
-            "  background-color: rgba(18, 18, 28, 215);"
-            "  border: 1px solid rgba(220, 220, 235, 90);"
-            "  border-radius: 4px;"
-            "}"
-        )
-        log_layout = QVBoxLayout(self._log_frame)
-        log_layout.setContentsMargins(10, 8, 10, 8)
-        log_title = QLabel("Event Log")
-        log_title.setStyleSheet(
-            "color: #f0f0f8; font-weight: bold; font-size: 12px;"
-        )
-        self._log_label = QLabel()
-        self._log_label.setAlignment(
-            Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft
-        )
-        self._log_label.setWordWrap(True)
-        self._log_label.setFont(QFont("Monospace", 10))
-        self._log_label.setStyleSheet("color: #e2e2ee;")
-        log_layout.addWidget(log_title)
-        log_layout.addWidget(self._log_label)
-        self._log_frame.setMaximumWidth(380)
-        self._log_frame.raise_()
 
         self._camera_preset_buttons: dict[str, QPushButton] = {}
         for key, label in (
@@ -213,7 +183,7 @@ class View3DPanel:
 
             def eventFilter(self, obj, event):  # noqa: N802
                 if event.type() == QEvent.Type.Resize:
-                    self._panel._position_overlays()
+                    self._panel._position_camera_overlay()
                 return False
 
         self._resize_forwarder = _ResizeForwarder(self)
@@ -258,7 +228,6 @@ class View3DPanel:
         self._profiler = FrameProfiler.from_env(viz.profile_frames)
         self._sim_profile_enabled = config.simulation.profile_replay
         self._scene_built = False
-        self._clear_dynamic_actors()
         if self.plotter is not None:
             self.plotter.clear()
         self._cone_poly = None
@@ -292,14 +261,13 @@ class View3DPanel:
             raise RuntimeError("View3DPanel.set_result must be called first")
         self.ensure_initialized()
 
-        total_q = result.schedule.total_duration
+        total_q = result.playable_q_end
         q = float(np.clip(q, 0.0, total_q))
         self._current_q = q
-        phase_str = result.step_label(q)
         frame_start = time.perf_counter()
 
         with self._profiler.measure("replay"):
-            self._replay_to(q)
+            event_log = self._replay_to(q)
         self._profiler.set_gauge("replay_steps", float(self._replay_step_count))
 
         with self._profiler.measure("update_scene"):
@@ -309,7 +277,10 @@ class View3DPanel:
         self._profiler.end_frame()
         self._emit_profile()
 
-        return View3DFrameInfo(phase_label=phase_str)
+        return View3DFrameInfo(
+            capture_active=result.mutual_lock(q),
+            event_log=tuple(event_log),
+        )
 
     def close_panel(self) -> None:
         if self.plotter is not None:
@@ -384,10 +355,6 @@ class View3DPanel:
         else:
             self._apply_camera_preset(key)
 
-    def _position_overlays(self) -> None:
-        self._position_log_overlay()
-        self._position_camera_overlay()
-
     def _position_camera_overlay(self) -> None:
         margin = 12
         gap = 6
@@ -400,31 +367,15 @@ class View3DPanel:
             btn.raise_()
             x += btn.width() + gap
 
-    def _position_log_overlay(self) -> None:
-        margin = 12
-        self._log_frame.adjustSize()
-        w = min(self._log_frame.sizeHint().width(), 380)
-        h = self._log_frame.sizeHint().height()
-        self._log_frame.setGeometry(
-            self._plot_host.width() - w - margin,
-            margin,
-            w,
-            h,
-        )
-        self._log_frame.raise_()
-
-    def _replay_to(self, q_end: float) -> None:
+    def _replay_to(self, q_end: float) -> list[str]:
         result = self._result
         assert result is not None
         log_lines: list[str] = []
         result.replay_to(q_end, event_log=log_lines)
-        self._log_label.setText("\n".join(log_lines))
-        self._position_overlays()
+        self._position_camera_overlay()
         if result.last_sim_profiler is not None:
             self._replay_step_count = result.last_sim_profiler.step_count
-
-    def _clear_dynamic_actors(self) -> None:
-        pass
+        return log_lines
 
     def _build_scene(self) -> None:
         result = self._result
@@ -473,7 +424,20 @@ class View3DPanel:
         )
         return pv.PolyData(verts, faces_pv)
 
+    def _empty_mesh(self):
+        return self._pv.PolyData()
+
+    def _hardware_state(self, satellite: str, q: float) -> tuple[bool, bool]:
+        result = self._result
+        assert result is not None
+        scheduled, local_t = result.schedule.script_at(q)
+        timeline = scheduled.script.s1 if satellite == "S1" else scheduled.script.s2
+        return timeline.hardware_state_at(local_t)
+
     def _cone_mesh(self, satellite: str, q: float):
+        beam_enabled, _ = self._hardware_state(satellite, q)
+        if not beam_enabled:
+            return self._empty_mesh()
         result = self._result
         assert result is not None
         config = result.config
@@ -492,6 +456,9 @@ class View3DPanel:
         return self._to_polydata(verts, faces)
 
     def _fov_circle(self, satellite: str, q: float):
+        _, receiver_enabled = self._hardware_state(satellite, q)
+        if not receiver_enabled:
+            return self._empty_mesh()
         result = self._result
         assert result is not None
         config = result.config
@@ -545,6 +512,11 @@ class View3DPanel:
         poly = getattr(self, poly_attr)
         actor = getattr(self, actor_attr)
 
+        if line.n_points == 0:
+            if actor is not None:
+                actor.SetVisibility(0)
+            return
+
         if poly is None or actor is None:
             setattr(self, poly_attr, line)
             kwargs: dict = {"color": color, "line_width": line_width}
@@ -554,6 +526,7 @@ class View3DPanel:
             setattr(self, actor_attr, actor)
             return
 
+        actor.SetVisibility(1)
         poly.points = line.points
         poly.Modified()
         actor.mapper.Update()

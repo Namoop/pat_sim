@@ -7,6 +7,7 @@ from typing import Literal
 import numpy as np
 
 from satellite.scenario import format_summary
+from satellite.visualize.panels.event_log_panel import EventLogPanel
 from satellite.visualize.panels.map_tab import MapTabPanel
 from satellite.visualize.panels.view3d import View3DPanel
 from satellite.visualize.qt_util import configure_qt_platform, install_sigint_handler
@@ -25,6 +26,14 @@ def play_step_delta(
     if autoplay_active and autoplay_speed is not None:
         return q_step * autoplay_speed
     return q_step
+
+
+def clamp_playable_q(q: float, playable_end: float) -> float:
+    return float(np.clip(q, 0.0, playable_end))
+
+
+def play_reaches_end(next_q: float, playable_end: float) -> bool:
+    return next_q > playable_end + 1e-12
 
 
 def run_visualizer(
@@ -58,7 +67,7 @@ def run_visualizer(
         print(format_summary(result))
 
     config = result.config
-    total_q = result.schedule.total_duration
+    playable_q = result.playable_q_end
     q_step = config.simulation.q_step
     map_debounce_ms = config.map_visualization.slider_debounce_ms
 
@@ -70,7 +79,7 @@ def run_visualizer(
             self._session = session
             self._result = result
             self._start_q = float(start_q)
-            self.current_q = float(np.clip(start_q, 0.0, total_q))
+            self.current_q = clamp_playable_q(start_q, playable_q)
             self._active_tab: Literal["3d", "map"] = default_tab
             self._3d_dirty = True
             self._map_dirty = True
@@ -78,7 +87,6 @@ def run_visualizer(
             self._autoplay_speed = autoplay_speed
             self._autoplay_active = False
             self._pending_q: float | None = None
-            self._last_capture = False
             self._shown_once = False
 
             self._play_timer = QTimer(self)
@@ -90,20 +98,17 @@ def run_visualizer(
             self._debounce_timer.timeout.connect(self._on_debounced_q)
 
             self.setWindowTitle(f"Satellite SDA — {session.status_label()}")
-            self.resize(1100, 800)
+            self.resize(1300, 800)
 
             central = QWidget()
             self.setCentralWidget(central)
-            layout = QVBoxLayout(central)
+            root_layout = QVBoxLayout(central)
+            root_layout.setContentsMargins(0, 0, 0, 0)
+            root_layout.setSpacing(0)
 
-            self._stack = QStackedWidget()
-            self._panel_3d = View3DPanel(self._stack)
-            self._panel_map = MapTabPanel(self._stack)
-            self._stack.addWidget(self._panel_3d.widget)
-            self._stack.addWidget(self._panel_map.widget)
-            layout.addWidget(self._stack, stretch=1)
-
-            controls = QHBoxLayout()
+            self._controls_bar = QWidget()
+            controls = QHBoxLayout(self._controls_bar)
+            controls.setContentsMargins(8, 6, 8, 6)
 
             self._tab_group = QButtonGroup(self)
             self._tab_3d_btn = QPushButton("3D")
@@ -117,18 +122,21 @@ def run_visualizer(
             controls.addWidget(self._tab_3d_btn)
             controls.addWidget(self._tab_map_btn)
 
-            controls.addWidget(QLabel("Time q:"))
             self.slider = QSlider(Qt.Orientation.Horizontal)
             self.slider.setMinimum(0)
-            self.slider.setMaximum(max(0, int(total_q / q_step)))
+            self.slider.setMaximum(max(0, int(playable_q / q_step)))
             self.slider.valueChanged.connect(self._on_slider_changed)
             controls.addWidget(self.slider, stretch=1)
 
-            self.time_label = QLabel()
-            controls.addWidget(self.time_label)
+            self._time_label = QLabel()
+            self._time_label.setFont(QFont("Monospace", 10))
+            controls.addWidget(self._time_label)
 
-            self.capture_label = QLabel("")
-            controls.addWidget(self.capture_label)
+            self._capture_label = QLabel("")
+            self._capture_label.setStyleSheet(
+                "color: #008800; font-weight: bold;"
+            )
+            controls.addWidget(self._capture_label)
 
             self.play_btn = QPushButton("Play")
             self.play_btn.clicked.connect(self._toggle_play)
@@ -145,14 +153,24 @@ def run_visualizer(
             self._progress.setVisible(False)
             controls.addWidget(self._progress)
 
-            layout.addLayout(controls)
+            root_layout.addWidget(self._controls_bar)
+
+            self._stack = QStackedWidget()
+            self._panel_3d = View3DPanel(self._stack)
+            self._panel_map = MapTabPanel(self._stack)
+            self._stack.addWidget(self._panel_3d.widget)
+            self._stack.addWidget(self._panel_map.widget)
+            root_layout.addWidget(self._stack, stretch=1)
 
             self._profile_label = QLabel()
             self._profile_label.setFont(QFont("Monospace", 9))
             self._profile_label.setStyleSheet("color: #555;")
             self._profile_label.setWordWrap(True)
             self._profile_label.setVisible(False)
-            layout.addWidget(self._profile_label)
+            root_layout.addWidget(self._profile_label)
+
+            self._event_log = EventLogPanel(central, chrome=self._controls_bar)
+            root_layout.addWidget(self._event_log.widget)
 
             self._panel_3d.set_profile_callback(self._set_profile_text)
             self._panel_map.set_profile_callback(self._set_profile_text)
@@ -174,11 +192,11 @@ def run_visualizer(
                 self._panel_3d.ensure_initialized()
                 info = self._panel_3d.apply_q(self.current_q)
                 self._3d_dirty = False
-                self._update_time_label(info.phase_label, self._last_capture)
+                self._update_frame(info)
             elif tab == "map" and self._map_dirty:
                 info = self._panel_map.apply_q(self.current_q)
                 self._map_dirty = False
-                self._update_time_label(info.phase_label, info.capture_active)
+                self._update_frame(info)
             elif tab == "3d":
                 self._panel_3d.on_tab_shown()
             self._sync_profile_label_visibility()
@@ -199,40 +217,37 @@ def run_visualizer(
             self._panel_map.set_result(new_result)
             self._3d_dirty = True
             self._map_dirty = True
-            total = new_result.schedule.total_duration
-            self.current_q = float(np.clip(self._start_q, 0.0, total))
-            self.slider.setMaximum(max(0, int(total / q_step)))
+            playable = new_result.playable_q_end
+            self.current_q = clamp_playable_q(self._start_q, playable)
+            self.slider.setMaximum(max(0, int(playable / q_step)))
             self.setWindowTitle(f"Satellite SDA — {self._session.status_label()}")
             self._sync_profile_label_visibility()
 
-        def _update_time_label(self, phase: str, capture_active: bool) -> None:
-            total = self._result.schedule.total_duration
-            self.time_label.setText(
-                f"{self.current_q:.3f} / {total:.3f} ({phase})"
+        def _update_frame(self, info) -> None:
+            playable = self._result.playable_q_end
+            self._time_label.setText(f"q {self.current_q:.3f} / {playable:.3f}")
+            self._capture_label.setText(
+                "CAPTURE" if info.capture_active else ""
             )
             self.slider.blockSignals(True)
             self.slider.setValue(int(round(self.current_q / q_step)))
             self.slider.blockSignals(False)
-            self.capture_label.setText("CAPTURE" if capture_active else "")
-            self.capture_label.setStyleSheet(
-                "color: #008800; font-weight: bold;" if capture_active else ""
-            )
-            self._last_capture = capture_active
+            self._event_log.set_lines(info.event_log)
 
         def _apply_q_active(self, q: float) -> None:
-            total = self._result.schedule.total_duration
-            self.current_q = float(np.clip(q, 0.0, total))
+            playable = self._result.playable_q_end
+            self.current_q = clamp_playable_q(q, playable)
             if self._active_tab == "3d":
                 self._panel_3d.ensure_initialized()
                 info = self._panel_3d.apply_q(self.current_q)
                 self._3d_dirty = False
                 self._map_dirty = True
-                self._update_time_label(info.phase_label, self._last_capture)
+                self._update_frame(info)
             else:
                 info = self._panel_map.apply_q(self.current_q)
                 self._map_dirty = False
                 self._3d_dirty = True
-                self._update_time_label(info.phase_label, info.capture_active)
+                self._update_frame(info)
 
         def _on_slider_changed(self, value: int) -> None:
             self._pause()
@@ -258,8 +273,8 @@ def run_visualizer(
                 self._play()
 
         def _play(self, *, autoplay: bool = False) -> None:
-            total = self._result.schedule.total_duration
-            if self.current_q >= total:
+            playable = self._result.playable_q_end
+            if self.current_q >= playable:
                 self._apply_q_active(0.0)
             self._playing = True
             self.play_btn.setText("Pause")
@@ -276,23 +291,14 @@ def run_visualizer(
                 self._autoplay_active = False
 
         def _on_play_tick(self) -> None:
-            total = self._result.schedule.total_duration
+            playable = self._result.playable_q_end
             next_q = self.current_q + play_step_delta(
                 q_step,
                 autoplay_active=self._autoplay_active,
                 autoplay_speed=self._autoplay_speed,
             )
-            if self._autoplay_active and isinstance(self._session, MonteCarloVizSession):
-                hit_q = self._result.hit_at_q
-                if hit_q is not None:
-                    if self.current_q < hit_q - 1e-12:
-                        if next_q >= hit_q - 1e-12:
-                            self._apply_q_active(hit_q)
-                            return
-                    else:
-                        self._advance_to_next(autoplay_resume=True)
-                        return
-            if next_q > total + 1e-12:
+            if play_reaches_end(next_q, playable):
+                self._apply_q_active(playable)
                 if (
                     self._autoplay_active
                     and isinstance(self._session, MonteCarloVizSession)

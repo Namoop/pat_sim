@@ -32,7 +32,6 @@ class MapPanel:
     partner_in_beam: bool
     partner_in_fov: bool
     is_transmitting: bool
-    phase_label: str
 
 
 @dataclass(frozen=True)
@@ -93,17 +92,16 @@ def build_panel(
 
     scheduled, local_t = result.schedule.script_at(q)
     timeline = scheduled.script.s1 if satellite == "S1" else scheduled.script.s2
-    beam_enabled, _ = timeline.hardware_state_at(local_t)
+    beam_enabled, receiver_enabled = timeline.hardware_state_at(local_t)
 
     return MapPanel(
         satellite=satellite,
         partner=partner,
-        beam=beam,
-        fov=fov,
-        partner_in_beam=partner_in_beam,
-        partner_in_fov=partner_in_fov,
+        beam=beam if beam_enabled else None,
+        fov=fov if receiver_enabled else None,
+        partner_in_beam=partner_in_beam if beam_enabled else False,
+        partner_in_fov=partner_in_fov if receiver_enabled else False,
         is_transmitting=beam_enabled,
-        phase_label=result.step_label(q),
     )
 
 
