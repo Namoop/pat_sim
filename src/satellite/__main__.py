@@ -6,8 +6,12 @@ import argparse
 import sys
 from pathlib import Path
 
-from satellite.config import load_single_scenario
-from satellite.monte_carlo import format_monte_carlo_summary, run_monte_carlo_from_path
+from satellite.config import (
+    load_monte_carlo_config,
+    load_simulation_config,
+    load_single_scenario,
+)
+from satellite.monte_carlo import format_monte_carlo_summary, run_monte_carlo
 from satellite.scenario import format_summary, run_scenario
 
 
@@ -46,8 +50,8 @@ def main(argv: list[str] | None = None) -> int:
         choices=("3d", "map"),
         default=None,
         help=(
-            "Open interactive visualization: 3d (PyVista) or map (angular θ/φ view). "
-            "Use --visualize or --visualize 3d for the 3D window."
+            "Open unified visualization window; optional 3d or map picks the initial tab. "
+            "Use --visualize or --visualize 3d for the 3D tab first."
         ),
     )
     parser.add_argument(
@@ -62,7 +66,26 @@ def main(argv: list[str] | None = None) -> int:
         if not args.monte_carlo.exists():
             print(f"Monte Carlo config not found: {args.monte_carlo}", file=sys.stderr)
             return 1
-        summary = run_monte_carlo_from_path(str(args.monte_carlo))
+        mc = load_monte_carlo_config(args.monte_carlo)
+        sim = load_simulation_config(mc.simulation_path)
+        viz_mode = args.visualize
+        if viz_mode is not None or sim.visualization.enabled:
+            from satellite.visualize import run_visualizer
+            from satellite.visualize.session import MonteCarloVizSession
+
+            session = MonteCarloVizSession(mc)
+            try:
+                run_visualizer(
+                    session,
+                    default_tab=viz_mode or "3d",
+                    start_q=args.q,
+                )
+            except KeyboardInterrupt:
+                print("Interrupted.", file=sys.stderr)
+                return 130
+            return 0
+
+        summary = run_monte_carlo(mc)
         print(format_monte_carlo_summary(summary))
         return 0
 
@@ -82,22 +105,16 @@ def main(argv: list[str] | None = None) -> int:
     exit_code = 0 if result.success else 1
 
     viz_mode = args.visualize
-    if viz_mode is None and config.visualization.enabled:
-        viz_mode = "3d"
-
-    if viz_mode == "3d":
+    if viz_mode is not None or config.visualization.enabled:
         from satellite.visualize import run_visualizer
+        from satellite.visualize.session import SingleResultSession
 
         try:
-            run_visualizer(result, start_q=args.q)
-        except KeyboardInterrupt:
-            print("Interrupted.", file=sys.stderr)
-            return 130
-    elif viz_mode == "map":
-        from satellite.mapviz import run_map_visualizer
-
-        try:
-            run_map_visualizer(result, start_q=args.q)
+            run_visualizer(
+                SingleResultSession(result),
+                default_tab=viz_mode or "3d",
+                start_q=args.q,
+            )
         except KeyboardInterrupt:
             print("Interrupted.", file=sys.stderr)
             return 130
