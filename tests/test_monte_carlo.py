@@ -80,9 +80,9 @@ def test_monte_carlo_failure_biased_fixture():
 
 def test_monte_carlo_run_progress_messages():
     from satellite.monte_carlo import MonteCarloRunResult
-    from tests.test_strategy import _base_config
+    from tests.conftest import base_config
 
-    result = run_scenario(_base_config())
+    result = run_scenario(base_config())
     mc_run = MonteCarloRunResult(
         run_index=0,
         s1_theta=0.01,
