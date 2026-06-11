@@ -19,14 +19,56 @@ class View3DFrameInfo:
     phase_label: str
 
 
+@dataclass(frozen=True)
+class _CameraPreset:
+    """Camera pose relative to a focal satellite (partner for S1 views, S1 for S2)."""
+
+    focal_satellite: str
+    position_offset: tuple[float, float, float]
+    up: tuple[float, float, float]
+    view_angle: float = 30.0
+
+
+# Calibrated at inter-satellite distance 1000 m; offsets are focal-relative.
+# S2 presets mirror S1 through 180° about Z (flip x,y of offset and up).
+_CAMERA_PRESETS: dict[str, _CameraPreset] = {
+    "s1_close": _CameraPreset(
+        focal_satellite="S2",
+        position_offset=(134.33, -15.9782, 1.86303),
+        up=(-0.0802431, -0.751044, -0.655358),
+    ),
+    "s1_far": _CameraPreset(
+        focal_satellite="S2",
+        position_offset=(-1101.251, 12.9602, 0.0900143),
+        up=(0.00865572, 0.740161, -0.672374),
+    ),
+    "s2_close": _CameraPreset(
+        focal_satellite="S1",
+        position_offset=(-134.33, 15.9782, -1.86303),
+        up=(0.0802431, 0.751044, -0.655358),
+    ),
+    "s2_far": _CameraPreset(
+        focal_satellite="S1",
+        position_offset=(1101.251, -12.9602, -0.0900143),
+        up=(-0.00865572, -0.740161, -0.672374),
+    ),
+}
+
+
 class View3DPanel:
     """Embedded 3D PyVista view; caller owns timeline scrubbing."""
 
     def __init__(self, parent) -> None:
         import pyvista as pv
-        from PyQt6.QtCore import Qt, QTimer
+        from PyQt6.QtCore import Qt
         from PyQt6.QtGui import QFont
-        from PyQt6.QtWidgets import QFrame, QLabel, QVBoxLayout, QWidget
+        from PyQt6.QtWidgets import (
+            QFrame,
+            QLabel,
+            QPushButton,
+            QVBoxLayout,
+            QWidget,
+        )
         from pyvistaqt import QtInteractor
 
         self._pv = pv
@@ -71,6 +113,20 @@ class View3DPanel:
         self._log_frame.setMaximumWidth(380)
         self._log_frame.raise_()
 
+        self._camera_preset_buttons: dict[str, QPushButton] = {}
+        for key, label in (
+            ("s1_close", "S1 close"),
+            ("s1_far", "S1 far"),
+            ("s2_close", "S2 close"),
+            ("s2_far", "S2 far"),
+        ):
+            btn = QPushButton(label, self._plot_host)
+            btn.setToolTip(f"Jump to {label} camera preset")
+            btn.clicked.connect(lambda _checked=False, k=key: self._on_camera_preset(k))
+            self._style_camera_button(btn)
+            btn.raise_()
+            self._camera_preset_buttons[key] = btn
+
         layout.addWidget(self._plot_host, stretch=1)
 
         self._cone_poly = None
@@ -104,7 +160,7 @@ class View3DPanel:
 
             def eventFilter(self, obj, event):  # noqa: N802
                 if event.type() == QEvent.Type.Resize:
-                    self._panel._position_log_overlay()
+                    self._panel._position_overlays()
                 return False
 
         self._resize_forwarder = _ResizeForwarder(self)
@@ -113,6 +169,27 @@ class View3DPanel:
     @property
     def widget(self):
         return self._widget
+
+    @staticmethod
+    def _style_camera_button(btn) -> None:
+        """Square opaque buttons — avoids dark parent bleeding at rounded corners over VTK."""
+        btn.setAutoFillBackground(False)
+        btn.setFlat(True)
+        btn.setStyleSheet(
+            "QPushButton {"
+            "  background-color: rgb(55, 55, 68);"
+            "  color: #f0f0f8;"
+            "  border: 1px solid rgb(140, 140, 160);"
+            "  border-radius: 0px;"
+            "  padding: 4px 10px;"
+            "}"
+            "QPushButton:hover {"
+            "  background-color: rgb(70, 70, 85);"
+            "}"
+            "QPushButton:pressed {"
+            "  background-color: rgb(40, 40, 52);"
+            "}"
+        )
 
     def set_profile_callback(self, callback) -> None:
         self._profile_callback = callback
@@ -194,6 +271,44 @@ class View3DPanel:
             parts.append(self._profiler.format_overlay())
         self._profile_callback("\n\n".join(parts))
 
+    def _focal_position(self, satellite: str) -> np.ndarray:
+        result = self._result
+        assert result is not None
+        if satellite == "S1":
+            return np.asarray(result.p1, dtype=np.float64)
+        return np.asarray(result.pt, dtype=np.float64)
+
+    def _apply_camera_preset(self, preset_key: str) -> None:
+        if not self._scene_built or self.plotter is None:
+            return
+        preset = _CAMERA_PRESETS[preset_key]
+        focal = self._focal_position(preset.focal_satellite)
+        cam = self.plotter.camera
+        cam.focal_point = focal
+        cam.position = focal + np.asarray(preset.position_offset, dtype=np.float64)
+        cam.up = np.asarray(preset.up, dtype=np.float64)
+        cam.view_angle = preset.view_angle
+        self.plotter.render()
+
+    def _on_camera_preset(self, preset_key: str) -> None:
+        self._apply_camera_preset(preset_key)
+
+    def _position_overlays(self) -> None:
+        self._position_log_overlay()
+        self._position_camera_overlay()
+
+    def _position_camera_overlay(self) -> None:
+        margin = 12
+        gap = 6
+        x = margin
+        y = margin
+        for key in ("s1_close", "s1_far", "s2_close", "s2_far"):
+            btn = self._camera_preset_buttons[key]
+            btn.adjustSize()
+            btn.setGeometry(x, y, btn.sizeHint().width(), btn.sizeHint().height())
+            btn.raise_()
+            x += btn.width() + gap
+
     def _position_log_overlay(self) -> None:
         margin = 12
         self._log_frame.adjustSize()
@@ -213,7 +328,7 @@ class View3DPanel:
         log_lines: list[str] = []
         result.replay_to(q_end, event_log=log_lines)
         self._log_label.setText("\n".join(log_lines))
-        self._position_log_overlay()
+        self._position_overlays()
         if result.last_sim_profiler is not None:
             self._replay_step_count = result.last_sim_profiler.step_count
 
