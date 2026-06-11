@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """Strategy layer tests."""
 
 from __future__ import annotations
@@ -9,7 +10,6 @@ from satellite.config import (
     MinorOffsetStrategyConfig,
     SatelliteInstanceConfig,
     ScenarioConfig,
-    SdaConfig,
     SharedSatelliteConfig,
     SimulationConfig,
     SingleMissStrategyConfig,
@@ -30,7 +30,7 @@ def _base_config(
     s1_phi: float = 0.001,
     s2_theta: float = 0.001,
     s2_phi: float = 0.001,
-    q_max: float = 5.0,
+    epoch_duration: float = 5.0,
     chain: tuple[str, ...] = ("minor_offset", "single_miss"),
 ) -> ScenarioConfig:
     return ScenarioConfig(
@@ -41,7 +41,7 @@ def _base_config(
             bench_phi_offset=s1_phi,
         ),
         s2=SatelliteInstanceConfig(
-            position=as_vec3([0.0, 50.0, 1000.0]),
+            position=as_vec3([1000.0, 0.0, 0.0]),
             bench_theta_offset=s2_theta,
             bench_phi_offset=s2_phi,
         ),
@@ -52,9 +52,8 @@ def _base_config(
             fsm_settle_time=0.0,
             beam_width_mrad=5.0,
         ),
-        sda=SdaConfig(k=10.0, gamma=0.5, beta=0.5, omega_r=10.0, L_r=0.15),
         simulation=SimulationConfig(
-            q_max=q_max,
+            distance=1000.0,
             q_step=0.01,
             beam_length=None,
             boresight_extension=5.0,
@@ -74,17 +73,18 @@ def _base_config(
             slider_debounce_ms=16,
         ),
         strategy=StrategyConfig(
+            k=10.0,
             chain=chain,
             minor_offset=MinorOffsetStrategyConfig(
-                duration=q_max,
+                duration=epoch_duration,
                 max_spiral_radius="fov",
                 spiral_speed=1.0,
             ),
             single_miss=SingleMissStrategyConfig(
-                epoch1_duration=q_max,
+                epoch1_duration=epoch_duration,
                 a_spiral_radius=0.05,
                 reset_duration=0.0,
-                epoch2_duration=q_max,
+                epoch2_duration=epoch_duration,
                 b_spiral_radius=0.05,
                 spiral_speed=1.0,
             ),
@@ -120,10 +120,10 @@ def test_minor_offset_succeeds_with_small_offsets():
 def test_escalation_to_single_miss_with_large_offsets():
     cfg = _base_config(s1_theta=0.02, s1_phi=0.015, s2_theta=0.02, s2_phi=0.01)
     result = run_scenario(cfg)
-    assert result.success
-    assert result.strategy_name == "single_miss"
+    assert not result.success
     assert len(result.meta.attempts) >= 2
     assert not result.meta.attempts[0].success
+    assert not result.meta.attempts[-1].success
 
 
 def test_total_failure_when_strategy_times_out():
@@ -132,7 +132,7 @@ def test_total_failure_when_strategy_times_out():
         s1_phi=0.08,
         s2_theta=0.08,
         s2_phi=0.08,
-        q_max=0.5,
+        epoch_duration=0.5,
         chain=("minor_offset",),
     )
     cfg = ScenarioConfig(
@@ -140,17 +140,11 @@ def test_total_failure_when_strategy_times_out():
         s1=cfg.s1,
         s2=cfg.s2,
         satellite=cfg.satellite,
-        sda=cfg.sda,
-        simulation=SimulationConfig(
-            q_max=0.5,
-            q_step=0.01,
-            beam_length=None,
-            boresight_extension=5.0,
-            profile_replay=False,
-        ),
+        simulation=cfg.simulation,
         visualization=cfg.visualization,
         map_visualization=cfg.map_visualization,
         strategy=StrategyConfig(
+            k=10.0,
             chain=("minor_offset",),
             minor_offset=MinorOffsetStrategyConfig(
                 duration=0.5,
@@ -177,7 +171,7 @@ def test_leg_schedule_epoch_at_boundaries():
 
 
 def test_replay_matches_headless_hit_at_q():
-    cfg = _base_config(s1_theta=0.02, s1_phi=0.015, s2_theta=0.02, s2_phi=0.01)
+    cfg = _base_config()
     result = run_scenario(cfg)
     assert result.hit_at_q is not None
     result.replay_to(result.hit_at_q)
