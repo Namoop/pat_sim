@@ -13,11 +13,26 @@ from satellite.visualize.qt_util import configure_qt_platform, install_sigint_ha
 from satellite.visualize.session import MonteCarloVizSession, SingleResultSession, VizSession
 
 
+PLAY_INTERVAL_MS = 50
+
+
+def play_step_delta(
+    q_step: float,
+    *,
+    autoplay_active: bool,
+    autoplay_speed: float | None,
+) -> float:
+    if autoplay_active and autoplay_speed is not None:
+        return q_step * autoplay_speed
+    return q_step
+
+
 def run_visualizer(
     session: VizSession,
     *,
     default_tab: Literal["3d", "map"] = "3d",
     start_q: float = 0.0,
+    autoplay_speed: float | None = None,
 ) -> int:
     """Open unified 3D + map visualizer. Returns process exit code."""
     configure_qt_platform()
@@ -60,12 +75,14 @@ def run_visualizer(
             self._3d_dirty = True
             self._map_dirty = True
             self._playing = False
+            self._autoplay_speed = autoplay_speed
+            self._autoplay_active = False
             self._pending_q: float | None = None
             self._last_capture = False
             self._shown_once = False
 
             self._play_timer = QTimer(self)
-            self._play_timer.setInterval(50)
+            self._play_timer.setInterval(PLAY_INTERVAL_MS)
             self._play_timer.timeout.connect(self._on_play_tick)
 
             self._debounce_timer = QTimer(self)
@@ -240,24 +257,49 @@ def run_visualizer(
             else:
                 self._play()
 
-        def _play(self) -> None:
+        def _play(self, *, autoplay: bool = False) -> None:
             total = self._result.schedule.total_duration
             if self.current_q >= total:
                 self._apply_q_active(0.0)
             self._playing = True
             self.play_btn.setText("Pause")
+            if autoplay and self._autoplay_speed is not None:
+                self._autoplay_active = True
+            self._play_timer.setInterval(PLAY_INTERVAL_MS)
             self._play_timer.start()
 
-        def _pause(self) -> None:
+        def _pause(self, *, user: bool = True) -> None:
             self._playing = False
             self._play_timer.stop()
             self.play_btn.setText("Play")
+            if user:
+                self._autoplay_active = False
 
         def _on_play_tick(self) -> None:
             total = self._result.schedule.total_duration
-            next_q = self.current_q + q_step
+            next_q = self.current_q + play_step_delta(
+                q_step,
+                autoplay_active=self._autoplay_active,
+                autoplay_speed=self._autoplay_speed,
+            )
+            if self._autoplay_active and isinstance(self._session, MonteCarloVizSession):
+                hit_q = self._result.hit_at_q
+                if hit_q is not None:
+                    if self.current_q < hit_q - 1e-12:
+                        if next_q >= hit_q - 1e-12:
+                            self._apply_q_active(hit_q)
+                            return
+                    else:
+                        self._advance_to_next(autoplay_resume=True)
+                        return
             if next_q > total + 1e-12:
-                self._pause()
+                if (
+                    self._autoplay_active
+                    and isinstance(self._session, MonteCarloVizSession)
+                ):
+                    self._advance_to_next(autoplay_resume=True)
+                else:
+                    self._pause(user=False)
                 return
             self._apply_q_active(next_q)
 
@@ -268,8 +310,9 @@ def run_visualizer(
             self._tab_3d_btn.setEnabled(enabled)
             self._tab_map_btn.setEnabled(enabled)
 
-        def _on_next(self) -> None:
-            self._pause()
+        def _advance_to_next(self, *, autoplay_resume: bool = False) -> None:
+            self._play_timer.stop()
+            self._playing = False
             self._set_controls_enabled(False)
             self._progress.setVisible(True)
             QApplication.processEvents()
@@ -280,12 +323,20 @@ def run_visualizer(
             self._set_controls_enabled(True)
 
             if new_result is None:
+                self._autoplay_active = False
+                self.play_btn.setText("Play")
                 self.close()
                 return
 
             self._start_q = 0.0
             self._load_result(new_result)
             self._apply_q_active(self.current_q)
+            if autoplay_resume:
+                self._play(autoplay=True)
+
+        def _on_next(self) -> None:
+            self._pause()
+            self._advance_to_next()
 
         def closeEvent(self, event) -> None:  # noqa: N802
             self._play_timer.stop()
@@ -302,6 +353,11 @@ def run_visualizer(
 
         def _initial_frame(self) -> None:
             self._apply_q_active(self.current_q)
+            if (
+                self._autoplay_speed is not None
+                and isinstance(self._session, MonteCarloVizSession)
+            ):
+                self._play(autoplay=True)
 
     window = VisualizerWindow()
     install_sigint_handler(app, window)
