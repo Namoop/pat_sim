@@ -5,12 +5,15 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 from satellite.config import ScenarioConfig, StrategyConfig
-from satellite.strategy.actions import ActionScript
+from satellite.strategy.actions import StrategyScript
 from satellite.strategy.base import SearchStrategy, StrategyContext, StrategyResult
-from satellite.strategy.comprehensive import ComprehensiveStrategy
-from satellite.strategy.minor_offset import MinorOffsetStrategy
 from satellite.strategy.schedule import LegSchedule, compile_trace
-from satellite.strategy.single_miss import SingleMissStrategy
+from satellite.strategy.strategies import (
+    AsymmetricProbeStrategy,
+    ComprehensiveStrategy,
+    MinorOffsetStrategy,
+    SingleMissStrategy,
+)
 
 
 @dataclass
@@ -49,18 +52,28 @@ class MetaStrategy:
                 k=k,
             ),
             "single_miss": SingleMissStrategy(
-                epoch1_duration=sc.single_miss.epoch1_duration,
+                phase1_duration=sc.single_miss.phase1_duration,
                 a_spiral_radius=StrategyConfig.resolve_radius(
                     sc.single_miss.a_spiral_radius,
                     dish_fov,
                 ),
                 reset_duration=sc.single_miss.reset_duration,
-                epoch2_duration=sc.single_miss.epoch2_duration,
+                phase2_duration=sc.single_miss.phase2_duration,
                 b_spiral_radius=StrategyConfig.resolve_radius(
                     sc.single_miss.b_spiral_radius,
                     dish_fov,
                 ),
                 spiral_speed=sc.single_miss.spiral_speed,
+                w=w,
+                k=k,
+            ),
+            "asymmetric_probe": AsymmetricProbeStrategy(
+                probe_duration=sc.asymmetric_probe.probe_duration,
+                spiral_radius=StrategyConfig.resolve_radius(
+                    sc.asymmetric_probe.spiral_radius,
+                    dish_fov,
+                ),
+                spiral_speed=sc.asymmetric_probe.spiral_speed,
                 w=w,
                 k=k,
             ),
@@ -76,24 +89,28 @@ class MetaStrategy:
 
     def run(self, ctx: StrategyContext) -> MetaStrategyResult:
         attempts: list[StrategyResult] = []
-        scripts: list[ActionScript] = []
+        scripts: list[StrategyScript] = []
         global_q = 0.0
         winning: StrategyResult | None = None
-        final_ctx = ctx
+        attempt_ctx = ctx.clone_fresh()
 
         for strategy in self.strategies:
-            attempt_ctx = ctx.clone_fresh()
             result = strategy.try_run(attempt_ctx, global_q_start=global_q)
             attempts.append(result)
             scripts.append(result.script)
-            final_ctx = attempt_ctx
             global_q += result.elapsed_q
 
             if result.success:
                 winning = result
                 break
 
+            end_hardware = result.metadata.get("hardware")
+            attempt_ctx = attempt_ctx.clone_for_next_attempt(
+                end_hardware=end_hardware,
+            )
+
         schedule = compile_trace(scripts)
+        final_ctx = attempt_ctx
 
         if winning is not None:
             return MetaStrategyResult(

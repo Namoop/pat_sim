@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING
 from satellite.config import ScenarioConfig, default_beam_length
 from satellite.detection import beam_hits_dish
 from satellite.math3d import Vec3
-from satellite.strategy.actions import ActionScript
+from satellite.strategy.actions import StrategyScript, validate_movement_durations
 
 if TYPE_CHECKING:
     from satellite.sda.satellite import Satellite
@@ -20,6 +20,8 @@ class StrategyContext:
     s1: Satellite
     s2: Satellite
     config: ScenarioConfig
+    s1_frozen_hardware: tuple[bool, bool] | None = None
+    s2_frozen_hardware: tuple[bool, bool] | None = None
 
     @property
     def q_step(self) -> float:
@@ -36,13 +38,50 @@ class StrategyContext:
         s2 = Satellite.build("S2", self.config.s2, self.config.s1.position, self.config)
         return StrategyContext(s1=s1, s2=s2, config=self.config)
 
+    def clone_for_next_attempt(
+        self,
+        *,
+        end_hardware: dict[str, bool] | None = None,
+    ) -> StrategyContext:
+        """Fresh satellites for naive sides; preserve acquired satellites and hardware."""
+        from satellite.sda.satellite import Satellite
+
+        s1 = (
+            self.s1
+            if self.s1.receiver.has_seen_beam
+            else Satellite.build(
+                "S1", self.config.s1, self.config.s2.position, self.config
+            )
+        )
+        s2 = (
+            self.s2
+            if self.s2.receiver.has_seen_beam
+            else Satellite.build(
+                "S2", self.config.s2, self.config.s1.position, self.config
+            )
+        )
+        s1_hw = self.s1_frozen_hardware
+        s2_hw = self.s2_frozen_hardware
+        if end_hardware is not None:
+            if self.s1.receiver.has_seen_beam:
+                s1_hw = (end_hardware["s1_beam"], end_hardware["s1_receiver"])
+            if self.s2.receiver.has_seen_beam:
+                s2_hw = (end_hardware["s2_beam"], end_hardware["s2_receiver"])
+        return StrategyContext(
+            s1=s1,
+            s2=s2,
+            config=self.config,
+            s1_frozen_hardware=s1_hw,
+            s2_frozen_hardware=s2_hw,
+        )
+
 
 @dataclass
 class StrategyResult:
     success: bool
     strategy_name: str
     hit_at_q: float | None
-    script: ActionScript
+    script: StrategyScript
     elapsed_q: float
     skipped_reason: str | None = None
     metadata: dict = field(default_factory=dict)
@@ -52,14 +91,15 @@ class SearchStrategy(ABC):
     name: str
 
     @abstractmethod
-    def build_script(self, ctx: StrategyContext) -> ActionScript:
-        """Return timed epoch script (no offset-aware branching)."""
+    def build_script(self, ctx: StrategyContext) -> StrategyScript:
+        """Return independent per-satellite timelines."""
 
     def try_run(self, ctx: StrategyContext, global_q_start: float) -> StrategyResult:
         from satellite.strategy.runner import FrameRunner
 
         script = self.build_script(ctx)
-        script = ActionScript(epochs=script.epochs, strategy_name=self.name)
+        validate_movement_durations(ctx, script)
+        script.validate_slew_speed(ctx)
         run = FrameRunner(ctx).execute(script, global_q_start=global_q_start)
         return StrategyResult(
             success=run.success,
