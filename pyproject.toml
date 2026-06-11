@@ -18,9 +18,6 @@ viz = [
     "pyvistaqt>=0.11",
     "PyQt6>=6.6",
 ]
-mapviz = [
-    "PyQt6>=6.6",
-]
 perf = [
     "numba>=0.59",
 ]
