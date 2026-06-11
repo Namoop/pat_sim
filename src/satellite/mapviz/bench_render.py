@@ -39,7 +39,7 @@ def run_benchmark(
     config = load_single_scenario(scenario_path, simulation_path, strategy_path)
     result = run_scenario(config)
     result.ensure_replay_timeline()
-    total_q = result.schedule.total_duration
+    total_q = result.playable_q_end
     map_cfg = config.map_visualization
 
     app = QApplication.instance() or QApplication([])

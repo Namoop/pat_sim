@@ -1,4 +1,4 @@
-"""Precomputed full-timeline replay cache for O(1) viz scrubbing."""
+"""Precomputed replay cache for O(1) viz scrubbing up to playable end."""
 
 from __future__ import annotations
 
@@ -120,6 +120,10 @@ class ReplayTimeline:
     def step_count(self) -> int:
         return len(self.q_values)
 
+    @property
+    def q_end(self) -> float:
+        return float(self.q_values[-1]) if self.step_count else 0.0
+
     def index_for_q(self, q: float) -> int:
         if self.step_count == 0:
             return 0
@@ -210,12 +214,13 @@ def replay_to_q(
     event_log: list[str] | None = None,
 ) -> None:
     """Replay coupled simulation from q=0 through q_end."""
+    q_end = float(np.clip(q_end, 0.0, result.playable_q_end))
     if result._replay_timeline is not None:
         timeline = result._replay_timeline
         idx = timeline.restore(result, q_end)
         if event_log is not None:
             event_log.clear()
-            include_final = q_end >= result.schedule.total_duration - 1e-12
+            include_final = q_end >= result.playable_q_end - 1e-12
             event_log.extend(
                 timeline.event_log_up_to(idx, include_final=include_final)
             )
@@ -234,7 +239,6 @@ def replay_to_q(
 
     driver: _ReplayDriver = result._stepper
     q_step = driver.q_step
-    q_end = float(np.clip(q_end, 0.0, result.schedule.total_duration))
 
     if abs(driver.global_q - q_end) < 1e-9:
         return
@@ -285,9 +289,9 @@ def replay_to_q(
 
 
 def build_replay_timeline(result: ScenarioResult) -> ReplayTimeline:
-    """Run full schedule and record receiver state at every step."""
+    """Run schedule up to playable end and record receiver state at every step."""
     q_step = result.config.simulation.q_step
-    total = result.schedule.total_duration
+    stop_q = result.playable_q_end
 
     ctx = _fresh_context(result)
     driver = _ReplayDriver(ctx=ctx, q_step=q_step)
@@ -309,7 +313,7 @@ def build_replay_timeline(result: ScenarioResult) -> ReplayTimeline:
     q = 0.0
     prev_script_key: tuple[str, int] | None = None
 
-    while q <= total + 1e-12:
+    while q <= stop_q + 1e-12:
         scheduled, local_t = result.schedule.script_at(q)
         script_key = (scheduled.strategy_name, scheduled.attempt_index)
         if prev_script_key != script_key:
@@ -331,7 +335,9 @@ def build_replay_timeline(result: ScenarioResult) -> ReplayTimeline:
         s1_snaps.append(_capture_receiver(ctx.s1.receiver))
         s2_snaps.append(_capture_receiver(ctx.s2.receiver))
 
-        if q >= total - 1e-12:
+        if step_result.locked:
+            break
+        if q >= stop_q - 1e-12:
             break
         step_index += 1
         q += q_step

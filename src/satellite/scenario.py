@@ -56,6 +56,14 @@ class ScenarioResult:
         return self.meta.hit_at_q
 
     @property
+    def playable_q_end(self) -> float:
+        """Last q for replay and visualization (lock time, or full schedule if no lock)."""
+        hit = self.hit_at_q
+        if hit is not None:
+            return hit
+        return self.schedule.total_duration
+
+    @property
     def phase2_spiral_center_source(self) -> str:
         if self.s2.receiver.has_seen_beam:
             return "locked"

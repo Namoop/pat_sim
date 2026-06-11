@@ -129,4 +129,4 @@ src/satellite/
 - **Search:** independent per-satellite timelines (hold, spiral, reset, …) with optional beam/receiver enable states; FSM snaps on acquisition.
 - **Lock:** both satellites transmitting and receiving, both slews complete, simultaneous `visible_12 ∧ visible_21`.
 - **Partial acquisition:** if one satellite acquires the other before a strategy times out, the acquirer keeps tracking and ignores later scripted search; the non-acquired satellite continues the strategy chain normally.
-- **Replay:** headless and visualizer share one coupled replay timeline.
+- **Replay:** headless and visualizer share one coupled replay timeline, capped at lock time on successful runs.
