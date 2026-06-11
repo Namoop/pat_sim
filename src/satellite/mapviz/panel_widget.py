@@ -35,8 +35,12 @@ class AngularMapPanel(QWidget):
         self.setMinimumSize(200, 200)
         self.setAttribute(Qt.WidgetAttribute.WA_OpaquePaintEvent, True)
 
-    def set_paint_callback(self, callback: Callable[[float], None] | None) -> None:
-        self._on_paint_complete = callback
+    @property
+    def axis_limit(self) -> float:
+        return self._axis_limit
+
+    def set_axis_limit(self, limit: float) -> None:
+        self._axis_limit = limit
 
     @property
     def last_paint_seconds(self) -> float:

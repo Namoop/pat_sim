@@ -63,6 +63,31 @@ def sample_offsets(
     )
 
 
+def run_monte_carlo_single(
+    mc: MonteCarloConfig,
+    sim,
+    rng: np.random.Generator,
+    run_index: int,
+) -> MonteCarloRunResult:
+    s1_off, s2_off = sample_offsets(mc.error, rng)
+    instance = ScenarioInstance(
+        name=f"mc_run_{run_index}",
+        distance=None,
+        s1=s1_off,
+        s2=s2_off,
+    )
+    config = build_scenario_config(sim, instance, strategy=mc.strategy)
+    result = run_scenario(config)
+    return MonteCarloRunResult(
+        run_index=run_index,
+        s1_theta=s1_off.bench_theta_offset,
+        s1_phi=s1_off.bench_phi_offset,
+        s2_theta=s2_off.bench_theta_offset,
+        s2_phi=s2_off.bench_phi_offset,
+        result=result,
+    )
+
+
 def run_monte_carlo(mc: MonteCarloConfig) -> MonteCarloSummary:
     sim = load_simulation_config(mc.simulation_path)
     rng = np.random.default_rng(mc.seed)
@@ -70,25 +95,9 @@ def run_monte_carlo(mc: MonteCarloConfig) -> MonteCarloSummary:
     by_strategy: dict[str, int] = {}
 
     for run_index in range(mc.runs):
-        s1_off, s2_off = sample_offsets(mc.error, rng)
-        instance = ScenarioInstance(
-            name=f"mc_run_{run_index}",
-            distance=None,
-            s1=s1_off,
-            s2=s2_off,
-        )
-        config = build_scenario_config(sim, instance, strategy=mc.strategy)
-        result = run_scenario(config)
-        run_results.append(
-            MonteCarloRunResult(
-                run_index=run_index,
-                s1_theta=s1_off.bench_theta_offset,
-                s1_phi=s1_off.bench_phi_offset,
-                s2_theta=s2_off.bench_theta_offset,
-                s2_phi=s2_off.bench_phi_offset,
-                result=result,
-            )
-        )
+        run_result = run_monte_carlo_single(mc, sim, rng, run_index)
+        run_results.append(run_result)
+        result = run_result.result
         if result.success and result.strategy_name:
             by_strategy[result.strategy_name] = by_strategy.get(result.strategy_name, 0) + 1
 
