@@ -43,7 +43,7 @@ class SharedSatelliteConfig:
 @dataclass(frozen=True)
 class SimulationConfig:
     distance: float
-    q_step: float
+    t_step: float
     beam_length: float | None
     boresight_extension: float
     profile_replay: bool
@@ -190,7 +190,7 @@ def _load_simulation_section(data: dict) -> SimulationConfig:
         beam_length = float(beam_length)
     return SimulationConfig(
         distance=float(data["distance"]),
-        q_step=float(data["q_step"]),
+        t_step=float(data["t_step"]),
         beam_length=beam_length,
         boresight_extension=float(data.get("boresight_extension", 5.0)),
         profile_replay=bool(data.get("profile_replay", False)),

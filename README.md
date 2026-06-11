@@ -32,20 +32,20 @@ Run Monte Carlo from `MonteCarlo.toml`. Without `--visualize` (and with `[visual
 Scenario instance TOML: bench offsets and optional `[scenario].distance` override.
 
 `--simulation SIMULATION` (default: `Simulation.toml`)  
-Simulation base TOML: hardware, timing, distance, `q_step`, and visualization defaults.
+Simulation base TOML: hardware, timing, distance, `t_step`, and visualization defaults.
 
 `--strategy STRATEGY` (default: `MonteCarlo.toml`)  
 Strategy chain TOML. The `[strategy]` section and per-strategy parameter tables are read from this file.
 
-`--q Q` (default: `0`)  
-Starting time `q` when opening a visualizer.
+`--t T` (default: `0`)  
+Starting time `t` when opening a visualizer.
 
 **Examples**
 
 ```bash
 python -m satellite
 python -m satellite --monte-carlo MonteCarlo.toml
-python -m satellite --visualize map --q 2.5
+python -m satellite --visualize map --t 2.5
 ```
 
 ### Map render benchmark
@@ -68,7 +68,7 @@ Simulation base TOML.
 Strategy chain TOML.
 
 `--samples N` (default: `1000`)  
-Number of random `q` samples.
+Number of random `t` samples.
 
 `--seed N` (default: `0`)  
 RNG seed for sample times.
@@ -85,7 +85,7 @@ QT_QPA_PLATFORM=xcb python -m satellite [...]
 
 | File | Purpose |
 |------|---------|
-| [`Simulation.toml`](Simulation.toml) | Hardware, `distance`, `q_step`, visualization |
+| [`Simulation.toml`](Simulation.toml) | Hardware, `distance`, `t_step`, visualization |
 | [`default.toml`](default.toml) | Per-run bench offsets; optional `[scenario].distance` override |
 | [`MonteCarlo.toml`](MonteCarlo.toml) | MC runs, error distribution, strategy chain |
 

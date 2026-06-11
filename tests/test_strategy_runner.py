@@ -53,7 +53,7 @@ def test_mutual_lock_requires_both_slews_complete():
     built = script.build()
     result = FrameRunner(ctx).execute(built, stop_on_lock=True)
     assert result.success
-    assert result.hit_at_q is not None
+    assert result.hit_at_t is not None
 
 
 def test_disabled_receiver_blocks_lock():
@@ -103,7 +103,7 @@ def test_later_hardware_toggle_applies():
         hold(duration=2.0)
     built = script.build()
     runtime = FrameRunner(ctx).begin(built)
-    result_mid = FrameRunner(ctx).step(runtime, 0.25, ctx.q_step)
+    result_mid = FrameRunner(ctx).step(runtime, 0.25, ctx.t_step)
     assert any("beam enabled" in e for e in result_mid.events)
-    result_late = FrameRunner(ctx).step(runtime, 0.75, ctx.q_step)
+    result_late = FrameRunner(ctx).step(runtime, 0.75, ctx.t_step)
     assert any("beam disabled" in e for e in result_late.events)

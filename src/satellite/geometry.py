@@ -282,21 +282,21 @@ def ray_plane_intersection(
 
 def spiral_path_on_target_plane(
     p1: Vec3,
-    q_end: float,
+    t_end: float,
     boresight_fn: Callable[[float], Vec3],
     plane_normal: Vec3,
     plane_distance: float,
     num_steps: int,
 ) -> np.ndarray:
-    """Spiral polyline on the flat target plane from q=0 to q=q_end."""
-    if q_end <= 0.0 or num_steps < 2:
+    """Spiral polyline on the flat target plane from t=0 to t=t_end."""
+    if t_end <= 0.0 or num_steps < 2:
         n = normalize(plane_normal)
         return np.array([p1 + plane_distance * n], dtype=np.float64)
 
-    q_vals = linspace(0.0, q_end, num_steps)
+    t_vals = linspace(0.0, t_end, num_steps)
     points: list[Vec3] = []
-    for q in q_vals:
-        axis = normalize(boresight_fn(q))
+    for t in t_vals:
+        axis = normalize(boresight_fn(t))
         points.append(
             ray_plane_intersection(p1, axis, plane_normal, plane_distance)
         )
@@ -317,7 +317,7 @@ def ribbon_surface_point(
 
 def ribbon_swept_mesh(
     p1: Vec3,
-    q_end: float,
+    t_end: float,
     frame_fn: Callable[[float], tuple[Vec3, Vec3, Vec3]],
     alpha: float,
     distance: float,
@@ -325,16 +325,16 @@ def ribbon_swept_mesh(
     v_steps: int,
 ) -> tuple[np.ndarray, np.ndarray]:
     """
-    Continuous 3D ribbon swept along the spiral up to q_end:
+    Continuous 3D ribbon swept along the spiral up to t_end:
 
         R_ribbon(u,v) = P_1 + d*A_s(u) + d*tan(alpha)*v*B_s(u)
 
-    u in [0, q_end] follows the search spiral; v in [-1, 1] spans beam width.
+    u in [0, t_end] follows the search spiral; v in [-1, 1] spans beam width.
     """
-    if q_end <= 0.0 or u_steps < 2 or v_steps < 2:
+    if t_end <= 0.0 or u_steps < 2 or v_steps < 2:
         return np.empty((0, 3)), np.empty((0, 3), dtype=np.int64)
 
-    u_vals = linspace(0.0, q_end, u_steps)
+    u_vals = linspace(0.0, t_end, u_steps)
     v_vals = linspace(-1.0, 1.0, v_steps)
 
     verts: list[Vec3] = []
@@ -362,7 +362,7 @@ def ribbon_swept_mesh(
 
 def plane_spiral_swept_mesh(
     p1: Vec3,
-    q_end: float,
+    t_end: float,
     boresight_fn: Callable[[float], Vec3],
     plane_normal: Vec3,
     plane_distance: float,
@@ -373,9 +373,9 @@ def plane_spiral_swept_mesh(
     Single flat swept area on the target plane at actual-target height.
 
     Projects the spiral onto the plane perpendicular to the believed boresight,
-    then builds one ribbon mesh (path ± beam footprint radius) growing with q.
+    then builds one ribbon mesh (path ± beam footprint radius) growing with t.
     """
-    if q_end <= 0.0 or num_steps < 2:
+    if t_end <= 0.0 or num_steps < 2:
         return np.empty((0, 3)), np.empty((0, 3), dtype=np.int64)
 
     n = normalize(plane_normal)
@@ -384,7 +384,7 @@ def plane_spiral_swept_mesh(
         return np.empty((0, 3)), np.empty((0, 3), dtype=np.int64)
 
     path = spiral_path_on_target_plane(
-        p1, q_end, boresight_fn, plane_normal, plane_distance, num_steps
+        p1, t_end, boresight_fn, plane_normal, plane_distance, num_steps
     )
     if len(path) < 2:
         return np.empty((0, 3)), np.empty((0, 3), dtype=np.int64)
@@ -431,7 +431,7 @@ def plane_spiral_swept_mesh(
 
 def desmos_k_surface_mesh(
     p1: Vec3,
-    q_end: float,
+    t_end: float,
     frame_fn: Callable[[float], tuple[Vec3, Vec3, Vec3]],
     alpha: float,
     distance: float,
@@ -439,17 +439,17 @@ def desmos_k_surface_mesh(
     v_steps: int,
 ) -> tuple[np.ndarray, np.ndarray]:
     """
-    Desmos K(u,v) swept search caps from u=0 to u=q_end:
+    Desmos K(u,v) swept search caps from u=0 to u=t_end:
 
         K(u,v) = P_1 + d*A_s(u) + d*tan(alpha)*cos(v)*B_s(u) + d*tan(alpha)*sin(v)*C_s(u)
 
     At u=0 the first cap lies along the believed boresight at the given range.
     For visualization, pass |P_t - P_1| so caps sit at actual-target height.
     """
-    if q_end <= 0.0 or u_steps < 1 or v_steps < 3:
+    if t_end <= 0.0 or u_steps < 1 or v_steps < 3:
         return np.empty((0, 3)), np.empty((0, 3), dtype=np.int64)
 
-    u_vals = linspace(0.0, q_end, max(2, u_steps))
+    u_vals = linspace(0.0, t_end, max(2, u_steps))
     v_vals = np.linspace(0.0, 2.0 * np.pi, v_steps, endpoint=False, dtype=np.float64)
 
     verts: list[Vec3] = []
@@ -479,7 +479,7 @@ def desmos_k_surface_mesh(
 
 def spiral_trail_on_plane(
     p1: Vec3,
-    q_max: float,
+    t_max: float,
     boresight_fn: Callable[[float], Vec3],
     plane_distance: float,
     num_steps: int,
@@ -490,7 +490,7 @@ def spiral_trail_on_plane(
         plane_normal = normalize(boresight_fn(0.0))
     return spiral_path_on_target_plane(
         p1,
-        q_max,
+        t_max,
         boresight_fn,
         plane_normal,
         plane_distance,

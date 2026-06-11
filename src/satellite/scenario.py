@@ -52,13 +52,13 @@ class ScenarioResult:
         return self.meta.success
 
     @property
-    def hit_at_q(self) -> float | None:
-        return self.meta.hit_at_q
+    def hit_at_t(self) -> float | None:
+        return self.meta.hit_at_t
 
     @property
-    def playable_q_end(self) -> float:
-        """Last q for replay and visualization (lock time, or full schedule if no lock)."""
-        hit = self.hit_at_q
+    def playable_t_end(self) -> float:
+        """Last t for replay and visualization (lock time, or full schedule if no lock)."""
+        hit = self.hit_at_t
         if hit is not None:
             return hit
         return self.schedule.total_duration
@@ -105,12 +105,12 @@ class ScenarioResult:
     def believed_distance(self) -> float:
         return distance(self.s1.position, self.s2.position)
 
-    def local_q(self, q: float) -> float:
-        _, local = self.schedule.step_at(q)
+    def script_local_t(self, t: float) -> float:
+        _, local = self.schedule.step_at(t)
         return local
 
-    def bench_aim(self, satellite: str, q: float) -> Vec3:
-        self.replay_to(q)
+    def bench_aim(self, satellite: str, t: float) -> Vec3:
+        self.replay_to(t)
         sat = self.s1 if satellite == "S1" else self.s2
         return sat.bench.bench_boresight.copy()
 
@@ -122,12 +122,12 @@ class ScenarioResult:
             self.config.simulation,
         )
 
-    def bidirectional_lock(self, q: float) -> tuple[bool, bool]:
-        if self._stepper is None or abs(self._stepper.global_q - q) > 1e-9:
-            self.replay_to(q)
+    def bidirectional_lock(self, t: float) -> tuple[bool, bool]:
+        if self._stepper is None or abs(self._stepper.global_t - t) > 1e-9:
+            self.replay_to(t)
         aim1 = self.s1.bench.bench_boresight
         aim2 = self.s2.bench.bench_boresight
-        scheduled, local_t = self.schedule.script_at(q)
+        scheduled, local_t = self.schedule.script_at(t)
         s1_beam, s1_receiver = scheduled.script.s1.hardware_state_at(local_t)
         s2_beam, s2_receiver = scheduled.script.s2.hardware_state_at(local_t)
         return (
@@ -139,18 +139,18 @@ class ScenarioResult:
             and link_established(self.s2, self.s1, aim2, self.config),
         )
 
-    def mutual_lock(self, q: float) -> bool:
-        hit_12, hit_21 = self.bidirectional_lock(q)
+    def mutual_lock(self, t: float) -> bool:
+        hit_12, hit_21 = self.bidirectional_lock(t)
         return hit_12 and hit_21
 
-    def in_cone_at_q(self, q: float) -> bool:
-        return self.mutual_lock(q)
+    def in_cone_at_t(self, t: float) -> bool:
+        return self.mutual_lock(t)
 
-    def check_dish_hit(self, q: float) -> bool:
-        return self.mutual_lock(q)
+    def check_dish_hit(self, t: float) -> bool:
+        return self.mutual_lock(t)
 
-    def dish_boresight_for_display(self, satellite: str, q: float) -> Vec3:
-        return self.bench_aim(satellite, q)
+    def dish_boresight_for_display(self, satellite: str, t: float) -> Vec3:
+        return self.bench_aim(satellite, t)
 
     def boresight_ray_length(self, satellite: str) -> float:
         sat = self.s1 if satellite == "S1" else self.s2
@@ -168,13 +168,13 @@ class ScenarioResult:
 
     def replay_to(
         self,
-        q_end: float,
+        t_end: float,
         *,
         event_log: list[str] | None = None,
     ) -> None:
-        from satellite.replay_timeline import replay_to_q
+        from satellite.replay_timeline import replay_to_t
 
-        replay_to_q(self, q_end, event_log=event_log)
+        replay_to_t(self, t_end, event_log=event_log)
 
 
 # Late import to avoid circular dependency
@@ -211,13 +211,13 @@ def format_summary(result: ScenarioResult) -> str:
     lines = [
         f"Scenario: {cfg.name}",
         f"Strategy chain: {', '.join(cfg.strategy.chain)}",
-        f"Schedule duration: {result.schedule.total_duration:.3f} sim-q",
+        f"Schedule duration: {result.schedule.total_duration:.3f} sim-t",
         f"Success: {'yes' if result.success else 'no'}",
     ]
     if result.strategy_name:
         lines.append(f"Winning strategy: {result.strategy_name}")
-    if result.hit_at_q is not None:
-        lines.append(f"Hit at q = {result.hit_at_q:.4f}")
+    if result.hit_at_t is not None:
+        lines.append(f"Hit at t = {result.hit_at_t:.4f}")
     if result.meta.lock_direction:
         lines.append(f"Lock direction: {result.meta.lock_direction}")
 
@@ -225,7 +225,7 @@ def format_summary(result: ScenarioResult) -> str:
         status = "success" if attempt.success else "no lock"
         lines.append(
             f"  Attempt {attempt.strategy_name}: {status} "
-            f"(duration {attempt.elapsed_q:.3f})"
+            f"(duration {attempt.elapsed_t:.3f})"
         )
         if attempt.skipped_reason:
             lines.append(f"    skipped: {attempt.skipped_reason}")

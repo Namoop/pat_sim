@@ -24,8 +24,8 @@ class StrategyContext:
     s2_frozen_hardware: tuple[bool, bool] | None = None
 
     @property
-    def q_step(self) -> float:
-        return self.config.simulation.q_step
+    def t_step(self) -> float:
+        return self.config.simulation.t_step
 
     def reset_satellites(self) -> None:
         self.s1.receiver.reset_dish_tracking()
@@ -80,9 +80,9 @@ class StrategyContext:
 class StrategyResult:
     success: bool
     strategy_name: str
-    hit_at_q: float | None
+    hit_at_t: float | None
     script: StrategyScript
-    elapsed_q: float
+    elapsed_t: float
     skipped_reason: str | None = None
     metadata: dict = field(default_factory=dict)
 
@@ -94,19 +94,19 @@ class SearchStrategy(ABC):
     def build_script(self, ctx: StrategyContext) -> StrategyScript:
         """Return independent per-satellite timelines."""
 
-    def try_run(self, ctx: StrategyContext, global_q_start: float) -> StrategyResult:
+    def try_run(self, ctx: StrategyContext, global_t_start: float) -> StrategyResult:
         from satellite.strategy.runner import FrameRunner
 
         script = self.build_script(ctx)
         validate_movement_durations(ctx, script)
         script.validate_slew_speed(ctx)
-        run = FrameRunner(ctx).execute(script, global_q_start=global_q_start)
+        run = FrameRunner(ctx).execute(script, global_t_start=global_t_start)
         return StrategyResult(
             success=run.success,
             strategy_name=self.name,
-            hit_at_q=run.hit_at_q,
+            hit_at_t=run.hit_at_t,
             script=script,
-            elapsed_q=script.total_duration,
+            elapsed_t=script.total_duration,
             metadata=run.metadata,
         )
 

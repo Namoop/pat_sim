@@ -19,8 +19,8 @@ def test_asymmetric_probe_succeeds_with_small_offsets():
     result = run_scenario(cfg)
     assert result.success
     assert result.strategy_name == "asymmetric_probe"
-    assert result.hit_at_q is not None
-    hit_12, hit_21 = result.bidirectional_lock(result.hit_at_q)
+    assert result.hit_at_t is not None
+    hit_12, hit_21 = result.bidirectional_lock(result.hit_at_t)
     assert hit_12 and hit_21
 
 
@@ -58,4 +58,4 @@ def test_asymmetric_probe_fails_when_b_never_acquires():
     )
     result = run_scenario(cfg)
     assert not result.success
-    assert result.hit_at_q is None
+    assert result.hit_at_t is None

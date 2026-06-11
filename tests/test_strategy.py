@@ -35,8 +35,8 @@ def test_minor_offset_succeeds_with_small_offsets():
     result = run_scenario(cfg)
     assert result.success
     assert result.strategy_name == "minor_offset"
-    assert result.hit_at_q is not None
-    assert result.mutual_lock(result.hit_at_q)
+    assert result.hit_at_t is not None
+    assert result.mutual_lock(result.hit_at_t)
 
 
 def test_escalation_to_single_miss_with_large_offsets():
@@ -68,17 +68,17 @@ def test_leg_schedule_step_at_boundaries():
     assert schedule.total_duration > 0.0
     step0, local0 = schedule.step_at(0.0)
     assert local0 == pytest.approx(0.0)
-    mid = step0.q_start + step0.duration * 0.5
+    mid = step0.t_start + step0.duration * 0.5
     _, local_mid = schedule.step_at(mid)
     assert local_mid == pytest.approx(step0.duration * 0.5, abs=0.02)
 
 
-def test_replay_matches_headless_hit_at_q():
+def test_replay_matches_headless_hit_at_t():
     cfg = base_config()
     result = run_scenario(cfg)
-    assert result.hit_at_q is not None
-    result.replay_to(result.hit_at_q)
-    assert result.mutual_lock(result.hit_at_q)
+    assert result.hit_at_t is not None
+    result.replay_to(result.hit_at_t)
+    assert result.mutual_lock(result.hit_at_t)
 
 
 def test_event_log_includes_initial_conditions():
@@ -103,10 +103,10 @@ def test_event_log_includes_initial_conditions():
 def test_event_log_includes_acquisition_and_lock():
     cfg = base_config()
     result = run_scenario(cfg)
-    assert result.hit_at_q is not None
+    assert result.hit_at_t is not None
     result.ensure_replay_timeline()
     log: list[str] = []
-    result.replay_to(result.hit_at_q, event_log=log)
+    result.replay_to(result.hit_at_t, event_log=log)
     joined = "\n".join(log)
     assert "acquisition started" in joined.lower() or "Mutual lock" in joined
     assert "Mutual lock" in joined or "Lock (both)" in joined

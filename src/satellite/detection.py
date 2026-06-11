@@ -53,7 +53,7 @@ def point_in_transmitter_cone(
     return dot(normalize(axis), direction) >= np.cos(alpha)
 
 
-def beam_incident_angle_at_q(
+def beam_incident_angle_at_t(
     apex: Vec3,
     dish_mount: Vec3,
     dish_boresight: Vec3,
@@ -63,8 +63,8 @@ def beam_incident_angle_at_q(
     return angle_between(dish_boresight, toward_source)
 
 
-def beam_illuminates_dish_mount_at_q(
-    q: float,
+def beam_illuminates_dish_mount_at_t(
+    t: float,
     apex: Vec3,
     dish_mount: Vec3,
     boresight_fn: Callable[[float], Vec3],
@@ -74,15 +74,15 @@ def beam_illuminates_dish_mount_at_q(
     """True when the transmitter cone covers the dish mount point."""
     return point_in_transmitter_cone(
         apex,
-        boresight_fn(q),
+        boresight_fn(t),
         alpha,
         beam_length,
         dish_mount,
     )
 
 
-def beam_missed_dish_fov_at_q(
-    q: float,
+def beam_missed_dish_fov_at_t(
+    t: float,
     apex: Vec3,
     dish_mount: Vec3,
     dish_boresight: Vec3,
@@ -95,11 +95,11 @@ def beam_missed_dish_fov_at_q(
     Return incident angle (rad) when the beam hits the mount but is outside
     dish FOV, else None.
     """
-    if not beam_illuminates_dish_mount_at_q(
-        q, apex, dish_mount, boresight_fn, alpha, beam_length
+    if not beam_illuminates_dish_mount_at_t(
+        t, apex, dish_mount, boresight_fn, alpha, beam_length
     ):
         return None
-    incident = beam_incident_angle_at_q(apex, dish_mount, dish_boresight)
+    incident = beam_incident_angle_at_t(apex, dish_mount, dish_boresight)
     if incident <= dish_fov:
         return None
     return incident
@@ -134,8 +134,8 @@ def beam_hits_dish(
     return point_in_transmitter_cone(apex, beam_axis, alpha, beam_length, dish_mount)
 
 
-def beam_hits_dish_at_q(
-    q: float,
+def beam_hits_dish_at_t(
+    t: float,
     apex: Vec3,
     dish_mount: Vec3,
     dish_boresight: Vec3,
@@ -144,13 +144,13 @@ def beam_hits_dish_at_q(
     alpha: float,
     beam_length: float,
 ) -> bool:
-    """Like beam_hits_dish but evaluates boresight_fn at q."""
+    """Like beam_hits_dish but evaluates boresight_fn at t."""
     return beam_hits_dish(
         apex,
         dish_mount,
         dish_boresight,
         dish_fov,
-        boresight_fn(q),
+        boresight_fn(t),
         alpha,
         beam_length,
     )

@@ -55,10 +55,10 @@ def main(argv: list[str] | None = None) -> int:
         ),
     )
     parser.add_argument(
-        "--q",
+        "--t",
         type=float,
         default=0.0,
-        help="Starting time q for visualization (default: 0)",
+        help="Starting time t for visualization (default: 0)",
     )
     parser.add_argument(
         "--autoplay",
@@ -101,7 +101,7 @@ def main(argv: list[str] | None = None) -> int:
                 run_visualizer(
                     session,
                     default_tab=viz_mode or "3d",
-                    start_q=args.q,
+                    start_t=args.t,
                     autoplay_speed=args.autoplay,
                 )
             except KeyboardInterrupt:
@@ -140,7 +140,7 @@ def main(argv: list[str] | None = None) -> int:
             run_visualizer(
                 SingleResultSession(result),
                 default_tab=viz_mode or "3d",
-                start_q=args.q,
+                start_t=args.t,
             )
         except KeyboardInterrupt:
             print("Interrupted.", file=sys.stderr)

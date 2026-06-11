@@ -18,29 +18,29 @@ PLAY_INTERVAL_MS = 50
 
 
 def play_step_delta(
-    q_step: float,
+    t_step: float,
     *,
     autoplay_active: bool,
     autoplay_speed: float | None,
 ) -> float:
     if autoplay_active and autoplay_speed is not None:
-        return q_step * autoplay_speed
-    return q_step
+        return t_step * autoplay_speed
+    return t_step
 
 
-def clamp_playable_q(q: float, playable_end: float) -> float:
-    return float(np.clip(q, 0.0, playable_end))
+def clamp_playable_t(t: float, playable_end: float) -> float:
+    return float(np.clip(t, 0.0, playable_end))
 
 
-def play_reaches_end(next_q: float, playable_end: float) -> bool:
-    return next_q > playable_end + 1e-12
+def play_reaches_end(next_t: float, playable_end: float) -> bool:
+    return next_t > playable_end + 1e-12
 
 
 def run_visualizer(
     session: VizSession,
     *,
     default_tab: Literal["3d", "map"] = "3d",
-    start_q: float = 0.0,
+    start_t: float = 0.0,
     autoplay_speed: float | None = None,
 ) -> int:
     """Open unified 3D + map visualizer. Returns process exit code."""
@@ -67,8 +67,8 @@ def run_visualizer(
         print(format_summary(result))
 
     config = result.config
-    playable_q = result.playable_q_end
-    q_step = config.simulation.q_step
+    playable_t = result.playable_t_end
+    t_step = config.simulation.t_step
     map_debounce_ms = config.map_visualization.slider_debounce_ms
 
     app = QApplication.instance() or QApplication([])
@@ -78,15 +78,15 @@ def run_visualizer(
             super().__init__()
             self._session = session
             self._result = result
-            self._start_q = float(start_q)
-            self.current_q = clamp_playable_q(start_q, playable_q)
+            self._start_t = float(start_t)
+            self.current_t = clamp_playable_t(start_t, playable_t)
             self._active_tab: Literal["3d", "map"] = default_tab
             self._3d_dirty = True
             self._map_dirty = True
             self._playing = False
             self._autoplay_speed = autoplay_speed
             self._autoplay_active = False
-            self._pending_q: float | None = None
+            self._pending_t: float | None = None
             self._shown_once = False
 
             self._play_timer = QTimer(self)
@@ -124,7 +124,7 @@ def run_visualizer(
 
             self.slider = QSlider(Qt.Orientation.Horizontal)
             self.slider.setMinimum(0)
-            self.slider.setMaximum(max(0, int(playable_q / q_step)))
+            self.slider.setMaximum(max(0, int(playable_t / t_step)))
             self.slider.valueChanged.connect(self._on_slider_changed)
             controls.addWidget(self.slider, stretch=1)
 
@@ -190,11 +190,11 @@ def run_visualizer(
             self._set_tab_ui(tab)
             if tab == "3d" and self._3d_dirty:
                 self._panel_3d.ensure_initialized()
-                info = self._panel_3d.apply_q(self.current_q)
+                info = self._panel_3d.apply_t(self.current_t)
                 self._3d_dirty = False
                 self._update_frame(info)
             elif tab == "map" and self._map_dirty:
-                info = self._panel_map.apply_q(self.current_q)
+                info = self._panel_map.apply_t(self.current_t)
                 self._map_dirty = False
                 self._update_frame(info)
             elif tab == "3d":
@@ -217,54 +217,54 @@ def run_visualizer(
             self._panel_map.set_result(new_result)
             self._3d_dirty = True
             self._map_dirty = True
-            playable = new_result.playable_q_end
-            self.current_q = clamp_playable_q(self._start_q, playable)
-            self.slider.setMaximum(max(0, int(playable / q_step)))
+            playable = new_result.playable_t_end
+            self.current_t = clamp_playable_t(self._start_t, playable)
+            self.slider.setMaximum(max(0, int(playable / t_step)))
             self.setWindowTitle(f"Satellite SDA — {self._session.status_label()}")
             self._sync_profile_label_visibility()
 
         def _update_frame(self, info) -> None:
-            playable = self._result.playable_q_end
-            self._time_label.setText(f"q {self.current_q:.3f} / {playable:.3f}")
+            playable = self._result.playable_t_end
+            self._time_label.setText(f"t {self.current_t:.3f} / {playable:.3f}")
             self._capture_label.setText(
                 "CAPTURE" if info.capture_active else ""
             )
             self.slider.blockSignals(True)
-            self.slider.setValue(int(round(self.current_q / q_step)))
+            self.slider.setValue(int(round(self.current_t / t_step)))
             self.slider.blockSignals(False)
             self._event_log.set_lines(info.event_log)
 
-        def _apply_q_active(self, q: float) -> None:
-            playable = self._result.playable_q_end
-            self.current_q = clamp_playable_q(q, playable)
+        def _apply_t_active(self, t: float) -> None:
+            playable = self._result.playable_t_end
+            self.current_t = clamp_playable_t(t, playable)
             if self._active_tab == "3d":
                 self._panel_3d.ensure_initialized()
-                info = self._panel_3d.apply_q(self.current_q)
+                info = self._panel_3d.apply_t(self.current_t)
                 self._3d_dirty = False
                 self._map_dirty = True
                 self._update_frame(info)
             else:
-                info = self._panel_map.apply_q(self.current_q)
+                info = self._panel_map.apply_t(self.current_t)
                 self._map_dirty = False
                 self._3d_dirty = True
                 self._update_frame(info)
 
         def _on_slider_changed(self, value: int) -> None:
             self._pause()
-            q = value * q_step
+            t = value * t_step
             if (
                 self._active_tab == "map"
                 and map_debounce_ms > 0
             ):
-                self._pending_q = q
+                self._pending_t = t
                 self._debounce_timer.start(map_debounce_ms)
             else:
-                self._apply_q_active(q)
+                self._apply_t_active(t)
 
         def _on_debounced_q(self) -> None:
-            if self._pending_q is not None:
-                self._apply_q_active(self._pending_q)
-                self._pending_q = None
+            if self._pending_t is not None:
+                self._apply_t_active(self._pending_t)
+                self._pending_t = None
 
         def _toggle_play(self) -> None:
             if self._playing:
@@ -273,9 +273,9 @@ def run_visualizer(
                 self._play()
 
         def _play(self, *, autoplay: bool = False) -> None:
-            playable = self._result.playable_q_end
-            if self.current_q >= playable:
-                self._apply_q_active(0.0)
+            playable = self._result.playable_t_end
+            if self.current_t >= playable:
+                self._apply_t_active(0.0)
             self._playing = True
             self.play_btn.setText("Pause")
             if autoplay and self._autoplay_speed is not None:
@@ -291,14 +291,14 @@ def run_visualizer(
                 self._autoplay_active = False
 
         def _on_play_tick(self) -> None:
-            playable = self._result.playable_q_end
-            next_q = self.current_q + play_step_delta(
-                q_step,
+            playable = self._result.playable_t_end
+            next_t = self.current_t + play_step_delta(
+                t_step,
                 autoplay_active=self._autoplay_active,
                 autoplay_speed=self._autoplay_speed,
             )
-            if play_reaches_end(next_q, playable):
-                self._apply_q_active(playable)
+            if play_reaches_end(next_t, playable):
+                self._apply_t_active(playable)
                 if (
                     self._autoplay_active
                     and isinstance(self._session, MonteCarloVizSession)
@@ -307,7 +307,7 @@ def run_visualizer(
                 else:
                     self._pause(user=False)
                 return
-            self._apply_q_active(next_q)
+            self._apply_t_active(next_t)
 
         def _set_controls_enabled(self, enabled: bool) -> None:
             self.slider.setEnabled(enabled)
@@ -334,9 +334,9 @@ def run_visualizer(
                 self.close()
                 return
 
-            self._start_q = 0.0
+            self._start_t = 0.0
             self._load_result(new_result)
-            self._apply_q_active(self.current_q)
+            self._apply_t_active(self.current_t)
             if autoplay_resume:
                 self._play(autoplay=True)
 
@@ -358,7 +358,7 @@ def run_visualizer(
             QTimer.singleShot(0, self._initial_frame)
 
         def _initial_frame(self) -> None:
-            self._apply_q_active(self.current_q)
+            self._apply_t_active(self.current_t)
             if (
                 self._autoplay_speed is not None
                 and isinstance(self._session, MonteCarloVizSession)

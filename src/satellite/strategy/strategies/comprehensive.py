@@ -12,18 +12,18 @@ class ComprehensiveStrategy(SearchStrategy):
     def build_script(self, ctx: StrategyContext):
         script = strategy(self.name)
         with script.satellite("S1"):
-            hold(duration=max(ctx.q_step, 1e-9))
+            hold(duration=max(ctx.t_step, 1e-9))
         with script.satellite("S2"):
-            hold(duration=max(ctx.q_step, 1e-9))
+            hold(duration=max(ctx.t_step, 1e-9))
         return script.build()
 
-    def try_run(self, ctx: StrategyContext, global_q_start: float) -> StrategyResult:
+    def try_run(self, ctx: StrategyContext, global_t_start: float) -> StrategyResult:
         script = self.build_script(ctx)
         return StrategyResult(
             success=False,
             strategy_name=self.name,
-            hit_at_q=None,
+            hit_at_t=None,
             script=script,
-            elapsed_q=script.total_duration,
+            elapsed_t=script.total_duration,
             skipped_reason="not_implemented",
         )

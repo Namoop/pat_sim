@@ -60,16 +60,16 @@ def point_in_disc(
 def spiral_trail_in_map(
     origin: Vec3,
     tx: TransmitterSDA,
-    local_q_end: float,
+    local_t_end: float,
     num_steps: int,
 ) -> np.ndarray:
-    """Sample transmitter boresight from local q=0 through local_q_end."""
-    if local_q_end <= 0.0 or num_steps < 2:
+    """Sample transmitter boresight from local t=0 through local_t_end."""
+    if local_t_end <= 0.0 or num_steps < 2:
         beam = tx.boresight_at(0.0)
         theta, phi = direction_to_tangent_angles(origin, beam)
         return np.array([[theta, phi]], dtype=np.float64)
 
-    qs = np.linspace(0.0, local_q_end, num_steps, dtype=np.float64)
+    ts = np.linspace(0.0, local_t_end, num_steps, dtype=np.float64)
     points = np.empty((num_steps, 2), dtype=np.float64)
     for i, u in enumerate(qs):
         beam = tx.boresight_at(float(u))

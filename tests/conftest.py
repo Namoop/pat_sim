@@ -49,7 +49,7 @@ def base_config(
         ),
         simulation=SimulationConfig(
             distance=1000.0,
-            q_step=0.01,
+            t_step=0.01,
             beam_length=None,
             boresight_extension=5.0,
             profile_replay=False,

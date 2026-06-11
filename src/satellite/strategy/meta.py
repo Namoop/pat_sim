@@ -19,7 +19,7 @@ from satellite.strategy.strategies import (
 @dataclass
 class MetaStrategyResult:
     success: bool
-    hit_at_q: float | None
+    hit_at_t: float | None
     winning_strategy: str | None
     attempts: list[StrategyResult]
     schedule: LegSchedule
@@ -91,15 +91,15 @@ class MetaStrategy:
     def run(self, ctx: StrategyContext) -> MetaStrategyResult:
         attempts: list[StrategyResult] = []
         scripts: list[StrategyScript] = []
-        global_q = 0.0
+        global_t = 0.0
         winning: StrategyResult | None = None
         attempt_ctx = ctx.clone_fresh()
 
         for strategy in self.strategies:
-            result = strategy.try_run(attempt_ctx, global_q_start=global_q)
+            result = strategy.try_run(attempt_ctx, global_t_start=global_t)
             attempts.append(result)
             scripts.append(result.script)
-            global_q += result.elapsed_q
+            global_t += result.elapsed_t
 
             if result.success:
                 winning = result
@@ -116,7 +116,7 @@ class MetaStrategy:
         if winning is not None:
             return MetaStrategyResult(
                 success=True,
-                hit_at_q=winning.hit_at_q,
+                hit_at_t=winning.hit_at_t,
                 winning_strategy=winning.strategy_name,
                 attempts=attempts,
                 schedule=schedule,
@@ -128,7 +128,7 @@ class MetaStrategy:
 
         return MetaStrategyResult(
             success=False,
-            hit_at_q=None,
+            hit_at_t=None,
             winning_strategy=None,
             attempts=attempts,
             schedule=schedule,

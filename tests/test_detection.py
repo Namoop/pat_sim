@@ -44,9 +44,9 @@ def test_off_axis_beam_rejected_when_source_outside_fov():
     cfg = build_scenario_config(sim, instance, strategy=mc_strategy.strategy)
     result = run_scenario(cfg)
 
-    q = 6.09
-    result.replay_to(q)
-    aim2 = result.bench_aim("S2", q)
+    t = 6.09
+    result.replay_to(t)
+    aim2 = result.bench_aim("S2", t)
     geom1 = result.s1.receiver.geometry_snapshot()
     alpha = cfg.satellite.alpha
     beam_length = beam_length_for(result.s2, cfg)

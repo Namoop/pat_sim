@@ -7,7 +7,7 @@ beam_width = 5.0
 
 [simulation]
 distance = 1000.0
-q_step = 0.01
+t_step = 0.01
 boresight_extension = 5.0
 profile_replay = false
 

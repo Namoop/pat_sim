@@ -27,7 +27,7 @@ class AsymmetricProbeStrategy(SearchStrategy):
         self.k = k
 
     def build_script(self, ctx: StrategyContext):
-        slew_timeout = max(ctx.config.satellite.bench_slew_time, ctx.q_step)
+        slew_timeout = max(ctx.config.satellite.bench_slew_time, ctx.t_step)
         script = strategy(self.name)
         with script.satellite("S1"):
             # Phase 1: Leader

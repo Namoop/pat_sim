@@ -1,4 +1,4 @@
-"""Build angular map panels from ScenarioResult at a given q."""
+"""Build angular map panels from ScenarioResult at a given t."""
 
 from __future__ import annotations
 
@@ -36,7 +36,7 @@ class MapPanel:
 
 @dataclass(frozen=True)
 class MapScene:
-    q: float
+    t: float
     s1: MapPanel
     s2: MapPanel
     capture_active: bool
@@ -61,9 +61,9 @@ def _map_origin(sat: Satellite) -> object:
 def build_panel(
     result: ScenarioResult,
     satellite: SatelliteName,
-    q: float,
+    t: float,
 ) -> MapPanel:
-    result.replay_to(q)
+    result.replay_to(t)
     sat = _satellite(result, satellite)
     origin = _map_origin(sat)
 
@@ -90,7 +90,7 @@ def build_panel(
         dish_fov,
     )
 
-    scheduled, local_t = result.schedule.script_at(q)
+    scheduled, local_t = result.schedule.script_at(t)
     timeline = scheduled.script.s1 if satellite == "S1" else scheduled.script.s2
     beam_enabled, receiver_enabled = timeline.hardware_state_at(local_t)
 
@@ -105,11 +105,11 @@ def build_panel(
     )
 
 
-def build_scene(result: ScenarioResult, q: float) -> MapScene:
-    result.replay_to(q)
-    s1 = build_panel(result, "S1", q)
-    s2 = build_panel(result, "S2", q)
+def build_scene(result: ScenarioResult, t: float) -> MapScene:
+    result.replay_to(t)
+    s1 = build_panel(result, "S1", t)
+    s2 = build_panel(result, "S2", t)
 
-    capture = result.mutual_lock(q)
+    capture = result.mutual_lock(t)
 
-    return MapScene(q=q, s1=s1, s2=s2, capture_active=capture)
+    return MapScene(t=t, s1=s1, s2=s2, capture_active=capture)

@@ -9,7 +9,7 @@ from satellite.strategy.actions import MovementStep, StrategyScript
 
 @dataclass(frozen=True)
 class ScheduledScript:
-    q_start: float
+    t_start: float
     script: StrategyScript
     attempt_index: int = 0
 
@@ -18,8 +18,8 @@ class ScheduledScript:
         return self.script.total_duration
 
     @property
-    def q_end(self) -> float:
-        return self.q_start + self.duration
+    def t_end(self) -> float:
+        return self.t_start + self.duration
 
     @property
     def strategy_name(self) -> str:
@@ -28,7 +28,7 @@ class ScheduledScript:
 
 @dataclass(frozen=True)
 class ScheduledStep:
-    q_start: float
+    t_start: float
     duration: float
     strategy_name: str = ""
     step_index: int = 0
@@ -44,35 +44,35 @@ class LegSchedule:
 
     @property
     def steps(self) -> tuple[ScheduledStep, ...]:
-        return tuple(self.step_at(script.q_start)[0] for script in self.scripts)
+        return tuple(self.step_at(script.t_start)[0] for script in self.scripts)
 
     @property
     def total_duration(self) -> float:
         if not self.scripts:
             return 0.0
-        return self.scripts[-1].q_end
+        return self.scripts[-1].t_end
 
-    def script_at(self, q: float) -> tuple[ScheduledScript, float]:
+    def script_at(self, t: float) -> tuple[ScheduledScript, float]:
         if not self.scripts:
             raise RuntimeError("empty LegSchedule")
-        q = max(0.0, q)
+        t = max(0.0, t)
         for script in self.scripts:
-            if q < script.q_end - 1e-12:
-                return script, q - script.q_start
+            if t < script.t_end - 1e-12:
+                return script, t - script.t_start
         last = self.scripts[-1]
         return last, last.duration
 
-    def step_at(self, q: float) -> tuple[ScheduledStep, float]:
-        scheduled, local_t = self.script_at(q)
+    def step_at(self, t: float) -> tuple[ScheduledStep, float]:
+        scheduled, local_t = self.script_at(t)
         s1_step, s1_local = scheduled.script.s1.movement_at(local_t)
         s2_step, _ = scheduled.script.s2.movement_at(local_t)
         label = " / ".join(
             part for part in (s1_step.label, s2_step.label) if part
         )
-        step_start = scheduled.q_start + min(s1_step.start, s2_step.start)
-        step_end = scheduled.q_start + max(s1_step.end, s2_step.end)
+        step_start = scheduled.t_start + min(s1_step.start, s2_step.start)
+        step_end = scheduled.t_start + max(s1_step.end, s2_step.end)
         step = ScheduledStep(
-            q_start=step_start,
+            t_start=step_start,
             duration=step_end - step_start,
             strategy_name=scheduled.strategy_name,
             step_index=max(s1_step.index, s2_step.index),
@@ -83,23 +83,23 @@ class LegSchedule:
         )
         return step, s1_local
 
-    def step_index_at(self, q: float) -> int:
-        step, _ = self.step_at(q)
+    def step_index_at(self, t: float) -> int:
+        step, _ = self.step_at(t)
         return step.step_index
 
-    def strategy_at(self, q: float) -> str:
-        script, _ = self.script_at(q)
+    def strategy_at(self, t: float) -> str:
+        script, _ = self.script_at(t)
         return script.strategy_name
 
 
 def compile_script(
     script: StrategyScript,
     *,
-    q_start: float = 0.0,
+    t_start: float = 0.0,
     attempt_index: int = 0,
 ) -> ScheduledScript:
     return ScheduledScript(
-        q_start=q_start,
+        t_start=t_start,
         script=script,
         attempt_index=attempt_index,
     )
@@ -110,6 +110,6 @@ def compile_trace(scripts: list[StrategyScript]) -> LegSchedule:
     scheduled: list[ScheduledScript] = []
     cursor = 0.0
     for index, script in enumerate(scripts):
-        scheduled.append(compile_script(script, q_start=cursor, attempt_index=index))
+        scheduled.append(compile_script(script, t_start=cursor, attempt_index=index))
         cursor += script.total_duration
     return LegSchedule(scripts=tuple(scheduled))

@@ -117,7 +117,7 @@ class View3DPanel:
 
         self._pv = pv
         self._result: ScenarioResult | None = None
-        self._current_q = 0.0
+        self._current_t = 0.0
 
         self._widget = QWidget(parent)
         layout = QVBoxLayout(self._widget)
@@ -255,19 +255,19 @@ class View3DPanel:
         print(f"Replay timeline: {timeline.memory_summary()}")
         self._build_scene()
 
-    def apply_q(self, q: float) -> View3DFrameInfo:
+    def apply_t(self, t: float) -> View3DFrameInfo:
         result = self._result
         if result is None:
             raise RuntimeError("View3DPanel.set_result must be called first")
         self.ensure_initialized()
 
-        total_q = result.playable_q_end
-        q = float(np.clip(q, 0.0, total_q))
-        self._current_q = q
+        total_t = result.playable_t_end
+        t = float(np.clip(t, 0.0, total_t))
+        self._current_t = t
         frame_start = time.perf_counter()
 
         with self._profiler.measure("replay"):
-            event_log = self._replay_to(q)
+            event_log = self._replay_to(t)
         self._profiler.set_gauge("replay_steps", float(self._replay_step_count))
 
         with self._profiler.measure("update_scene"):
@@ -278,7 +278,7 @@ class View3DPanel:
         self._emit_profile()
 
         return View3DFrameInfo(
-            capture_active=result.mutual_lock(q),
+            capture_active=result.mutual_lock(t),
             event_log=tuple(event_log),
         )
 
@@ -367,11 +367,11 @@ class View3DPanel:
             btn.raise_()
             x += btn.width() + gap
 
-    def _replay_to(self, q_end: float) -> list[str]:
+    def _replay_to(self, t_end: float) -> list[str]:
         result = self._result
         assert result is not None
         log_lines: list[str] = []
-        result.replay_to(q_end, event_log=log_lines)
+        result.replay_to(t_end, event_log=log_lines)
         self._position_camera_overlay()
         if result.last_sim_profiler is not None:
             self._replay_step_count = result.last_sim_profiler.step_count
@@ -427,15 +427,15 @@ class View3DPanel:
     def _empty_mesh(self):
         return self._pv.PolyData()
 
-    def _hardware_state(self, satellite: str, q: float) -> tuple[bool, bool]:
+    def _hardware_state(self, satellite: str, t: float) -> tuple[bool, bool]:
         result = self._result
         assert result is not None
-        scheduled, local_t = result.schedule.script_at(q)
+        scheduled, local_t = result.schedule.script_at(t)
         timeline = scheduled.script.s1 if satellite == "S1" else scheduled.script.s2
         return timeline.hardware_state_at(local_t)
 
-    def _cone_mesh(self, satellite: str, q: float):
-        beam_enabled, _ = self._hardware_state(satellite, q)
+    def _cone_mesh(self, satellite: str, t: float):
+        beam_enabled, _ = self._hardware_state(satellite, t)
         if not beam_enabled:
             return self._empty_mesh()
         result = self._result
@@ -443,7 +443,7 @@ class View3DPanel:
         config = result.config
         viz = config.visualization
         sat = result.s1 if satellite == "S1" else result.s2
-        aim = result.bench_aim(satellite, q)
+        aim = result.bench_aim(satellite, t)
         beam_len = result.beam_length(satellite)
         verts, faces = cone_mesh_for_aim(
             sat.position,
@@ -455,8 +455,8 @@ class View3DPanel:
         )
         return self._to_polydata(verts, faces)
 
-    def _fov_circle(self, satellite: str, q: float):
-        _, receiver_enabled = self._hardware_state(satellite, q)
+    def _fov_circle(self, satellite: str, t: float):
+        _, receiver_enabled = self._hardware_state(satellite, t)
         if not receiver_enabled:
             return self._empty_mesh()
         result = self._result
@@ -467,7 +467,7 @@ class View3DPanel:
         pv = self._pv
         sat = result.s1 if satellite == "S1" else result.s2
         rx = sat.receiver
-        aim = result.bench_aim(satellite, q)
+        aim = result.bench_aim(satellite, t)
         mount = rx.dish_mount_for_boresight(aim)
         axis = normalize(aim)
         dist_along_aim = float(np.dot(sat.partner_actual - mount, axis))
@@ -487,15 +487,15 @@ class View3DPanel:
         )
         return pv.lines_from_points(ring, close=True)
 
-    def _swept_area_mesh(self, q: float):
+    def _swept_area_mesh(self, t: float):
         return self._pv.PolyData()
 
-    def _dish_mesh(self, satellite: str, q: float):
+    def _dish_mesh(self, satellite: str, t: float):
         result = self._result
         assert result is not None
         viz = result.config.visualization
         rx = result.s1.receiver if satellite == "S1" else result.s2.receiver
-        boresight = result.dish_boresight_for_display(satellite, q)
+        boresight = result.dish_boresight_for_display(satellite, t)
         verts, faces = rx.dish_mesh_at(viz.cone_v_steps, boresight=boresight)
         return self._to_polydata(verts, faces)
 
@@ -572,10 +572,10 @@ class View3DPanel:
         result = self._result
         assert result is not None
         pv = self._pv
-        q = self._current_q
+        t = self._current_t
 
         with self._profiler.measure("mesh_cone_s1"):
-            s1_cone = self._cone_mesh("S1", q)
+            s1_cone = self._cone_mesh("S1", t)
         with self._profiler.measure("actor_cone_s1"):
             self._update_mesh_actor(
                 s1_cone,
@@ -587,7 +587,7 @@ class View3DPanel:
             )
 
         with self._profiler.measure("mesh_cone_s2"):
-            s2_cone = self._cone_mesh("S2", q)
+            s2_cone = self._cone_mesh("S2", t)
         with self._profiler.measure("actor_cone_s2"):
             self._update_mesh_actor(
                 s2_cone,
@@ -599,7 +599,7 @@ class View3DPanel:
             )
 
         with self._profiler.measure("mesh_fov_s1"):
-            s1_fov = self._fov_circle("S1", q)
+            s1_fov = self._fov_circle("S1", t)
         with self._profiler.measure("actor_fov_s1"):
             self._update_line_actor(
                 s1_fov,
@@ -611,7 +611,7 @@ class View3DPanel:
             )
 
         with self._profiler.measure("mesh_fov_s2"):
-            s2_fov = self._fov_circle("S2", q)
+            s2_fov = self._fov_circle("S2", t)
         with self._profiler.measure("actor_fov_s2"):
             self._update_line_actor(
                 s2_fov,
@@ -623,7 +623,7 @@ class View3DPanel:
             )
 
         with self._profiler.measure("mesh_swept"):
-            swept_mesh = self._swept_area_mesh(q)
+            swept_mesh = self._swept_area_mesh(t)
         with self._profiler.measure("actor_swept"):
             self._update_mesh_actor(
                 swept_mesh,
@@ -635,7 +635,7 @@ class View3DPanel:
             )
 
         with self._profiler.measure("mutual_lock"):
-            in_cone = result.mutual_lock(q)
+            in_cone = result.mutual_lock(t)
         with self._profiler.measure("actor_body_color"):
             for sat_name, actor in (
                 ("S1", self._s1_body_actor),
@@ -647,7 +647,7 @@ class View3DPanel:
                 prop.SetColor(*pv.Color(color).float_rgb)
 
         with self._profiler.measure("mesh_dish_s1"):
-            s1_dish = self._dish_mesh("S1", q)
+            s1_dish = self._dish_mesh("S1", t)
         with self._profiler.measure("actor_dish_s1"):
             self._update_mesh_actor(
                 s1_dish,
@@ -658,7 +658,7 @@ class View3DPanel:
                 label="S1 dish",
             )
         with self._profiler.measure("mesh_dish_s2"):
-            s2_dish = self._dish_mesh("S2", q)
+            s2_dish = self._dish_mesh("S2", t)
         with self._profiler.measure("actor_dish_s2"):
             self._update_mesh_actor(
                 s2_dish,

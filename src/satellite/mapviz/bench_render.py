@@ -39,7 +39,7 @@ def run_benchmark(
     config = load_single_scenario(scenario_path, simulation_path, strategy_path)
     result = run_scenario(config)
     result.ensure_replay_timeline()
-    total_q = result.playable_q_end
+    total_t = result.playable_t_end
     map_cfg = config.map_visualization
 
     app = QApplication.instance() or QApplication([])
@@ -51,23 +51,23 @@ def run_benchmark(
     app.processEvents()
 
     rng = np.random.default_rng(seed)
-    qs = rng.uniform(0.0, total_q, size=samples)
+    ts = rng.uniform(0.0, total_t, size=samples)
 
     replay_times: list[float] = []
     build_times: list[float] = []
     paint_times: list[float] = []
     frame_times: list[float] = []
 
-    for q in qs:
-        q = float(q)
+    for t in ts:
+        t = float(t)
         t0 = time.perf_counter()
 
         t_replay = time.perf_counter()
-        result.replay_to(q)
+        result.replay_to(t)
         replay_times.append(time.perf_counter() - t_replay)
 
         t_build = time.perf_counter()
-        scene = build_scene(result, q)
+        scene = build_scene(result, t)
         build_times.append(time.perf_counter() - t_build)
 
         t_paint = time.perf_counter()
@@ -87,7 +87,7 @@ def run_benchmark(
             f"max={vals_ms[-1]:.2f} ms"
         )
 
-    print(f"Mapviz QPainter benchmark ({samples} samples, q in [0, {total_q:.2f}])")
+    print(f"Mapviz QPainter benchmark ({samples} samples, t in [0, {total_t:.2f}])")
     report("replay", replay_times)
     report("build_scene", build_times)
     report("paint", paint_times)
@@ -122,7 +122,7 @@ def main(argv: list[str] | None = None) -> int:
         "--samples",
         type=int,
         default=1000,
-        help="Number of random q samples",
+        help="Number of random t samples",
     )
     parser.add_argument("--seed", type=int, default=0)
     args = parser.parse_args(argv)

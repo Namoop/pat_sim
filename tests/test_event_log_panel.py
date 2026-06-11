@@ -12,16 +12,16 @@ def test_split_event_log_partitions_by_satellite():
         "  distance = 1 km",
         "  S1 bench theta=1 mrad phi=1 mrad",
         "minor_offset: timeline started",
-        "S1 step: S1 FOV spiral at q=0.000",
-        "S2 step: S2 hold at q=0.000",
-        "S1 beam enabled at q=0.000",
-        "S2 acquisition started at q=0.500",
-        "Lock (both) at q=1.000",
+        "S1 step: S1 FOV spiral at t=0.000",
+        "S2 step: S2 hold at t=0.000",
+        "S1 beam enabled at t=0.000",
+        "S2 acquisition started at t=0.500",
+        "Lock (both) at t=1.000",
     ]
     system, s1, s2 = split_event_log(lines)
     assert "Initial conditions:" in system
     assert "minor_offset: timeline started" in system
-    assert "Lock (both) at q=1.000" in system
+    assert "Lock (both) at t=1.000" in system
     assert any("S1 step" in line for line in s1)
     assert any("S1 beam" in line for line in s1)
     assert any("S2 step" in line for line in s2)

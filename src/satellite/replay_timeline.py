@@ -34,10 +34,10 @@ class ReceiverSnapshot:
 @dataclass
 class _ReplayDriver:
     ctx: StrategyContext
-    q_step: float
+    t_step: float
     runtime: dict | None = None
     current_key: tuple[str, int] | None = None
-    global_q: float = 0.0
+    global_t: float = 0.0
 
     def _ensure_script(self, scheduled: ScheduledScript) -> None:
         key = (scheduled.strategy_name, scheduled.attempt_index)
@@ -54,7 +54,7 @@ class _ReplayDriver:
     def step_frame(self, scheduled: ScheduledScript, local_t: float):
         self._ensure_script(scheduled)
         assert self.runtime is not None
-        return FrameRunner(self.ctx).step(self.runtime, local_t, self.q_step)
+        return FrameRunner(self.ctx).step(self.runtime, local_t, self.t_step)
 
 
 def _capture_receiver(rx: ReceiverSDA) -> ReceiverSnapshot:
@@ -109,28 +109,28 @@ def _restore_receiver(rx: ReceiverSDA, snap: ReceiverSnapshot) -> None:
 
 @dataclass
 class ReplayTimeline:
-    q_values: np.ndarray
+    t_values: np.ndarray
     s1_snapshots: list[ReceiverSnapshot]
     s2_snapshots: list[ReceiverSnapshot]
-    hit_at_q: float | None
+    hit_at_t: float | None
     event_steps: list[int] = field(default_factory=list)
     event_lines: list[str] = field(default_factory=list)
 
     @property
     def step_count(self) -> int:
-        return len(self.q_values)
+        return len(self.t_values)
 
     @property
-    def q_end(self) -> float:
-        return float(self.q_values[-1]) if self.step_count else 0.0
+    def t_end(self) -> float:
+        return float(self.t_values[-1]) if self.step_count else 0.0
 
-    def index_for_q(self, q: float) -> int:
+    def index_for_t(self, t: float) -> int:
         if self.step_count == 0:
             return 0
         if self.step_count == 1:
             return 0
-        step = float(self.q_values[1] - self.q_values[0])
-        idx = int(np.floor((q + 1e-12) / step))
+        step = float(self.t_values[1] - self.t_values[0])
+        idx = int(np.floor((t + 1e-12) / step))
         return int(np.clip(idx, 0, self.step_count - 1))
 
     def memory_bytes(self) -> int:
@@ -138,14 +138,14 @@ class ReplayTimeline:
         vec_bytes = n * 3 * 8 * 4
         snap_bytes = n * 2 * 224
         event_bytes = sum(len(s.encode("utf-8")) for s in self.event_lines)
-        return int(self.q_values.nbytes + vec_bytes + snap_bytes + event_bytes)
+        return int(self.t_values.nbytes + vec_bytes + snap_bytes + event_bytes)
 
     def memory_summary(self) -> str:
         mb = self.memory_bytes() / (1024 * 1024)
         return f"{self.step_count} steps, ~{mb:.2f} MiB"
 
-    def restore(self, result: ScenarioResult, q_end: float) -> int:
-        idx = self.index_for_q(q_end)
+    def restore(self, result: ScenarioResult, t_end: float) -> int:
+        idx = self.index_for_t(t_end)
         _restore_receiver(result.s1.receiver, self.s1_snapshots[idx])
         _restore_receiver(result.s2.receiver, self.s2_snapshots[idx])
         return idx
@@ -207,20 +207,20 @@ def _fresh_context(result: ScenarioResult) -> StrategyContext:
     return StrategyContext(s1=s1, s2=s2, config=cfg)
 
 
-def replay_to_q(
+def replay_to_t(
     result: ScenarioResult,
-    q_end: float,
+    t_end: float,
     *,
     event_log: list[str] | None = None,
 ) -> None:
-    """Replay coupled simulation from q=0 through q_end."""
-    q_end = float(np.clip(q_end, 0.0, result.playable_q_end))
+    """Replay coupled simulation from t=0 through t_end."""
+    t_end = float(np.clip(t_end, 0.0, result.playable_t_end))
     if result._replay_timeline is not None:
         timeline = result._replay_timeline
-        idx = timeline.restore(result, q_end)
+        idx = timeline.restore(result, t_end)
         if event_log is not None:
             event_log.clear()
-            include_final = q_end >= result.playable_q_end - 1e-12
+            include_final = t_end >= result.playable_t_end - 1e-12
             event_log.extend(
                 timeline.event_log_up_to(idx, include_final=include_final)
             )
@@ -230,7 +230,7 @@ def replay_to_q(
         ctx = _fresh_context(result)
         result._stepper = _ReplayDriver(
             ctx=ctx,
-            q_step=result.config.simulation.q_step,
+            t_step=result.config.simulation.t_step,
         )
         result.s1.receiver.reset_dish_tracking()
         result.s2.receiver.reset_dish_tracking()
@@ -238,27 +238,27 @@ def replay_to_q(
         ctx.s2.receiver.reset_dish_tracking()
 
     driver: _ReplayDriver = result._stepper
-    q_step = driver.q_step
+    t_step = driver.t_step
 
-    if abs(driver.global_q - q_end) < 1e-9:
+    if abs(driver.global_t - t_end) < 1e-9:
         return
 
-    if driver.global_q > q_end + 1e-12:
+    if driver.global_t > t_end + 1e-12:
         driver.ctx = _fresh_context(result)
         driver.runtime = None
         driver.current_key = None
-        driver.global_q = 0.0
+        driver.global_t = 0.0
         result.s1.receiver.reset_dish_tracking()
         result.s2.receiver.reset_dish_tracking()
         driver.ctx.s1.receiver.reset_dish_tracking()
         driver.ctx.s2.receiver.reset_dish_tracking()
 
     while True:
-        scheduled, local_t = result.schedule.script_at(driver.global_q)
+        scheduled, local_t = result.schedule.script_at(driver.global_t)
         driver.step_frame(scheduled, local_t)
-        if driver.global_q >= q_end - 1e-12:
+        if driver.global_t >= t_end - 1e-12:
             break
-        driver.global_q += q_step
+        driver.global_t += t_step
 
     for src, dst in (
         (driver.ctx.s1, result.s1),
@@ -285,36 +285,36 @@ def replay_to_q(
         acq_dst.fsm_locked = acq_src.fsm_locked
         acq_dst.slew_complete = acq_src.slew_complete
 
-    driver.global_q = q_end
+    driver.global_t = t_end
 
 
 def build_replay_timeline(result: ScenarioResult) -> ReplayTimeline:
     """Run schedule up to playable end and record receiver state at every step."""
-    q_step = result.config.simulation.q_step
-    stop_q = result.playable_q_end
+    t_step = result.config.simulation.t_step
+    stop_t = result.playable_t_end
 
     ctx = _fresh_context(result)
-    driver = _ReplayDriver(ctx=ctx, q_step=q_step)
+    driver = _ReplayDriver(ctx=ctx, t_step=t_step)
 
-    q_values: list[float] = []
+    t_values: list[float] = []
     s1_snaps: list[ReceiverSnapshot] = []
     s2_snaps: list[ReceiverSnapshot] = []
-    hit_at_q: float | None = None
+    hit_at_t: float | None = None
 
     timeline = ReplayTimeline(
-        q_values=np.array([], dtype=np.float64),
+        t_values=np.array([], dtype=np.float64),
         s1_snapshots=[],
         s2_snapshots=[],
-        hit_at_q=None,
+        hit_at_t=None,
     )
     _append_initial_conditions(timeline, result)
 
     step_index = 0
-    q = 0.0
+    t = 0.0
     prev_script_key: tuple[str, int] | None = None
 
-    while q <= stop_q + 1e-12:
-        scheduled, local_t = result.schedule.script_at(q)
+    while t <= stop_t + 1e-12:
+        scheduled, local_t = result.schedule.script_at(t)
         script_key = (scheduled.strategy_name, scheduled.attempt_index)
         if prev_script_key != script_key:
             _append_event(
@@ -326,24 +326,24 @@ def build_replay_timeline(result: ScenarioResult) -> ReplayTimeline:
 
         step_result = driver.step_frame(scheduled, local_t)
         for event in step_result.events:
-            _append_event(timeline, step_index, f"{event} at q={q:.3f}")
-        if hit_at_q is None and step_result.locked:
-            hit_at_q = q
-            _append_event(timeline, step_index, f"Lock (both) at q={q:.3f}")
+            _append_event(timeline, step_index, f"{event} at t={t:.3f}")
+        if hit_at_t is None and step_result.locked:
+            hit_at_t = t
+            _append_event(timeline, step_index, f"Lock (both) at t={t:.3f}")
 
-        q_values.append(q)
+        t_values.append(t)
         s1_snaps.append(_capture_receiver(ctx.s1.receiver))
         s2_snaps.append(_capture_receiver(ctx.s2.receiver))
 
         if step_result.locked:
             break
-        if q >= stop_q - 1e-12:
+        if t >= stop_t - 1e-12:
             break
         step_index += 1
-        q += q_step
+        t += t_step
 
-    timeline.q_values = np.asarray(q_values, dtype=np.float64)
+    timeline.t_values = np.asarray(t_values, dtype=np.float64)
     timeline.s1_snapshots = s1_snaps
     timeline.s2_snapshots = s2_snaps
-    timeline.hit_at_q = hit_at_q
+    timeline.hit_at_t = hit_at_t
     return timeline

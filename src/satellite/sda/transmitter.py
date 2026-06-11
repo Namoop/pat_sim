@@ -72,9 +72,9 @@ class TransmitterSDA:
     def pt(self) -> Vec3:
         return self.partner_actual
 
-    def frame_at(self, q: float) -> tuple[Vec3, Vec3, Vec3]:
+    def frame_at(self, t: float) -> tuple[Vec3, Vec3, Vec3]:
         return global_spiral_frame(
-            q,
+            t,
             self.w,
             self.k,
             self.u_x,
@@ -82,17 +82,17 @@ class TransmitterSDA:
             self.u_z,
         )
 
-    def boresight_at(self, q: float) -> Vec3:
-        a_s, _, _ = self.frame_at(q)
+    def boresight_at(self, t: float) -> Vec3:
+        a_s, _, _ = self.frame_at(t)
         return a_s
 
     def cone_mesh_at(
         self,
-        q: float,
+        t: float,
         u_steps: int,
         v_steps: int,
     ) -> tuple[np.ndarray, np.ndarray]:
-        a_s, b_s, c_s = self.frame_at(q)
+        a_s, b_s, c_s = self.frame_at(t)
         return cone_surface_mesh(
             self.position,
             a_s,
@@ -104,10 +104,10 @@ class TransmitterSDA:
             v_steps,
         )
 
-    def spiral_path_up_to(self, q: float, num_steps: int) -> np.ndarray:
+    def spiral_path_up_to(self, t: float, num_steps: int) -> np.ndarray:
         return spiral_path_on_target_plane(
             self.position,
-            q,
+            t,
             self.boresight_at,
             self.nominal_boresight,
             self.believed_range,
@@ -116,14 +116,14 @@ class TransmitterSDA:
 
     def swept_area_mesh_up_to(
         self,
-        q: float,
+        t: float,
         u_steps: int,
         v_steps: int,
         target_range: float | None = None,
     ) -> tuple[np.ndarray, np.ndarray]:
         return ribbon_swept_mesh(
             self.position,
-            q,
+            t,
             self.frame_at,
             self.alpha,
             target_range if target_range is not None else self.actual_target_range,
@@ -131,14 +131,14 @@ class TransmitterSDA:
             v_steps,
         )
 
-    def believed_target_at(self, q: float) -> Vec3:
-        return self.position + self.believed_range * self.boresight_at(q)
+    def believed_target_at(self, t: float) -> Vec3:
+        return self.position + self.believed_range * self.boresight_at(t)
 
-    def spiral_point_at_actual_range(self, q: float) -> Vec3:
-        return self.position + self.actual_target_range * self.boresight_at(q)
+    def spiral_point_at_actual_range(self, t: float) -> Vec3:
+        return self.position + self.actual_target_range * self.boresight_at(t)
 
-    def theta_offset(self, q: float) -> float:
-        return self.w * q
+    def theta_offset(self, t: float) -> float:
+        return self.w * t
 
-    def phi_offset(self, q: float) -> float:
-        return self.k * q
+    def phi_offset(self, t: float) -> float:
+        return self.k * t

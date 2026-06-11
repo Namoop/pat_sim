@@ -101,9 +101,9 @@ def test_monte_carlo_run_progress_messages():
     assert complete.startswith("Completed in 12.5ms:")
     if result.success:
         assert " Success with " in complete
-        assert " at q=" in complete
+        assert " at t=" in complete
     else:
-        assert " Failed after q=" in complete
+        assert " Failed after t=" in complete
         assert "timeout (tried " in complete
 
 

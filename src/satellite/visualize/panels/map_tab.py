@@ -78,28 +78,28 @@ class MapTabPanel:
         self._initialized = True
         self._result.ensure_replay_timeline()
 
-    def apply_q(self, q: float) -> MapTabFrameInfo:
+    def apply_t(self, t: float) -> MapTabFrameInfo:
         result = self._result
         if result is None:
             raise RuntimeError("MapTabPanel.set_result must be called first")
         self.ensure_initialized()
 
-        total_q = result.playable_q_end
-        q = float(np.clip(q, 0.0, total_q))
+        total_t = result.playable_t_end
+        t = float(np.clip(t, 0.0, total_t))
 
         if self._profiling_active:
             frame_start = time.perf_counter()
             with self._profiler.measure("replay"):
-                event_log = self._replay_to(q)
+                event_log = self._replay_to(t)
             self._profiler.set_gauge(
                 "replay_steps",
                 float(self._replay_step_count),
             )
             with self._profiler.measure("build_scene"):
-                scene = build_scene(result, q)
+                scene = build_scene(result, t)
         else:
-            event_log = self._replay_to(q)
-            scene = build_scene(result, q)
+            event_log = self._replay_to(t)
+            scene = build_scene(result, t)
 
         if self._profiling_active:
             t_paint = time.perf_counter()
@@ -135,11 +135,11 @@ class MapTabPanel:
             parts.append(self._profiler.format_overlay())
         self._profile_callback("\n\n".join(parts))
 
-    def _replay_to(self, q_end: float) -> list[str]:
+    def _replay_to(self, t_end: float) -> list[str]:
         result = self._result
         assert result is not None
         log_lines: list[str] = []
-        result.replay_to(q_end, event_log=log_lines)
+        result.replay_to(t_end, event_log=log_lines)
         if self._profiling_active and result.last_sim_profiler is not None:
             self._replay_step_count = result.last_sim_profiler.step_count
         return log_lines

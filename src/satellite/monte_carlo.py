@@ -96,12 +96,12 @@ def format_monte_carlo_run_complete(
     result = run.result
     if result.success:
         strat = result.strategy_name or "unknown"
-        q = result.hit_at_q
-        q_str = f"{q:.3g}" if q is not None else "?"
-        return f"{prefix} Success with {strat} at q={q_str}"
-    total_q = result.schedule.total_duration
+        t = result.hit_at_t
+        t_str = f"{t:.3g}" if t is not None else "?"
+        return f"{prefix} Success with {strat} at t={t_str}"
+    total_t = result.schedule.total_duration
     tried = ", ".join(result.config.strategy.chain)
-    return f"{prefix} Failed after q={total_q:.3g} timeout (tried {tried})"
+    return f"{prefix} Failed after t={total_t:.3g} timeout (tried {tried})"
 
 
 def run_monte_carlo_single(

@@ -25,8 +25,8 @@ class HardwareSnapshot(TypedDict):
 @dataclass
 class FrameRunResult:
     success: bool
-    hit_at_q: float | None
-    global_q_end: float
+    hit_at_t: float | None
+    global_t_end: float
     metadata: dict = field(default_factory=dict)
 
 
@@ -75,43 +75,43 @@ class FrameRunner:
         self,
         script: StrategyScript,
         *,
-        global_q_start: float = 0.0,
+        global_t_start: float = 0.0,
         stop_on_lock: bool = True,
     ) -> FrameRunResult:
-        q_step = self.ctx.q_step
+        t_step = self.ctx.t_step
         runtime = self.begin(script)
         local_t = 0.0
         all_events: list[str] = []
 
         while local_t <= script.total_duration + 1e-12:
-            result = self.step(runtime, local_t, q_step)
+            result = self.step(runtime, local_t, t_step)
             all_events.extend(result.events)
             if result.locked and stop_on_lock:
                 return FrameRunResult(
                     success=True,
-                    hit_at_q=global_q_start + local_t,
-                    global_q_end=global_q_start + local_t + q_step,
+                    hit_at_t=global_t_start + local_t,
+                    global_t_end=global_t_start + local_t + t_step,
                     metadata={
                         "direction": "both",
                         "strategy_name": script.strategy_name,
                         "events": all_events,
                         "hardware": self._hardware_snapshot(runtime),
-                        "elapsed_q": local_t + q_step,
+                        "elapsed_t": local_t + t_step,
                     },
                 )
             if local_t >= script.total_duration - 1e-12:
                 break
-            local_t += q_step
+            local_t += t_step
 
         return FrameRunResult(
             success=False,
-            hit_at_q=None,
-            global_q_end=global_q_start + script.total_duration,
+            hit_at_t=None,
+            global_t_end=global_t_start + script.total_duration,
             metadata={
                 "strategy_name": script.strategy_name,
                 "events": all_events,
                 "hardware": self._hardware_snapshot(runtime),
-                "elapsed_q": script.total_duration,
+                "elapsed_t": script.total_duration,
             },
         )
 
@@ -140,7 +140,7 @@ class FrameRunner:
         self,
         runtime: dict[str, SatelliteRuntime],
         local_t: float,
-        q_step: float,
+        t_step: float,
     ) -> FrameStepResult:
         events: list[str] = []
         s1_runtime = runtime["S1"]
@@ -153,14 +153,14 @@ class FrameRunner:
             self.ctx.s2.position,
             s1_runtime,
             local_t,
-            q_step,
+            t_step,
         )
         aim2, events2 = self._apply_satellite(
             self.ctx.s2,
             self.ctx.s1.position,
             s2_runtime,
             local_t,
-            q_step,
+            t_step,
         )
         events.extend(events1)
         events.extend(events2)
@@ -172,7 +172,7 @@ class FrameRunner:
             s1_runtime.receiver_enabled,
             s2_runtime.beam_enabled,
             s2_runtime.receiver_enabled,
-            q_step,
+            t_step,
             events,
         )
 
@@ -184,7 +184,7 @@ class FrameRunner:
         s1_receiver: bool,
         s2_beam: bool,
         s2_receiver: bool,
-        q_step: float,
+        t_step: float,
         events: list[str],
     ) -> FrameStepResult:
         visible_12 = (
@@ -210,7 +210,7 @@ class FrameRunner:
             _, acq_events2 = self.ctx.s2.receiver.observe_beam(
                 True,
                 self.ctx.s1.position,
-                q_step,
+                t_step,
                 dish_at_step_start=geom2.dish_boresight,
             )
         if visible_21:
@@ -218,7 +218,7 @@ class FrameRunner:
             _, acq_events1 = self.ctx.s1.receiver.observe_beam(
                 True,
                 self.ctx.s2.position,
-                q_step,
+                t_step,
                 dish_at_step_start=geom1.dish_boresight,
             )
         for event in acq_events2:
@@ -267,14 +267,14 @@ class FrameRunner:
         self,
         sat,
         partner_position,
-        q_step: float,
+        t_step: float,
         events: list[str],
     ):
         if sat.receiver.has_seen_beam:
             _, acq_events = sat.receiver.observe_beam(
                 False,
                 partner_position,
-                q_step,
+                t_step,
             )
             for event in acq_events:
                 if event == "Slew complete":
@@ -288,11 +288,11 @@ class FrameRunner:
         partner_position,
         runtime: SatelliteRuntime,
         local_t: float,
-        q_step: float,
+        t_step: float,
     ) -> tuple[object, list[str]]:
         events: list[str] = []
         if sat.receiver.has_seen_beam:
-            aim = self._hold_or_track(sat, partner_position, q_step, events)
+            aim = self._hold_or_track(sat, partner_position, t_step, events)
             return aim, events
 
         step, step_t = runtime.timeline.movement_at(local_t)

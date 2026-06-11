@@ -117,5 +117,5 @@ def test_validate_slew_speed_invoked_from_try_run():
         w=10.0,
         k=10.0,
     )
-    result = strat.try_run(ctx, global_q_start=0.0)
-    assert result.elapsed_q == pytest.approx(1.0)
+    result = strat.try_run(ctx, global_t_start=0.0)
+    assert result.elapsed_t == pytest.approx(1.0)
