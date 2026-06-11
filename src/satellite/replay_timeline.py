@@ -7,10 +7,9 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 
-from satellite.strategy.base import StrategyContext, link_established
-from satellite.strategy.movements import Reset, build_aim_context
+from satellite.strategy.base import StrategyContext
 from satellite.strategy.runner import FrameRunner
-from satellite.strategy.schedule import ScheduledEpoch
+from satellite.strategy.schedule import ScheduledScript
 
 if TYPE_CHECKING:
     from satellite.scenario import ScenarioResult
@@ -29,65 +28,33 @@ class ReceiverSnapshot:
     acq_track_target: np.ndarray | None
     bench_slew_rate: float | None
     acq_fsm_locked: bool
-
-
-@dataclass
-class _SatEpochState:
-    ctx: object
-    epoch_key: tuple[str, int]
+    slew_complete: bool
 
 
 @dataclass
 class _ReplayDriver:
     ctx: StrategyContext
     q_step: float
-    s1_state: _SatEpochState | None = None
-    s2_state: _SatEpochState | None = None
+    runtime: dict | None = None
     current_key: tuple[str, int] | None = None
     global_q: float = 0.0
 
-    def _ensure_epoch(self, epoch: ScheduledEpoch) -> None:
-        key = (epoch.strategy_name, epoch.epoch_index)
+    def _ensure_script(self, scheduled: ScheduledScript) -> None:
+        key = (scheduled.strategy_name, scheduled.attempt_index)
         if self.current_key == key:
             return
+        if self.current_key is not None:
+            if not self.ctx.s1.receiver.has_seen_beam:
+                self.ctx.s1.receiver.reset_dish_tracking()
+            if not self.ctx.s2.receiver.has_seen_beam:
+                self.ctx.s2.receiver.reset_dish_tracking()
         self.current_key = key
-        self.s1_state = _SatEpochState(
-            ctx=build_aim_context(
-                self.ctx.s1,
-                reset=isinstance(epoch.s1_action.movement, Reset),
-            ),
-            epoch_key=key,
-        )
-        self.s2_state = _SatEpochState(
-            ctx=build_aim_context(
-                self.ctx.s2,
-                reset=isinstance(epoch.s2_action.movement, Reset),
-            ),
-            epoch_key=key,
-        )
+        self.runtime = FrameRunner(self.ctx).begin(scheduled.script)
 
-    def step_frame(
-        self,
-        epoch: ScheduledEpoch,
-        local_t: float,
-    ) -> tuple[bool, bool]:
-        self._ensure_epoch(epoch)
-        runner = FrameRunner(self.ctx)
-        aim1 = runner._apply_aim(
-            self.ctx.s1,
-            epoch.s1_action.movement,
-            self.s1_state,
-            local_t,
-            epoch.duration,
-        )
-        aim2 = runner._apply_aim(
-            self.ctx.s2,
-            epoch.s2_action.movement,
-            self.s2_state,
-            local_t,
-            epoch.duration,
-        )
-        return runner._bidirectional_lock(aim1, aim2, self.q_step)
+    def step_frame(self, scheduled: ScheduledScript, local_t: float):
+        self._ensure_script(scheduled)
+        assert self.runtime is not None
+        return FrameRunner(self.ctx).step(self.runtime, local_t, self.q_step)
 
 
 def _capture_receiver(rx: ReceiverSDA) -> ReceiverSnapshot:
@@ -108,6 +75,7 @@ def _capture_receiver(rx: ReceiverSDA) -> ReceiverSnapshot:
         ),
         bench_slew_rate=acq.bench_slew_rate,
         acq_fsm_locked=acq.fsm_locked,
+        slew_complete=acq.slew_complete,
     )
 
 
@@ -135,6 +103,7 @@ def _restore_receiver(rx: ReceiverSDA, snap: ReceiverSnapshot) -> None:
     )
     acq.bench_slew_rate = snap.bench_slew_rate
     acq.fsm_locked = snap.acq_fsm_locked
+    acq.slew_complete = snap.slew_complete
     bench._invalidate_geometry_cache()
 
 
@@ -163,7 +132,7 @@ class ReplayTimeline:
     def memory_bytes(self) -> int:
         n = self.step_count
         vec_bytes = n * 3 * 8 * 4
-        snap_bytes = n * 2 * 192
+        snap_bytes = n * 2 * 224
         event_bytes = sum(len(s.encode("utf-8")) for s in self.event_lines)
         return int(self.q_values.nbytes + vec_bytes + snap_bytes + event_bytes)
 
@@ -210,12 +179,12 @@ def initial_conditions_lines(result: ScenarioResult) -> list[str]:
         "Initial conditions:",
         f"  distance = {_format_sigfig(distance_km)} km",
         (
-            f"  S1 bench θ={_format_sigfig(s1.bench_theta_offset * 1e3)} mrad"
-            f"  φ={_format_sigfig(s1.bench_phi_offset * 1e3)} mrad"
+            f"  S1 bench theta={_format_sigfig(s1.bench_theta_offset * 1e3)} mrad"
+            f" phi={_format_sigfig(s1.bench_phi_offset * 1e3)} mrad"
         ),
         (
-            f"  S2 bench θ={_format_sigfig(s2.bench_theta_offset * 1e3)} mrad"
-            f"  φ={_format_sigfig(s2.bench_phi_offset * 1e3)} mrad"
+            f"  S2 bench theta={_format_sigfig(s2.bench_theta_offset * 1e3)} mrad"
+            f" phi={_format_sigfig(s2.bench_phi_offset * 1e3)} mrad"
         ),
     ]
 
@@ -272,33 +241,20 @@ def replay_to_q(
 
     if driver.global_q > q_end + 1e-12:
         driver.ctx = _fresh_context(result)
-        driver.s1_state = None
-        driver.s2_state = None
+        driver.runtime = None
         driver.current_key = None
         driver.global_q = 0.0
-        driver._prev_strategy = None
         result.s1.receiver.reset_dish_tracking()
         result.s2.receiver.reset_dish_tracking()
         driver.ctx.s1.receiver.reset_dish_tracking()
         driver.ctx.s2.receiver.reset_dish_tracking()
 
-    prev_strategy: str | None = getattr(driver, "_prev_strategy", None)
-
     while True:
-        epoch, local_t = result.schedule.epoch_at(driver.global_q)
-        if prev_strategy is not None and epoch.strategy_name != prev_strategy:
-            driver.ctx.s1.receiver.reset_dish_tracking()
-            driver.ctx.s2.receiver.reset_dish_tracking()
-            driver.s1_state = None
-            driver.s2_state = None
-            driver.current_key = None
-        prev_strategy = epoch.strategy_name
-        driver.step_frame(epoch, local_t)
+        scheduled, local_t = result.schedule.script_at(driver.global_q)
+        driver.step_frame(scheduled, local_t)
         if driver.global_q >= q_end - 1e-12:
             break
         driver.global_q += q_step
-
-    driver._prev_strategy = prev_strategy
 
     for src, dst in (
         (driver.ctx.s1, result.s1),
@@ -323,6 +279,7 @@ def replay_to_q(
         )
         acq_dst.bench_slew_rate = acq_src.bench_slew_rate
         acq_dst.fsm_locked = acq_src.fsm_locked
+        acq_dst.slew_complete = acq_src.slew_complete
 
     driver.global_q = q_end
 
@@ -350,34 +307,25 @@ def build_replay_timeline(result: ScenarioResult) -> ReplayTimeline:
 
     step_index = 0
     q = 0.0
-    prev_epoch_key: tuple[str, int] | None = None
-    prev_strategy: str | None = None
+    prev_script_key: tuple[str, int] | None = None
 
     while q <= total + 1e-12:
-        epoch, local_t = result.schedule.epoch_at(q)
-        if prev_strategy is not None and epoch.strategy_name != prev_strategy:
-            ctx.s1.receiver.reset_dish_tracking()
-            ctx.s2.receiver.reset_dish_tracking()
-            driver.s1_state = None
-            driver.s2_state = None
-            driver.current_key = None
-        prev_strategy = epoch.strategy_name
-        epoch_key = (epoch.strategy_name, epoch.epoch_index)
-        if prev_epoch_key != epoch_key:
+        scheduled, local_t = result.schedule.script_at(q)
+        script_key = (scheduled.strategy_name, scheduled.attempt_index)
+        if prev_script_key != script_key:
             _append_event(
                 timeline,
                 step_index,
-                f"{epoch.strategy_name}: {epoch.label or 'epoch'} started",
+                f"{scheduled.strategy_name}: timeline started",
             )
-            prev_epoch_key = epoch_key
+            prev_script_key = script_key
 
-        hit_12, hit_21 = driver.step_frame(epoch, local_t)
-        if hit_at_q is None and (hit_12 or hit_21):
+        step_result = driver.step_frame(scheduled, local_t)
+        for event in step_result.events:
+            _append_event(timeline, step_index, f"{event} at q={q:.3f}")
+        if hit_at_q is None and step_result.locked:
             hit_at_q = q
-            direction = "S1→S2" if hit_12 else "S2→S1"
-            if hit_12 and hit_21:
-                direction = "both"
-            _append_event(timeline, step_index, f"Lock ({direction}) at q={q:.3f}")
+            _append_event(timeline, step_index, f"Lock (both) at q={q:.3f}")
 
         q_values.append(q)
         s1_snaps.append(_capture_receiver(ctx.s1.receiver))

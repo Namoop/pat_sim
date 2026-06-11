@@ -15,7 +15,7 @@ from satellite.strategy.base import StrategyContext, link_established
 from satellite.strategy.meta import MetaStrategy, MetaStrategyResult
 from satellite.strategy.movements import Reset, build_aim_context
 from satellite.strategy.runner import FrameRunner
-from satellite.strategy.schedule import LegSchedule, ScheduledEpoch
+from satellite.strategy.schedule import LegSchedule, ScheduledStep
 
 if TYPE_CHECKING:
     from satellite.diagnostics import SimReplayProfiler
@@ -54,26 +54,6 @@ class ScenarioResult:
     @property
     def hit_at_q(self) -> float | None:
         return self.meta.hit_at_q
-
-    @property
-    def phase1_hit(self) -> bool:
-        return self.meta.success and self.meta.winning_strategy == "minor_offset"
-
-    @property
-    def phase2_hit(self) -> bool:
-        return self.meta.success and self.meta.winning_strategy == "single_miss"
-
-    @property
-    def phase1_hit_at_q(self) -> float | None:
-        if self.phase1_hit:
-            return self.meta.hit_at_q
-        return None
-
-    @property
-    def phase2_hit_at_q(self) -> float | None:
-        if self.phase2_hit:
-            return self.meta.hit_at_q
-        return None
 
     @property
     def phase2_spiral_center_source(self) -> str:
@@ -118,17 +98,17 @@ class ScenarioResult:
         return distance(self.s1.position, self.s2.position)
 
     def local_q(self, q: float) -> float:
-        _, local = self.schedule.epoch_at(q)
+        _, local = self.schedule.step_at(q)
         return local
 
-    def scheduled_epoch(self, q: float) -> ScheduledEpoch:
-        epoch, _ = self.schedule.epoch_at(q)
-        return epoch
+    def scheduled_step(self, q: float) -> ScheduledStep:
+        step, _ = self.schedule.step_at(q)
+        return step
 
-    def epoch_label(self, q: float) -> str:
-        epoch = self.scheduled_epoch(q)
-        name = epoch.strategy_name or "search"
-        label = epoch.label or f"epoch {epoch.epoch_index + 1}"
+    def step_label(self, q: float) -> str:
+        step = self.scheduled_step(q)
+        name = step.strategy_name or "search"
+        label = step.label or f"step {step.step_index + 1}"
         return f"{name}: {label}"
 
     def bench_aim(self, satellite: str, q: float) -> Vec3:
@@ -149,20 +129,27 @@ class ScenarioResult:
             self.replay_to(q)
         aim1 = self.s1.bench.bench_boresight
         aim2 = self.s2.bench.bench_boresight
+        scheduled, local_t = self.schedule.script_at(q)
+        s1_beam, s1_receiver = scheduled.script.s1.hardware_state_at(local_t)
+        s2_beam, s2_receiver = scheduled.script.s2.hardware_state_at(local_t)
         return (
-            link_established(self.s1, self.s2, aim1, self.config),
-            link_established(self.s2, self.s1, aim2, self.config),
+            s1_beam
+            and s2_receiver
+            and link_established(self.s1, self.s2, aim1, self.config),
+            s2_beam
+            and s1_receiver
+            and link_established(self.s2, self.s1, aim2, self.config),
         )
 
-    def active_in_cone(self, q: float) -> bool:
+    def mutual_lock(self, q: float) -> bool:
         hit_12, hit_21 = self.bidirectional_lock(q)
-        return hit_12 or hit_21
+        return hit_12 and hit_21
 
     def in_cone_at_q(self, q: float) -> bool:
-        return self.active_in_cone(q)
+        return self.mutual_lock(q)
 
     def check_dish_hit(self, q: float) -> bool:
-        return self.active_in_cone(q)
+        return self.mutual_lock(q)
 
     def dish_boresight_for_display(self, satellite: str, q: float) -> Vec3:
         return self.bench_aim(satellite, q)
