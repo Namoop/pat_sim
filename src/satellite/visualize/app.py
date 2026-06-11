@@ -10,7 +10,7 @@ from satellite.scenario import format_summary
 from satellite.visualize.panels.map_tab import MapTabPanel
 from satellite.visualize.panels.view3d import View3DPanel
 from satellite.visualize.qt_util import configure_qt_platform, install_sigint_handler
-from satellite.visualize.session import VizSession
+from satellite.visualize.session import MonteCarloVizSession, SingleResultSession, VizSession
 
 
 def run_visualizer(
@@ -39,7 +39,8 @@ def run_visualizer(
     )
 
     result = session.current()
-    print(format_summary(result))
+    if not isinstance(session, MonteCarloVizSession):
+        print(format_summary(result))
 
     config = result.config
     total_q = result.schedule.total_duration
@@ -133,6 +134,7 @@ def run_visualizer(
             self._profile_label.setFont(QFont("Monospace", 9))
             self._profile_label.setStyleSheet("color: #555;")
             self._profile_label.setWordWrap(True)
+            self._profile_label.setVisible(False)
             layout.addWidget(self._profile_label)
 
             self._panel_3d.set_profile_callback(self._set_profile_text)
@@ -162,9 +164,17 @@ def run_visualizer(
                 self._update_time_label(info.phase_label, info.capture_active)
             elif tab == "3d":
                 self._panel_3d.on_tab_shown()
+            self._sync_profile_label_visibility()
 
         def _set_profile_text(self, text: str) -> None:
             self._profile_label.setText(text)
+
+        def _sync_profile_label_visibility(self) -> None:
+            panel = self._panel_3d if self._active_tab == "3d" else self._panel_map
+            active = panel.profiling_active
+            self._profile_label.setVisible(active)
+            if not active:
+                self._profile_label.clear()
 
         def _load_result(self, new_result) -> None:
             self._result = new_result
@@ -176,6 +186,7 @@ def run_visualizer(
             self.current_q = float(np.clip(self._start_q, 0.0, total))
             self.slider.setMaximum(max(0, int(total / q_step)))
             self.setWindowTitle(f"Satellite SDA — {self._session.status_label()}")
+            self._sync_profile_label_visibility()
 
         def _update_time_label(self, phase: str, capture_active: bool) -> None:
             total = self._result.schedule.total_duration
@@ -272,7 +283,6 @@ def run_visualizer(
                 self.close()
                 return
 
-            print(format_summary(new_result))
             self._start_q = 0.0
             self._load_result(new_result)
             self._apply_q_active(self.current_q)

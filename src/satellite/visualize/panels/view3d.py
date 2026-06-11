@@ -194,6 +194,10 @@ class View3DPanel:
     def set_profile_callback(self, callback) -> None:
         self._profile_callback = callback
 
+    @property
+    def profiling_active(self) -> bool:
+        return self._profiler.enabled or self._sim_profile_enabled
+
     def set_result(self, result: ScenarioResult) -> None:
         self._result = result
         config = result.config

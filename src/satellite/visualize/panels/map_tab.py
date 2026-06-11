@@ -101,6 +101,10 @@ class MapTabPanel:
     def set_profile_callback(self, callback) -> None:
         self._profile_callback = callback
 
+    @property
+    def profiling_active(self) -> bool:
+        return self._profiling_active
+
     def set_result(self, result: ScenarioResult) -> None:
         self._result = result
         map_cfg = result.config.map_visualization
