@@ -9,8 +9,7 @@ The spacecraft body is assumed correctly pointed. Launch mispoint is modeled as 
 ```bash
 pip install -e .
 pip install -e ".[perf]"    # optional Numba-accelerated detection
-pip install -e ".[viz]"      # interactive 3D (PyVista)
-pip install -e ".[mapviz]"   # angular map (PyQt6)
+pip install -e ".[viz]"      # interactive 3D + angular map (PyVista, PyQt6)
 ```
 
 ## Run
@@ -23,8 +22,11 @@ Run a satellite SDA communication scenario. Pass `--help` for the same option li
 
 **Options**
 
+`--visualize [{3d,map}]`  
+Open unified visualization window after the run. Optional `3d` or `map` picks the **initial tab** (3D PyVista view or angular θ/φ map). `--visualize` alone is equivalent to `--visualize 3d`. If omitted, the window opens when `[visualization].enabled` is true in the simulation config. With `--monte-carlo`, opens an interactive step-through mode: **Next** runs the next sampled scenario (or closes on the last run / single scenario).
+
 `--monte-carlo MONTE_CARLO`  
-Run Monte Carlo batch from `MonteCarlo.toml`. When set, single-scenario mode is skipped and a batch summary is printed.
+Run Monte Carlo from `MonteCarlo.toml`. Without `--visualize` (and with `[visualization].enabled` false), runs the full batch headlessly and prints a summary. With visualization enabled, runs one scenario at a time in the visualizer; use **Next** to advance.
 
 `--scenario SCENARIO` (default: `default.toml`)  
 Scenario instance TOML: bench offsets and optional `[scenario].distance` override.
@@ -34,9 +36,6 @@ Simulation base TOML: hardware, timing, distance, `q_step`, and visualization de
 
 `--strategy STRATEGY` (default: `MonteCarlo.toml`)  
 Strategy chain TOML. The `[strategy]` section (and nested epoch tables) is read from this file.
-
-`--visualize [{3d,map}]`  
-Open interactive visualization after the run: `3d` (PyVista) or `map` (angular θ/φ view). `--visualize` alone is equivalent to `--visualize 3d`. If omitted, 3D opens when `[visualization].enabled` is true in the simulation config.
 
 `--q Q` (default: `0`)  
 Starting time `q` when opening a visualizer.
@@ -55,7 +54,7 @@ python -m satellite --visualize map --q 2.5
 python -m satellite.mapviz.bench_render [options]
 ```
 
-Benchmark mapviz QPainter render path (headless Qt). Pass `--help` for options.
+Benchmark mapviz QPainter render path (headless Qt). Requires `[viz]` (PyQt6). Pass `--help` for options.
 
 **Options**
 
@@ -105,8 +104,8 @@ src/satellite/
   strategy/       — meta-strategy, movements, frame runner
   sda/            — bench, transmitter, receiver
   scenario.py     — orchestration and replay
-  visualize/      — PyVista 3D
-  mapviz/         — QPainter angular map
+  visualize/      — unified 3D + map visualizer
+  mapviz/         — QPainter angular map panels
 ```
 
 ## Model summary
