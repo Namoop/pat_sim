@@ -196,6 +196,35 @@ def _append_event(timeline: ReplayTimeline, step_index: int, line: str) -> None:
     timeline.event_lines.append(line)
 
 
+def _format_sigfig(value: float, sigfigs: int = 3) -> str:
+    return f"{value:.{sigfigs}g}"
+
+
+def initial_conditions_lines(result: ScenarioResult) -> list[str]:
+    """Event-log header lines for scenario geometry and bench offsets."""
+    cfg = result.config
+    s1 = cfg.s1
+    s2 = cfg.s2
+    distance_km = cfg.simulation.distance / 1000.0
+    return [
+        "Initial conditions:",
+        f"  distance = {_format_sigfig(distance_km)} km",
+        (
+            f"  S1 bench θ={_format_sigfig(s1.bench_theta_offset * 1e3)} mrad"
+            f"  φ={_format_sigfig(s1.bench_phi_offset * 1e3)} mrad"
+        ),
+        (
+            f"  S2 bench θ={_format_sigfig(s2.bench_theta_offset * 1e3)} mrad"
+            f"  φ={_format_sigfig(s2.bench_phi_offset * 1e3)} mrad"
+        ),
+    ]
+
+
+def _append_initial_conditions(timeline: ReplayTimeline, result: ScenarioResult) -> None:
+    for line in initial_conditions_lines(result):
+        _append_event(timeline, 0, line)
+
+
 def _fresh_context(result: ScenarioResult) -> StrategyContext:
     from satellite.sda.satellite import Satellite
 
@@ -317,6 +346,7 @@ def build_replay_timeline(result: ScenarioResult) -> ReplayTimeline:
         s2_snapshots=[],
         hit_at_q=None,
     )
+    _append_initial_conditions(timeline, result)
 
     step_index = 0
     q = 0.0

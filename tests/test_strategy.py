@@ -176,3 +176,22 @@ def test_replay_matches_headless_hit_at_q():
     assert result.hit_at_q is not None
     result.replay_to(result.hit_at_q)
     assert result.active_in_cone(result.hit_at_q)
+
+
+def test_event_log_includes_initial_conditions():
+    cfg = _base_config(
+        s1_theta=0.01,
+        s1_phi=-0.02,
+        s2_theta=0.03,
+        s2_phi=0.04,
+    )
+    result = run_scenario(cfg)
+    result.ensure_replay_timeline()
+    log: list[str] = []
+    result.replay_to(0.0, event_log=log)
+    assert log[0] == "Initial conditions:"
+    assert "distance = 1 km" in log[1]
+    assert "S1 bench θ=10 mrad" in log[2]
+    assert "φ=-20 mrad" in log[2]
+    assert "S2 bench θ=30 mrad" in log[3]
+    assert "φ=40 mrad" in log[3]
