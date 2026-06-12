@@ -16,16 +16,15 @@ seed = 42
 #chain = ["hex_scan"]
 
 # so slow...
-#[[monte_carlo.chains]]
-#runs = 10
-#chain = ["lissajous_scan"]
+[[monte_carlo.chains]]
+runs = 10
+chain = ["lissajous_scan"]
 
-# need more deviation
 #[[monte_carlo.chains]]
 #runs = 10
 #chain = ["rosette_scan"]
 
-# ???
+# currently gravity, consider probabilistic bias instead?
 #[[monte_carlo.chains]]
 #runs = 10
 #chain = ["center_rebias"]
@@ -39,10 +38,9 @@ seed = 42
 #runs = 10
 #chain = ["random_walk"]
 
-# long time to calculate
-[[monte_carlo.chains]]
-runs = 10
-chain = ["random_curve"]
+#[[monte_carlo.chains]]
+#runs = 10
+#chain = ["random_curve"]
 
 #[[monte_carlo.chains]]
 #runs = 10
@@ -82,15 +80,15 @@ s2_delta = 0.5
 [strategy.rosette_scan]
 s1_w1 = 1.0
 s1_w2 = 1.41421356
-s2_w1 = 1.0
+s2_w1 = 1.4
 s2_w2 = 1.61803399
 
 [strategy.center_rebias]
-velocity_a = 0.01
+velocity_a = 0.1
 velocity_ratio = 1.41421356
-drift_sigma = 0.1
-max_turn_radius = 0.5
-bias_strength = 0.2
+drift_sigma = 20
+max_turn_radius = 50
+bias_strength = 1
 
 [strategy.concentric_shells]
 spiral_speed_a = 1.0

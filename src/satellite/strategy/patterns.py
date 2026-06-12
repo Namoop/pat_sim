@@ -134,8 +134,9 @@ def rosette_aim_at(
     u_y: Vec3,
     u_z: Vec3,
 ) -> Vec3:
-    u_off = A * math.cos(w1 * local_t)
-    v_off = A * math.cos(w2 * local_t)
+    r = A * math.cos(w2 * local_t)
+    u_off = r * math.cos(w1 * local_t)
+    v_off = r * math.sin(w1 * local_t)
     return normalize(u_z + u_off * u_x + v_off * u_y)
 
 
