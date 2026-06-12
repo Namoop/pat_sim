@@ -6,7 +6,7 @@ from typing import Protocol
 
 import numpy as np
 
-from satellite.config import MonteCarloConfig, load_simulation_config
+from satellite.config import MonteCarloConfig, StrategyConfig, load_simulation_config
 from satellite.monte_carlo import run_monte_carlo_single
 from satellite.scenario import ScenarioResult
 
@@ -46,37 +46,51 @@ class MonteCarloVizSession:
     def __init__(self, mc: MonteCarloConfig) -> None:
         self._mc = mc
         self._sim = load_simulation_config(mc.simulation_path)
-        self._rng = np.random.default_rng(mc.seed)
+        
+        self._runs_metadata = []
+        for chain_cfg in mc.chains:
+            chain_rng = np.random.default_rng(mc.seed)
+            seeds = chain_rng.integers(0, 2**32 - 1, size=chain_cfg.runs).tolist()
+            chain_strategy = StrategyConfig(
+                k=mc.strategy.k,
+                chain=chain_cfg.chain,
+                params=mc.strategy.params,
+            )
+            for s in seeds:
+                self._runs_metadata.append((s, chain_strategy))
+
         self._run_index = 0
         self._current: ScenarioResult | None = None
 
     def current(self) -> ScenarioResult:
         if self._current is None:
-            seed = int(self._rng.integers(0, 2**32 - 1))
+            seed, strategy = self._runs_metadata[self._run_index]
             run = run_monte_carlo_single(
                 self._mc,
                 self._sim,
                 seed,
                 self._run_index,
                 report=False,
+                strategy=strategy,
             )
             self._current = run.result
         return self._current
 
     def has_next(self) -> bool:
-        return self._run_index < self._mc.runs - 1
+        return self._run_index < len(self._runs_metadata) - 1
 
     def advance(self) -> ScenarioResult | None:
-        if self._run_index >= self._mc.runs - 1:
+        if self._run_index >= len(self._runs_metadata) - 1:
             return None
         self._run_index += 1
-        seed = int(self._rng.integers(0, 2**32 - 1))
+        seed, strategy = self._runs_metadata[self._run_index]
         run = run_monte_carlo_single(
             self._mc,
             self._sim,
             seed,
             self._run_index,
             report=False,
+            strategy=strategy,
         )
         self._current = run.result
         return self._current
@@ -87,4 +101,4 @@ class MonteCarloVizSession:
             if self._current is not None
             else f"mc_run_{self._run_index}"
         )
-        return f"{name} ({self._run_index + 1}/{self._mc.runs})"
+        return f"{name} ({self._run_index + 1}/{len(self._runs_metadata)})"

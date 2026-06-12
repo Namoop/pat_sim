@@ -15,8 +15,10 @@ from satellite.config import (
     BenchOffsetConfig,
     ErrorDistributionConfig,
     GaussianErrorConfig,
+    MonteCarloChainConfig,
     MonteCarloConfig,
     ScenarioInstance,
+    StrategyConfig,
     UniformErrorConfig,
     build_scenario_config,
     load_monte_carlo_config,
@@ -122,6 +124,7 @@ def run_monte_carlo_single(
     *,
     report: bool = False,
     total_runs: int | None = None,
+    strategy: StrategyConfig | None = None,
 ) -> MonteCarloRunResult:
     rng = np.random.default_rng(seed)
     s1_off, s2_off = sample_offsets(mc.error, rng)
@@ -145,7 +148,7 @@ def run_monte_carlo_single(
         s1=s1_off,
         s2=s2_off,
     )
-    config = build_scenario_config(sim, instance, strategy=mc.strategy)
+    config = build_scenario_config(sim, instance, strategy=strategy or mc.strategy)
     t0 = time.perf_counter()
     result = run_scenario(config)
     elapsed_ms = (time.perf_counter() - t0) * 1000.0
@@ -241,10 +244,24 @@ def run_monte_carlo(
     max_workers: int | None = None,
 ) -> MonteCarloSummary:
     sim = load_simulation_config(mc.simulation_path)
-    # Generate independent seeds for each run
-    master_rng = np.random.default_rng(mc.seed)
-    seeds = master_rng.integers(0, 2**32 - 1, size=mc.runs).tolist()
 
+    tasks = []
+    global_run_idx = 0
+    for chain_cfg in mc.chains:
+        chain_rng = np.random.default_rng(mc.seed)
+        seeds = chain_rng.integers(0, 2**32 - 1, size=chain_cfg.runs).tolist()
+        
+        chain_strategy = StrategyConfig(
+            k=mc.strategy.k,
+            chain=chain_cfg.chain,
+            params=mc.strategy.params,
+        )
+        
+        for run_in_chain_idx in range(chain_cfg.runs):
+            tasks.append((seeds[run_in_chain_idx], global_run_idx, chain_strategy))
+            global_run_idx += 1
+
+    total_runs = len(tasks)
     run_results: list[MonteCarloRunResult] = []
     interrupted = False
     successes = 0
@@ -254,7 +271,7 @@ def run_monte_carlo(
         max_workers = max(1, multiprocessing.cpu_count() - 1)
 
     try:
-        if max_workers > 1:
+        if max_workers > 1 and total_runs > 1:
             with concurrent.futures.ProcessPoolExecutor(
                 max_workers=max_workers
             ) as executor:
@@ -263,14 +280,15 @@ def run_monte_carlo(
                         run_monte_carlo_single,
                         mc,
                         sim,
-                        seeds[i],
-                        i,
+                        seed,
+                        global_idx,
                         report=False,
-                    ): i
-                    for i in range(mc.runs)
+                        strategy=strat,
+                    ): global_idx
+                    for seed, global_idx, strat in tasks
                 }
 
-                _print_progress_bar(0, mc.runs, 0)
+                _print_progress_bar(0, total_runs, 0)
 
                 for future in concurrent.futures.as_completed(future_to_index):
                     try:
@@ -278,28 +296,28 @@ def run_monte_carlo(
                         run_results.append(res)
                         if res.result.success:
                             successes += 1
-                        _print_progress_bar(len(run_results), mc.runs, successes)
+                        _print_progress_bar(len(run_results), total_runs, successes)
                     except Exception as e:
                         print(f"\nRun failed with error: {e}", file=sys.stderr)
         else:
             # Serial execution (max_workers=1)
-            _print_progress_bar(0, mc.runs, 0)
-            for i in range(mc.runs):
+            _print_progress_bar(0, total_runs, 0)
+            for seed, global_idx, strat in tasks:
                 res = run_monte_carlo_single(
-                    mc, sim, seeds[i], i, report=False
+                    mc, sim, seed, global_idx, report=False, strategy=strat
                 )
                 run_results.append(res)
                 if res.result.success:
                     successes += 1
-                _print_progress_bar(len(run_results), mc.runs, successes)
+                _print_progress_bar(len(run_results), total_runs, successes)
 
-        _print_progress_bar(len(run_results), mc.runs, successes, finished=True)
+        _print_progress_bar(len(run_results), total_runs, successes, finished=True)
 
     except KeyboardInterrupt:
         interrupted = True
         print("\nInterrupted. Cleaning up workers...", file=sys.stderr)
-        # ProcessPoolExecutor shutdown handles cleanup
 
+    run_results.sort(key=lambda r: r.run_index)
     return _build_monte_carlo_summary(mc, run_results, interrupted=interrupted)
 
 

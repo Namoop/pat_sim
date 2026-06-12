@@ -30,8 +30,8 @@ class SharedSatelliteConfig:
 
     body_radius: float
     dish_fov: float
-    bench_slew_time: float
-    fsm_settle_time: float
+    max_beam_speed: float
+    max_fsm_speed: float
     beam_width_mrad: float
 
     @property
@@ -46,6 +46,7 @@ class SimulationConfig:
     t_step: float
     beam_length: float | None
     boresight_extension: float
+    max_search_radius: float
     profile_replay: bool
 
 
@@ -66,41 +67,33 @@ class MapVisualizationConfig:
     slider_debounce_ms: int
 
 
-@dataclass(frozen=True)
-class MinorOffsetStrategyConfig:
-    duration: float
-    max_spiral_radius: str | float
-    spiral_speed: float
-
-
-@dataclass(frozen=True)
-class SingleMissStrategyConfig:
-    phase1_duration: float
-    a_spiral_radius: str | float
-    reset_duration: float
-    phase2_duration: float
-    b_spiral_radius: str | float
-    spiral_speed: float
-
-
-@dataclass(frozen=True)
-class AsymmetricProbeStrategyConfig:
-    probe_duration: float
-    spiral_radius: str | float
-    spiral_speed: float = 1.0
-    reset_duration: float = 0.0
+from typing import Any, Mapping
 
 
 @dataclass(frozen=True)
 class StrategyConfig:
     k: float
     chain: tuple[str, ...]
-    minor_offset: MinorOffsetStrategyConfig
-    single_miss: SingleMissStrategyConfig
-    asymmetric_probe: AsymmetricProbeStrategyConfig
+    params: Mapping[str, Any]
 
     def spiral_w(self, satellite: SharedSatelliteConfig) -> float:
         return self.k * satellite.alpha / 3.141592653589793
+
+    def spiral_duration(
+        self, radius: float, w: float, speed: float = 1.0
+    ) -> float:
+        """T = R / (w * speed)"""
+        if w <= 0:
+            return 0.0
+        return radius / (w * speed)
+
+    def reset_duration(
+        self, radius: float, max_beam_speed: float
+    ) -> float:
+        """T_reset = R / max_beam_speed"""
+        if max_beam_speed <= 0:
+            return 0.0
+        return radius / max_beam_speed
 
     @staticmethod
     def resolve_radius(value: str | float, dish_fov: float) -> float:
@@ -159,12 +152,44 @@ ErrorDistributionConfig = UniformErrorConfig | GaussianErrorConfig
 
 
 @dataclass(frozen=True)
+class MonteCarloChainConfig:
+    runs: int
+    chain: tuple[str, ...]
+
+
+@dataclass(frozen=True)
 class MonteCarloConfig:
     simulation_path: Path
     runs: int
     seed: int
     error: ErrorDistributionConfig
     strategy: StrategyConfig
+    chains: tuple[MonteCarloChainConfig, ...] = ()
+
+    def __post_init__(self) -> None:
+        if not hasattr(self, "chains") or not self.chains:
+            chain_seq = self.strategy.chain if self.strategy else ()
+            object.__setattr__(
+                self,
+                "chains",
+                (MonteCarloChainConfig(runs=self.runs, chain=chain_seq),),
+            )
+        else:
+            total_chain_runs = sum(c.runs for c in self.chains)
+            if total_chain_runs != self.runs:
+                if len(self.chains) == 1:
+                    object.__setattr__(
+                        self,
+                        "chains",
+                        (MonteCarloChainConfig(runs=self.runs, chain=self.chains[0].chain),),
+                    )
+                else:
+                    chain_seq = self.strategy.chain if self.strategy else ()
+                    object.__setattr__(
+                        self,
+                        "chains",
+                        (MonteCarloChainConfig(runs=self.runs, chain=chain_seq),),
+                    )
 
 
 def positions_for_distance(distance: float) -> tuple[Vec3, Vec3]:
@@ -176,10 +201,8 @@ def _load_shared_satellite(data: dict) -> SharedSatelliteConfig:
     return SharedSatelliteConfig(
         body_radius=float(data.get("body_radius", 0.5)),
         dish_fov=float(data.get("dish_fov", 0.002)),
-        bench_slew_time=float(
-            data.get("bench_slew_time", data.get("dish_slew_time", 0.3))
-        ),
-        fsm_settle_time=float(data.get("fsm_settle_time", 0.0)),
+        max_beam_speed=float(data.get("max_beam_speed", 0.087)),  # ~5 deg/s
+        max_fsm_speed=float(data.get("max_fsm_speed", 1.0)),
         beam_width_mrad=float(data["beam_width"]),
     )
 
@@ -193,6 +216,7 @@ def _load_simulation_section(data: dict) -> SimulationConfig:
         t_step=float(data["t_step"]),
         beam_length=beam_length,
         boresight_extension=float(data.get("boresight_extension", 5.0)),
+        max_search_radius=float(data.get("max_search_radius", 0.07)),
         profile_replay=bool(data.get("profile_replay", False)),
     )
 
@@ -222,55 +246,31 @@ def _require_float(section: dict, key: str, context: str) -> float:
     return float(section[key])
 
 
-def _load_strategy(data: dict) -> StrategyConfig:
-    minor_offset_cfg = data.get("minor_offset", {})
-    single_miss_cfg = data.get("single_miss", {})
+def _load_strategy(data: dict, chains_data: list | None = None) -> StrategyConfig:
+    from satellite.strategy.base import CONFIG_PARSERS
+
     if "k" not in data:
         raise ValueError("[strategy].k is required")
-    if "duration" not in minor_offset_cfg:
-        raise ValueError("[strategy.minor_offset].duration is required")
-    if "phase1_duration" not in single_miss_cfg:
-        raise ValueError("[strategy.single_miss].phase1_duration is required")
-    if "phase2_duration" not in single_miss_cfg:
-        raise ValueError("[strategy.single_miss].phase2_duration is required")
 
-    asymmetric_probe_cfg = data.get("asymmetric_probe", {})
+    global_chain = data.get("chain", ["minor_offset", "single_miss"])
+    all_strategy_names = set(global_chain)
+    if chains_data:
+        for c in chains_data:
+            all_strategy_names.update(c.get("chain", []))
+
+    params = {}
+    for name in all_strategy_names:
+        section = data.get(name, {})
+        if name in CONFIG_PARSERS:
+            params[name] = CONFIG_PARSERS[name](section)
+        else:
+            # Fallback for strategies not yet updated/stubbed or without config
+            params[name] = section
 
     return StrategyConfig(
         k=float(data["k"]),
-        chain=tuple(data.get("chain", ["minor_offset", "single_miss"])),
-        minor_offset=MinorOffsetStrategyConfig(
-            duration=float(minor_offset_cfg["duration"]),
-            max_spiral_radius=minor_offset_cfg.get("max_spiral_radius", "fov"),
-            spiral_speed=float(minor_offset_cfg.get("spiral_speed", 1.0)),
-        ),
-        single_miss=SingleMissStrategyConfig(
-            phase1_duration=float(single_miss_cfg["phase1_duration"]),
-            a_spiral_radius=single_miss_cfg.get("a_spiral_radius", 0.05),
-            reset_duration=float(single_miss_cfg.get("reset_duration", 0.0)),
-            phase2_duration=float(single_miss_cfg["phase2_duration"]),
-            b_spiral_radius=single_miss_cfg.get("b_spiral_radius", 0.05),
-            spiral_speed=float(single_miss_cfg.get("spiral_speed", 1.0)),
-        ),
-        asymmetric_probe=AsymmetricProbeStrategyConfig(
-            probe_duration=float(
-                asymmetric_probe_cfg.get(
-                    "probe_duration",
-                    single_miss_cfg.get("phase1_duration", 3.15),
-                )
-            ),
-            spiral_radius=asymmetric_probe_cfg.get(
-                "spiral_radius",
-                single_miss_cfg.get("a_spiral_radius", 0.05),
-            ),
-            spiral_speed=float(asymmetric_probe_cfg.get("spiral_speed", 1.0)),
-            reset_duration=float(
-                asymmetric_probe_cfg.get(
-                    "reset_duration",
-                    single_miss_cfg.get("reset_duration", 0.0),
-                )
-            ),
-        ),
+        chain=tuple(global_chain),
+        params=params,
     )
 
 
@@ -336,12 +336,29 @@ def load_monte_carlo_config(path: str | Path) -> MonteCarloConfig:
     mc = data.get("monte_carlo", {})
     simulation_rel = str(mc.get("simulation", "Simulation.toml"))
     simulation_path = (config_path.parent / simulation_rel).resolve()
+    
+    chains_data = mc.get("chains") or data.get("chains") or []
+    strategy = _load_strategy(data.get("strategy", {}), chains_data=chains_data)
+    
+    chains = []
+    if chains_data:
+        runs = 0
+        for c in chains_data:
+            chain_list = list(c.get("chain", []))
+            r = int(c.get("runs", 1))
+            runs += r
+            chains.append(MonteCarloChainConfig(runs=r, chain=tuple(chain_list)))
+    else:
+        runs = int(mc.get("runs", 1))
+        chains.append(MonteCarloChainConfig(runs=runs, chain=strategy.chain))
+
     return MonteCarloConfig(
         simulation_path=simulation_path,
-        runs=int(mc.get("runs", 1)),
+        runs=runs,
         seed=int(mc.get("seed", 0)),
         error=_load_error(data.get("error", {})),
-        strategy=_load_strategy(data.get("strategy", {})),
+        strategy=strategy,
+        chains=tuple(chains),
     )
 
 
