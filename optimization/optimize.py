@@ -242,6 +242,29 @@ def evaluate_candidate(
         params={strategy_name: parsed_params},
     )
 
+    # If the strategy is GPU-compatible, perform evaluation in a single batch on the GPU
+    import os
+    from satellite.cuda_monte_carlo import is_strategy_chain_supported_on_gpu, run_monte_carlo_cuda
+    from satellite.config import MonteCarloConfig, MonteCarloChainConfig
+
+    mc = MonteCarloConfig(
+        simulation_path=mc_cfg.simulation_path,
+        seed=mc_cfg.seed,
+        chains=(MonteCarloChainConfig(runs=len(fixed_offsets), chain=(strategy_name,)),),
+        error=mc_cfg.error,
+        strategy=strategy,
+    )
+
+    if os.environ.get("SATELLITE_NO_GPU") != "1" and is_strategy_chain_supported_on_gpu(mc):
+        summary = run_monte_carlo_cuda(mc)
+        success_rate = summary.success_rate
+        timeout = sim_cfg.simulation.timeout
+        mean_t = summary.mean_t if summary.mean_t is not None else timeout
+        penalty = timeout * 2.0
+        cost = ((1.0 - success_rate) * penalty) + mean_t
+        return cost, success_rate, mean_t
+
+    # Fallback to CPU parallel execution
     tasks = [
         (sim_cfg, ScenarioInstance(name=f"eval_{idx}", distance=None, s1=s1_off, s2=s2_off), strategy)
         for idx, (s1_off, s2_off) in enumerate(fixed_offsets)
