@@ -243,6 +243,11 @@ def run_monte_carlo(
     mc: MonteCarloConfig,
     max_workers: int | None = None,
 ) -> MonteCarloSummary:
+    from satellite.cuda_monte_carlo import is_strategy_chain_supported_on_gpu, run_monte_carlo_cuda
+    if is_strategy_chain_supported_on_gpu(mc):
+        print("Running Monte Carlo simulation on GPU (RTX 3050)...", flush=True)
+        return run_monte_carlo_cuda(mc)
+
     sim = load_simulation_config(mc.simulation_path)
 
     tasks = []

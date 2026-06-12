@@ -154,6 +154,7 @@ def test_monte_carlo_graceful_interrupt(monkeypatch):
         "satellite.monte_carlo.run_monte_carlo_single",
         interrupt_after_first,
     )
+    monkeypatch.setenv("SATELLITE_NO_GPU", "1")
     summary = run_monte_carlo(mc, max_workers=1)
     assert summary.interrupted is True
     assert summary.runs == 1
