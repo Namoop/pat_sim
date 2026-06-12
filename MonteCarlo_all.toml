@@ -70,11 +70,11 @@ speed_a = 1.0
 speed_ratio = 1.41421356
 
 [strategy.lissajous_scan]
-s1_wx = 1.0
-s1_wy = 1.41421356
+s1_wx = 1.5
+s1_wy = 2.12132034
 s1_delta = 0.0
-s2_wx = 1.61803399
-s2_wy = 2.28824561
+s2_wx = 2.42705099
+s2_wy = 3.43236842
 s2_delta = 0.5
 
 [strategy.rosette_scan]
