@@ -84,9 +84,45 @@ class FrameRunner:
         all_events: list[str] = []
 
         while local_t <= script.total_duration + 1e-12:
-            result = self.step(runtime, local_t, t_step)
-            all_events.extend(result.events)
-            if result.locked and stop_on_lock:
+            # Optimization: inline step logic to avoid object creation
+            s1_runtime = runtime["S1"]
+            s2_runtime = runtime["S2"]
+            
+            s1_hw = s1_runtime.apply_hardware(local_t)
+            s2_hw = s2_runtime.apply_hardware(local_t)
+            if s1_hw: all_events.extend(s1_hw)
+            if s2_hw: all_events.extend(s2_hw)
+
+            aim1, events1 = self._apply_satellite(
+                self.ctx.s1,
+                self.ctx.s2.position,
+                s1_runtime,
+                local_t,
+                t_step,
+            )
+            aim2, events2 = self._apply_satellite(
+                self.ctx.s2,
+                self.ctx.s1.position,
+                s2_runtime,
+                local_t,
+                t_step,
+            )
+            if events1: all_events.extend(events1)
+            if events2: all_events.extend(events2)
+
+            # _evaluate_lock return (locked, more_events)
+            locked, ev = self._evaluate_lock_fast(
+                aim1,
+                aim2,
+                s1_runtime.beam_enabled,
+                s1_runtime.receiver_enabled,
+                s2_runtime.beam_enabled,
+                s2_runtime.receiver_enabled,
+                t_step,
+            )
+            if ev: all_events.extend(ev)
+
+            if locked and stop_on_lock:
                 return FrameRunResult(
                     success=True,
                     hit_at_t=global_t_start + local_t,
@@ -114,6 +150,102 @@ class FrameRunner:
                 "elapsed_t": script.total_duration,
             },
         )
+
+    def _evaluate_lock_fast(
+        self,
+        aim1,
+        aim2,
+        s1_beam: bool,
+        s1_receiver: bool,
+        s2_beam: bool,
+        s2_receiver: bool,
+        t_step: float,
+    ) -> tuple[bool, list[str]]:
+        events: list[str] = []
+        visible_12 = (
+            s1_beam
+            and s2_receiver
+            and link_established(self.ctx.s1, self.ctx.s2, aim1, self.ctx.config)
+        )
+        visible_21 = (
+            s2_beam
+            and s1_receiver
+            and link_established(self.ctx.s2, self.ctx.s1, aim2, self.ctx.config)
+        )
+
+        if not visible_12 and not visible_21:
+            return False, events
+
+        if visible_12 and not self.ctx.s2.receiver.has_seen_beam:
+            events.append("S2 acquisition started")
+        if visible_21 and not self.ctx.s1.receiver.has_seen_beam:
+            events.append("S1 acquisition started")
+
+        s2_updated = False
+        s1_updated = False
+
+        if visible_12:
+            # Use dish_boresight instead of geometry_snapshot for speed
+            _, acq_events2 = self.ctx.s2.receiver.observe_beam(
+                True,
+                self.ctx.s1.position,
+                t_step,
+                dish_at_step_start=self.ctx.s2.receiver.dish_boresight,
+            )
+            for event in acq_events2:
+                if event == "Slew complete":
+                    events.append("S2 slew complete")
+            s2_updated = True
+            
+        if visible_21:
+            _, acq_events1 = self.ctx.s1.receiver.observe_beam(
+                True,
+                self.ctx.s2.position,
+                t_step,
+                dish_at_step_start=self.ctx.s1.receiver.dish_boresight,
+            )
+            for event in acq_events1:
+                if event == "Slew complete":
+                    events.append("S1 slew complete")
+            s1_updated = True
+
+        if s1_updated:
+            final_12 = (
+                s1_beam
+                and s2_receiver
+                and link_established(
+                    self.ctx.s1,
+                    self.ctx.s2,
+                    self.ctx.s1.bench.bench_boresight,
+                    self.ctx.config,
+                )
+            )
+        else:
+            final_12 = visible_12
+
+        if s2_updated:
+            final_21 = (
+                s2_beam
+                and s1_receiver
+                and link_established(
+                    self.ctx.s2,
+                    self.ctx.s1,
+                    self.ctx.s2.bench.bench_boresight,
+                    self.ctx.config,
+                )
+            )
+        else:
+            final_21 = visible_21
+
+        locked = (
+            final_12
+            and final_21
+            and self.ctx.s1.bench.acquisition.slew_complete
+            and self.ctx.s2.bench.acquisition.slew_complete
+        )
+        if locked:
+            events.append("Mutual lock")
+        return locked, events
 
     def begin(self, script: StrategyScript) -> dict[str, SatelliteRuntime]:
         return {
@@ -145,8 +277,11 @@ class FrameRunner:
         events: list[str] = []
         s1_runtime = runtime["S1"]
         s2_runtime = runtime["S2"]
-        events.extend(s1_runtime.apply_hardware(local_t))
-        events.extend(s2_runtime.apply_hardware(local_t))
+        
+        s1_hw = s1_runtime.apply_hardware(local_t)
+        s2_hw = s2_runtime.apply_hardware(local_t)
+        if s1_hw: events.extend(s1_hw)
+        if s2_hw: events.extend(s2_hw)
 
         aim1, events1 = self._apply_satellite(
             self.ctx.s1,
@@ -162,10 +297,10 @@ class FrameRunner:
             local_t,
             t_step,
         )
-        events.extend(events1)
-        events.extend(events2)
+        if events1: events.extend(events1)
+        if events2: events.extend(events2)
 
-        return self._evaluate_lock(
+        locked, ev = self._evaluate_lock_fast(
             aim1,
             aim2,
             s1_runtime.beam_enabled,
@@ -173,92 +308,21 @@ class FrameRunner:
             s2_runtime.beam_enabled,
             s2_runtime.receiver_enabled,
             t_step,
-            events,
+        )
+        if ev: events.extend(ev)
+
+        # Re-check visibility for compatibility with FrameStepResult
+        # (This is slightly slow but only used by tests and non-inlined callers)
+        v12 = s1_runtime.beam_enabled and s2_runtime.receiver_enabled and link_established(
+            self.ctx.s1, self.ctx.s2, self.ctx.s1.bench.bench_boresight, self.ctx.config
+        )
+        v21 = s2_runtime.beam_enabled and s1_runtime.receiver_enabled and link_established(
+            self.ctx.s2, self.ctx.s1, self.ctx.s2.bench.bench_boresight, self.ctx.config
         )
 
-    def _evaluate_lock(
-        self,
-        aim1,
-        aim2,
-        s1_beam: bool,
-        s1_receiver: bool,
-        s2_beam: bool,
-        s2_receiver: bool,
-        t_step: float,
-        events: list[str],
-    ) -> FrameStepResult:
-        visible_12 = (
-            s1_beam
-            and s2_receiver
-            and link_established(self.ctx.s1, self.ctx.s2, aim1, self.ctx.config)
-        )
-        visible_21 = (
-            s2_beam
-            and s1_receiver
-            and link_established(self.ctx.s2, self.ctx.s1, aim2, self.ctx.config)
-        )
-
-        if visible_12 and not self.ctx.s2.receiver.has_seen_beam:
-            events.append("S2 acquisition started")
-        if visible_21 and not self.ctx.s1.receiver.has_seen_beam:
-            events.append("S1 acquisition started")
-
-        acq_events2: list[str] = []
-        acq_events1: list[str] = []
-        if visible_12:
-            geom2 = self.ctx.s2.receiver.geometry_snapshot()
-            _, acq_events2 = self.ctx.s2.receiver.observe_beam(
-                True,
-                self.ctx.s1.position,
-                t_step,
-                dish_at_step_start=geom2.dish_boresight,
-            )
-        if visible_21:
-            geom1 = self.ctx.s1.receiver.geometry_snapshot()
-            _, acq_events1 = self.ctx.s1.receiver.observe_beam(
-                True,
-                self.ctx.s2.position,
-                t_step,
-                dish_at_step_start=geom1.dish_boresight,
-            )
-        for event in acq_events2:
-            if event == "Slew complete":
-                events.append("S2 slew complete")
-        for event in acq_events1:
-            if event == "Slew complete":
-                events.append("S1 slew complete")
-
-        final_12 = (
-            s1_beam
-            and s2_receiver
-            and link_established(
-                self.ctx.s1,
-                self.ctx.s2,
-                self.ctx.s1.bench.bench_boresight,
-                self.ctx.config,
-            )
-        )
-        final_21 = (
-            s2_beam
-            and s1_receiver
-            and link_established(
-                self.ctx.s2,
-                self.ctx.s1,
-                self.ctx.s2.bench.bench_boresight,
-                self.ctx.config,
-            )
-        )
-        locked = (
-            final_12
-            and final_21
-            and self.ctx.s1.bench.acquisition.slew_complete
-            and self.ctx.s2.bench.acquisition.slew_complete
-        )
-        if locked:
-            events.append("Mutual lock")
         return FrameStepResult(
-            visible_12=final_12,
-            visible_21=final_21,
+            visible_12=v12,
+            visible_21=v21,
             locked=locked,
             events=events,
         )
