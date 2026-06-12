@@ -151,3 +151,57 @@ def test_reset_slew_motion():
     assert dist_to_center > 0.01, f"Boresight jumped directly to center (teleported)! Dist: {math.degrees(dist_to_center):.3f} deg"
     assert dist_to_start < dist_to_center, "Boresight is not closer to starting position than center"
 
+
+def test_inward_spiral_motion():
+    from satellite.strategy.actions import hold, spiral, receiver
+    from satellite.math3d import angle_between
+
+    ctx = _ctx()
+    script = strategy("test_inward")
+    with script.satellite("S1"):
+        receiver.disable()
+        # Spiral out to 0.05
+        spiral(duration=1.0, w=10.0, k=20.0, max_radius=0.05)
+        # Spiral in to 0.0
+        spiral(duration=1.0, w=10.0, k=20.0, max_radius=0.0)
+    with script.satellite("S2"):
+        hold(duration=2.0)
+    built = script.build()
+
+    runtime = FrameRunner(ctx).begin(built)
+    
+    # Step to the end of the outward spiral (t = 1.0)
+    t = 0.0
+    while t < 1.0:
+        FrameRunner(ctx).step(runtime, t, ctx.t_step)
+        t += ctx.t_step
+
+    boresight_at_max_radius = ctx.s1.bench.bench_boresight.copy()
+    center = ctx.s1.bench.initial_boresight.copy()
+
+    # Verify we are deflected
+    start_dist = angle_between(boresight_at_max_radius, center)
+    assert start_dist > 0.01
+
+    # Step into the inward spiral (t = 1.5, halfway in)
+    t = 1.0
+    while t <= 1.5 + 1e-12:
+        FrameRunner(ctx).step(runtime, t, ctx.t_step)
+        t += ctx.t_step
+        
+    boresight_halfway = ctx.s1.bench.bench_boresight.copy()
+    dist_halfway = angle_between(boresight_halfway, center)
+    
+    # The radius should be smaller than start_dist but still deflected
+    assert dist_halfway < start_dist
+    assert dist_halfway > 0.005
+
+    # Step to the end of the inward spiral (t = 2.0)
+    while t <= 2.0 + 1e-12:
+        FrameRunner(ctx).step(runtime, t, ctx.t_step)
+        t += ctx.t_step
+        
+    boresight_end = ctx.s1.bench.bench_boresight.copy()
+    end_dist = angle_between(boresight_end, center)
+    assert end_dist < 1e-4
+

@@ -61,6 +61,32 @@ class Spiral(MovementPattern):
     speed: float = 1.0
 
     def aim_at(self, local_t: float, duration: float, ctx: AimContext) -> Vec3:
+        if self.max_radius == 0.0:
+            from satellite.math3d import angle_between, normalize
+            import math
+            R_start = angle_between(ctx.step_start_aim, ctx.center)
+            if R_start <= 0.0 or duration <= 0.0:
+                return ctx.center
+            progress = min(local_t / duration, 1.0)
+            theta_l = R_start * (1.0 - progress)
+            u = (R_start / self.w) * (1.0 - progress) if self.w > 0.0 else 0.0
+            phi_l = self.k * u
+            
+            sin_theta = math.sin(theta_l)
+            cos_theta = math.cos(theta_l)
+            sin_phi = math.sin(phi_l)
+            cos_phi = math.cos(phi_l)
+            
+            al0 = sin_theta * cos_phi
+            al1 = sin_theta * sin_phi
+            al2 = cos_theta
+            
+            asx = al0 * ctx.u_x[0] + al1 * ctx.u_y[0] + al2 * ctx.u_z[0]
+            asy = al0 * ctx.u_x[1] + al1 * ctx.u_y[1] + al2 * ctx.u_z[1]
+            asz = al0 * ctx.u_x[2] + al1 * ctx.u_y[2] + al2 * ctx.u_z[2]
+            import numpy as np
+            return normalize(np.array([asx, asy, asz], dtype=np.float64))
+
         return spiral_aim_at(
             local_t,
             w=self.w,
