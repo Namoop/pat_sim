@@ -62,7 +62,7 @@ python optimization/optimize.py --strategy random_walk --method grid --grid-poin
 
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
-| `--strategy` | `str` | *Required* | Name of the strategy to optimize (e.g., `random_curve`, `lissajous_scan`, `rosette_scan`, `center_rebias`, `random_walk`, `dual_spiral`, `dual_raster`). |
+| `--strategy` | `str` | *Required* | Name of the strategy to optimize (e.g., `random_curve`, `lissajous_scan`, `rosette_scan`, `center_rebias`, `random_walk`, `dual_spiral`, `dual_raster`, `concentric_shells`). |
 | `--method` | `str` | `random` | Optimization algorithm: `random`, `grid`, or `optuna`. |
 | `--trials` | `int` | `20` | Number of iterations for `random` or `optuna` search. |
 | `--grid-points` | `int` | `5` | Points per parameter axis for `grid` search. |
