@@ -29,7 +29,7 @@ EVAL_RUNS="${3:-30}"
 
 OPTIMIZER="optimization/optimize.py"
 SIM_CONFIG="Simulation.toml"
-MC_CONFIG="MonteCarlo.toml"
+MC_CONFIG="MonteCarlo_all.toml"
 LOG_DIR="optimization/logs"
 
 STRATEGIES=(
