@@ -44,8 +44,8 @@ class ReceiverSDA:
         return self.bench.partner_position
 
     @property
-    def bench_slew_time(self) -> float:
-        return self.bench.bench_slew_time
+    def max_beam_speed(self) -> float:
+        return self.bench.max_beam_speed
 
     @property
     def nominal_boresight(self) -> Vec3:

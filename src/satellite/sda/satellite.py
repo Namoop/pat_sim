@@ -43,7 +43,8 @@ class Satellite:
             partner_position=partner_actual,
             bench_theta_offset=instance.bench_theta_offset,
             bench_phi_offset=instance.bench_phi_offset,
-            bench_slew_time=hw.bench_slew_time,
+            max_beam_speed=hw.max_beam_speed,
+            max_fsm_speed=hw.max_fsm_speed,
         )
         fsm = FastSteeringMirror()
         beam_length = default_beam_length(position, partner_actual, config.simulation)

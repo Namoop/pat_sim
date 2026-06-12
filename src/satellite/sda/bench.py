@@ -30,13 +30,15 @@ class OpticalBench:
         partner_position: Vec3,
         bench_theta_offset: float,
         bench_phi_offset: float,
-        bench_slew_time: float,
+        max_beam_speed: float,
+        max_fsm_speed: float,
     ) -> None:
         self.position = position
         self.partner_position = partner_position
         self.bench_theta_offset = bench_theta_offset
         self.bench_phi_offset = bench_phi_offset
-        self.bench_slew_time = bench_slew_time
+        self.max_beam_speed = max_beam_speed
+        self.max_fsm_speed = max_fsm_speed
 
         self.toward_partner = normalize(partner_position - position)
         self._initial_bench_boresight = direction_with_local_offset(
@@ -140,39 +142,37 @@ class OpticalBench:
             acq.incident_angle = angle_between(dish, toward_source)
             acq.track_target = normalize(source_position - self.position)
             acq.has_seen_beam = True
-            acq.fsm_locked = True
+            acq.fsm_locked = False  # Start slewing
             acq.slew_complete = False
             fsm.snap_to(self.bench_boresight, toward_source)
-            bench_incident = angle_between(self.bench_boresight, acq.track_target)
-            if self.bench_slew_time > 0.0:
-                acq.bench_slew_rate = bench_incident / self.bench_slew_time
-            else:
-                acq.bench_slew_rate = float("inf")
+            acq.bench_slew_rate = self.max_beam_speed
+            if self.max_beam_speed == 0.0:
                 self.bench_boresight = acq.track_target.copy()
                 self._invalidate_geometry_cache()
                 acq.slew_complete = True
             just_detected = True
 
-        if (
-            acq.has_seen_beam
-            and not just_detected
-            and not acq.slew_complete
-            and acq.track_target is not None
-        ):
-            max_step = (acq.bench_slew_rate or 0.0) * dq
-            remaining = angle_between(self.bench_boresight, acq.track_target)
-            self.bench_boresight = rotate_toward(
-                self.bench_boresight,
-                acq.track_target,
-                max_step,
-            )
-            self._invalidate_geometry_cache()
-            fsm.update_with_bench(self.bench_boresight)
-            if remaining <= max_step + 1e-12:
-                self.bench_boresight = acq.track_target.copy()
+        if acq.has_seen_beam and acq.track_target is not None:
+            # Update FSM slew every step
+            fsm.update(self.bench_boresight, dq, self.max_fsm_speed)
+            acq.fsm_locked = fsm.locked
+
+            if not just_detected and not acq.slew_complete:
+                max_step = (acq.bench_slew_rate or 0.0) * dq
+                remaining = angle_between(self.bench_boresight, acq.track_target)
+                self.bench_boresight = rotate_toward(
+                    self.bench_boresight,
+                    acq.track_target,
+                    max_step,
+                )
                 self._invalidate_geometry_cache()
-                acq.slew_complete = True
-            slewed = True
+                # Mirror already updated above, but we sync target
+                fsm.update_with_bench(self.bench_boresight)
+                if remaining <= max_step + 1e-12:
+                    self.bench_boresight = acq.track_target.copy()
+                    self._invalidate_geometry_cache()
+                    acq.slew_complete = True
+                slewed = True
 
         if acq.slew_complete and not was_complete:
             events.append("Slew complete")

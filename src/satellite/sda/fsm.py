@@ -39,12 +39,16 @@ class FastSteeringMirror:
         self.phi_offset = 0.0
         self.locked = False
         self.track_target: Vec3 | None = None
+        self._target_theta = 0.0
+        self._target_phi = 0.0
 
     def reset(self) -> None:
         self.theta_offset = 0.0
         self.phi_offset = 0.0
         self.locked = False
         self.track_target = None
+        self._target_theta = 0.0
+        self._target_phi = 0.0
 
     def effective_receive_boresight(self, bench_boresight: Vec3) -> Vec3:
         """Receive aim with FSM steering applied on top of bench boresight."""
@@ -62,18 +66,51 @@ class FastSteeringMirror:
         )
 
     def snap_to(self, bench_boresight: Vec3, toward_source: Vec3) -> None:
-        """Instantly steer FSM so receive path aligns with incoming direction."""
-        self.theta_offset, self.phi_offset = _offsets_to_target(
+        """Set FSM target so receive path aligns with incoming direction."""
+        self._target_theta, self._target_phi = _offsets_to_target(
             bench_boresight,
             toward_source,
         )
         self.track_target = toward_source.copy()
-        self.locked = True
+        # Mirror will reach target in update()
+
+    def update(self, bench_boresight: Vec3, dq: float, max_fsm_speed: float) -> None:
+        """Slew mirror toward target at max_fsm_speed."""
+        if self.track_target is None:
+            return
+
+        # Always recompute target offsets as bench moves
+        self._target_theta, self._target_phi = _offsets_to_target(
+            bench_boresight,
+            self.track_target,
+        )
+
+        if max_fsm_speed <= 0:
+            # Infinite speed fallback
+            self.theta_offset = self._target_theta
+            self.phi_offset = self._target_phi
+            self.locked = True
+            return
+
+        # Simple 2D slew in tangent plane (approximation of mirror DOF)
+        du = self._target_theta - self.theta_offset
+        dv = self._target_phi - self.phi_offset
+        dist = np.hypot(du, dv)
+        max_step = max_fsm_speed * dq
+
+        if dist <= max_step + 1e-12:
+            self.theta_offset = self._target_theta
+            self.phi_offset = self._target_phi
+            self.locked = True
+        else:
+            self.theta_offset += (du / dist) * max_step
+            self.phi_offset += (dv / dist) * max_step
+            self.locked = False
 
     def update_with_bench(self, bench_boresight: Vec3) -> None:
-        """Recompute FSM offset after bench slew; keeps effective RX on track_target."""
+        """Recompute FSM target after bench slew; mirror remains on track."""
         if self.track_target is not None:
-            self.theta_offset, self.phi_offset = _offsets_to_target(
+            self._target_theta, self._target_phi = _offsets_to_target(
                 bench_boresight,
                 self.track_target,
             )
