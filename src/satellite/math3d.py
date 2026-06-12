@@ -120,6 +120,15 @@ def distance(a: Vec3, b: Vec3) -> float:
 
 
 @njit(cache=True)
+def add_scaled_vector(v1: Vec3, v2: Vec3, scale: float) -> Vec3:
+    return np.array([
+        v1[0] + v2[0] * scale,
+        v1[1] + v2[1] * scale,
+        v1[2] + v2[2] * scale
+    ], dtype=np.float64)
+
+
+@njit(cache=True)
 def spherical_to_cartesian(theta: float, phi: float) -> Vec3:
     """Unit vector from polar angle theta and azimuth phi (Desmos convention)."""
     sin_theta = math.sin(theta)

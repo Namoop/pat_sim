@@ -53,7 +53,7 @@ class ReceiverSDA:
 
     @property
     def dish_boresight(self) -> Vec3:
-        return self.bench.geometry_snapshot(self.body_radius).dish_boresight
+        return self.bench.dish_boresight_inertial()
 
     @property
     def has_seen_beam(self) -> bool:
@@ -84,7 +84,7 @@ class ReceiverSDA:
 
     @property
     def dish_mount(self) -> Vec3:
-        return self.bench.geometry_snapshot(self.body_radius).mount
+        return self.bench.dish_mount(self.body_radius)
 
     def dish_mount_for_boresight(self, boresight: Vec3) -> Vec3:
         return self.bench.dish_mount_for_boresight(boresight, self.body_radius)

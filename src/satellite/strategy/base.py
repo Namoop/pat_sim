@@ -108,6 +108,9 @@ class StrategyResult:
     metadata: dict = field(default_factory=dict)
 
 
+_VALIDATED_SCRIPTS_CACHE: set[tuple[int, float, bool]] = set()
+
+
 class SearchStrategy(ABC):
     name: str
 
@@ -124,8 +127,17 @@ class SearchStrategy(ABC):
         from satellite.strategy.runner import FrameRunner
 
         script = self.build_script(ctx)
-        validate_movement_durations(ctx, script)
-        script.validate_slew_speed(ctx)
+        
+        # Avoid redundant validations
+        max_beam_speed = ctx.config.satellite.max_beam_speed
+        enforce_speed_limit = ctx.config.simulation.enforce_speed_limit
+        cache_key = (hash(script), max_beam_speed, enforce_speed_limit)
+        
+        if cache_key not in _VALIDATED_SCRIPTS_CACHE:
+            validate_movement_durations(ctx, script)
+            script.validate_slew_speed(ctx)
+            _VALIDATED_SCRIPTS_CACHE.add(cache_key)
+
         run = FrameRunner(ctx).execute(script, global_t_start=global_t_start)
         return StrategyResult(
             success=run.success,

@@ -7,7 +7,7 @@ from dataclasses import dataclass
 import numpy as np
 
 from satellite.geometry import direction_with_local_offset, transmitter_basis
-from satellite.math3d import Vec3, angle_between, normalize, rotate_toward, spherical_angles_from_direction
+from satellite.math3d import Vec3, angle_between, normalize, rotate_toward, spherical_angles_from_direction, add_scaled_vector
 from satellite.sda.acquisition import AcquisitionState
 from satellite.sda.fsm import FastSteeringMirror
 
@@ -50,10 +50,12 @@ class OpticalBench:
         self.acquisition = AcquisitionState()
         self._cache_valid = False
         self._cached_dish: Vec3 | None = None
+        self._cached_mount: Vec3 | None = None
 
     def _invalidate_geometry_cache(self) -> None:
         self._cache_valid = False
         self._cached_dish = None
+        self._cached_mount = None
 
     def reset_tracking(self) -> None:
         self.bench_boresight = self._initial_bench_boresight.copy()
@@ -106,11 +108,15 @@ class OpticalBench:
         return float(np.hypot(self.bench_theta_offset, self.bench_phi_offset))
 
     def dish_mount(self, body_radius: float) -> Vec3:
+        if self._cache_valid and self._cached_mount is not None:
+            return self._cached_mount
         dish = self.dish_boresight_inertial()
-        return self.position + dish * body_radius
+        mount = add_scaled_vector(self.position, dish, body_radius)
+        self._cached_mount = mount
+        return mount
 
     def dish_mount_for_boresight(self, boresight: Vec3, body_radius: float) -> Vec3:
-        return self.position + boresight * body_radius
+        return add_scaled_vector(self.position, boresight, body_radius)
 
     def observe_beam(
         self,

@@ -45,8 +45,37 @@ class SatelliteRuntime:
     receiver_enabled: bool = True
     next_hardware_index: int = 0
     current_movement_index: int | None = None
+    current_aim_step_index: int | None = None
     aim_ctx: AimContext | None = None
     acquisition_hold: bool = False
+
+    def movement_at(self, local_t: float) -> tuple[MovementStep, float]:
+        steps = self.timeline.movement_steps
+        if not steps:
+            raise RuntimeError(f"{self.timeline.name} timeline has no movement steps")
+        t = min(max(local_t, 0.0), self.timeline.total_duration)
+        
+        idx = self.current_movement_index or 0
+        if idx < len(steps):
+            step = steps[idx]
+            if step.start - 1e-9 <= t < step.end - 1e-9:
+                return step, t - step.start
+                
+        for i in range(idx, len(steps)):
+            step = steps[i]
+            if t < step.end - 1e-9:
+                self.current_movement_index = i
+                return step, t - step.start
+                
+        for i in range(len(steps)):
+            step = steps[i]
+            if t < step.end - 1e-9:
+                self.current_movement_index = i
+                return step, t - step.start
+                
+        last = steps[-1]
+        self.current_movement_index = len(steps) - 1
+        return last, last.duration
 
     def apply_hardware(self, local_t: float) -> list[str]:
         if self.acquisition_hold:
@@ -343,8 +372,8 @@ class FrameRunner:
             for event in acq_events:
                 if event == "Slew complete":
                     events.append(f"{sat.name} slew complete")
-            return sat.bench.bench_boresight.copy()
-        return sat.bench.bench_boresight.copy()
+            return sat.bench.bench_boresight
+        return sat.bench.bench_boresight
 
     def _apply_satellite(
         self,
@@ -359,13 +388,13 @@ class FrameRunner:
             aim = self._hold_or_track(sat, partner_position, t_step, events)
             return aim, events
 
-        step, step_t = runtime.timeline.movement_at(local_t)
+        step, step_t = runtime.movement_at(local_t)
         step_events = self._ensure_movement_context(sat, runtime, step)
         events.extend(step_events)
         assert runtime.aim_ctx is not None
         aim = step.movement.aim_at(step_t, step.duration, runtime.aim_ctx)
         sat.bench.set_bench_aim(aim)
-        return sat.bench.bench_boresight.copy(), events
+        return sat.bench.bench_boresight, events
 
     def _ensure_movement_context(
         self,
@@ -373,9 +402,9 @@ class FrameRunner:
         runtime: SatelliteRuntime,
         step: MovementStep,
     ) -> list[str]:
-        if runtime.current_movement_index == step.index:
+        if runtime.current_aim_step_index == step.index:
             return []
-        runtime.current_movement_index = step.index
+        runtime.current_aim_step_index = step.index
         runtime.aim_ctx = build_aim_context(
             sat,
             reset=isinstance(step.movement, Reset),
