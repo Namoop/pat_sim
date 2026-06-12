@@ -163,6 +163,7 @@ class StrategyScript:
                             errors.append(msg)
                             if enforce:
                                 raise ValueError(msg)
+                            print(f"WARNING: {msg}")
                             break  # record once per step, then move on
                         last_aim = curr_aim
 
