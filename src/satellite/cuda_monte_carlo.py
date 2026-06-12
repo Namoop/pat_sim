@@ -895,7 +895,7 @@ def run_monte_carlo_cuda(mc: MonteCarloConfig) -> MonteCarloSummary:
                 p = [mv.w, mv.k, mv.max_radius, mv.speed]
             elif isinstance(mv, SerpentineRaster):
                 t_type = 3
-                p = [mv.radius, float(mv.steps), 1.0 if mv.horizontal else 0.0, 1.0 if mv.serpentine else 0.0]
+                p = [mv.radius, float(mv.steps), 1.0 if mv.horizontal else 0.0, 1.0]
             elif isinstance(mv, Rosette):
                 t_type = 4
                 p = [mv.A, mv.w1, mv.w2, 0.0]
@@ -918,7 +918,7 @@ def run_monte_carlo_cuda(mc: MonteCarloConfig) -> MonteCarloSummary:
                 p = [mv.w, mv.k, mv.max_radius, mv.speed]
             elif isinstance(mv, SerpentineRaster):
                 t_type = 3
-                p = [mv.radius, float(mv.steps), 1.0 if mv.horizontal else 0.0, 1.0 if mv.serpentine else 0.0]
+                p = [mv.radius, float(mv.steps), 1.0 if mv.horizontal else 0.0, 1.0]
             elif isinstance(mv, Rosette):
                 t_type = 4
                 p = [mv.A, mv.w1, mv.w2, 0.0]
