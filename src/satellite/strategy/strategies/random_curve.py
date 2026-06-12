@@ -21,6 +21,7 @@ class RandomCurveConfig:
     velocity_a: float = 0.01
     velocity_ratio: float = 1.41421356
     drift_sigma: float = 0.1
+    max_turn_radius: float = 0.5
     seed: int = 42
 
 
@@ -29,6 +30,7 @@ def parse_random_curve_config(data: dict) -> RandomCurveConfig:
         velocity_a=float(data.get("velocity_a", data.get("velocity", 0.01))),
         velocity_ratio=float(data.get("velocity_ratio", 1.41421356)),
         drift_sigma=float(data.get("drift_sigma", 0.1)),
+        max_turn_radius=float(data.get("max_turn_radius", 0.5)),
         seed=int(data.get("seed", 42)),
     )
 
@@ -37,23 +39,30 @@ def parse_random_curve_config(data: dict) -> RandomCurveConfig:
 class RandomCurvePattern(MovementPattern):
     velocity: float
     drift_sigma: float
+    max_turn_radius: float
     seed: int
     radius_limit: float
     dt_sim: float = 0.01  # Simulation step for internal integration
 
     def aim_at(self, local_t: float, duration: float, ctx: AimContext) -> Vec3:
-        # Stateless-ish integration (seeded by seed)
-        # For a real implementation, we might want a more efficient noise function
         rng = random.Random(self.seed)
         
         curr_u, curr_v = 0.0, 0.0
         heading = rng.uniform(0, 2 * math.pi)
+        current_dir = 0.0  # steering wheel angle
         
         # Simple integration up to local_t
         t = 0.0
         while t < local_t:
             step = min(self.dt_sim, local_t - t)
-            heading += rng.gauss(0, self.drift_sigma) * math.sqrt(step)
+            # Drift the steering wheel angle
+            current_dir += rng.gauss(0, self.drift_sigma) * math.sqrt(step)
+            # Clamp to max_turn_radius
+            current_dir = max(-self.max_turn_radius, min(self.max_turn_radius, current_dir))
+            
+            # Heading changes at a rate proportional to steering wheel angle (current_dir)
+            heading += current_dir * step
+            
             curr_u += self.velocity * math.cos(heading) * step
             curr_v += self.velocity * math.sin(heading) * step
             
@@ -63,6 +72,8 @@ class RandomCurvePattern(MovementPattern):
                 # Reflect heading back toward center
                 angle_to_center = math.atan2(-curr_v, -curr_u)
                 heading = angle_to_center + rng.uniform(-math.pi/4, math.pi/4)
+                # Reset steering wheel to point straight / turn back
+                current_dir = 0.0
                 # Snap back
                 curr_u *= self.radius_limit / dist
                 curr_v *= self.radius_limit / dist
@@ -93,6 +104,7 @@ class RandomCurveStrategy(SearchStrategy):
                 RandomCurvePattern(
                     velocity=velocity_a,
                     drift_sigma=self.config.drift_sigma,
+                    max_turn_radius=self.config.max_turn_radius,
                     seed=self.config.seed,
                     radius_limit=max_radius
                 ),
@@ -105,6 +117,7 @@ class RandomCurveStrategy(SearchStrategy):
                 RandomCurvePattern(
                     velocity=velocity_b,
                     drift_sigma=self.config.drift_sigma,
+                    max_turn_radius=self.config.max_turn_radius,
                     seed=self.config.seed + 1,
                     radius_limit=max_radius
                 ),
