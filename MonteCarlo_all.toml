@@ -10,15 +10,10 @@ seed = 42
 #runs = 10
 #chain = ["dual_raster"]
 
-# no idea whats going on but this is bad
+# so slow...
 #[[monte_carlo.chains]]
 #runs = 10
-#chain = ["hex_scan"]
-
-# so slow...
-[[monte_carlo.chains]]
-runs = 10
-chain = ["lissajous_scan"]
+#chain = ["lissajous_scan"]
 
 #[[monte_carlo.chains]]
 #runs = 10
@@ -34,9 +29,9 @@ chain = ["lissajous_scan"]
 #runs = 10
 #chain = ["concentric_shells"]
 
-#[[monte_carlo.chains]]
-#runs = 10
-#chain = ["random_walk"]
+[[monte_carlo.chains]]
+runs = 10
+chain = ["random_walk"]
 
 #[[monte_carlo.chains]]
 #runs = 10

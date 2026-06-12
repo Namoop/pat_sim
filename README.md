@@ -124,7 +124,6 @@ chain = ["asymmetric_swap"]
 | `asymmetric_swap` | S1 probes with RX off and resets, swap roles to establish reciprocal lock |
 | `dual_spiral` | Both satellites execute spirals simultaneously |
 | `dual_raster` | Satellites perform orthogonal raster scans (one horizontal, one vertical) |
-| `hex_scan` | Discrete hexagonal grid point-to-point scanning |
 | `lissajous_scan` | Continuous Lissajous figure scan |
 | `rosette_scan` | Rosette-pattern scan from center boresight |
 | `center_rebias` | Stochastic search with periodic center resets |

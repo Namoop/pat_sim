@@ -17,7 +17,6 @@ from tests.conftest import base_config
         "asymmetric_swap",
         "dual_spiral",
         "dual_raster",
-        "hex_scan",
         "lissajous_scan",
         "rosette_scan",
         "center_rebias",

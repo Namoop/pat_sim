@@ -251,36 +251,7 @@ raster_vertical(radius=max_search_radius, steps=steps_b, serpentine=True)
 
 ---
 
-## 6. Hexagonal Grid Scan (`hex_scan`)
-
-### Description
-
-The **Hexagonal Grid Scan** is a discrete search pattern where the beam visits points on a hexagonal lattice. Because circular beams pack most efficiently in a hexagonal arrangement, this pattern provides complete coverage of the `max_search_radius` with less beam overlap (and thus fewer steps) than a square grid.
-
-The pattern expands in concentric "rings" of hexagons from the center outward.
-
-### Configuration Parameters
-
-
-| Parameter       | Description                                                                          |
-| --------------- | ------------------------------------------------------------------------------------ |
-| `step_size`     | Distance between adjacent points (radians). Typically $1.5 \times \text{beamwidth}$. |
-| `step_duration` | Time spent at each point (seconds).                                                  |
-
-
-### Action Script (Pseudocode)
-
-**Satellite S1:**
-
-```python
-for point in hex_lattice(radius=max_search_radius, step=step_size):
-    move_to(point)
-    hold(duration=step_duration)
-```
-
----
-
-## 7. Lissajous Scan (`lissajous_scan`)
+## 6. Lissajous Scan (`lissajous_scan`)
 
 ### Description
 
@@ -313,7 +284,7 @@ lissajous(A=max_search_radius, wx=wx, wy=wy, delta=delta, duration=duration)
 
 ---
 
-## 8. Rosette Scan (`rosette_scan`)
+## 7. Rosette Scan (`rosette_scan`)
 
 ### Description
 
@@ -353,7 +324,7 @@ rosette(A=max_search_radius, w1=s2_w1, w2=s2_w2, duration=duration)
 
 ---
 
-## 9. Stochastic Center Re-bias (`center_rebias`)
+## 8. Stochastic Center Re-bias (`center_rebias`)
 
 ### Description
 
@@ -371,7 +342,7 @@ This is a **Center-Heavy** stochastic strategy. It performs a Random Walk, but w
 
 ---
 
-## 10. Concentric Shell Search (`concentric_shells`)
+## 9. Concentric Shell Search (`concentric_shells`)
 
 ### Description
 
@@ -385,7 +356,7 @@ This ensures the "hot" center is cleared repeatedly while progressively searchin
 
 ---
 
-## 11. Random Walk (`random_walk`)
+## 10. Random Walk (`random_walk`)
 
 ### Description
 
@@ -402,7 +373,7 @@ The **Random Walk** strategy is a stochastic search method. At discrete time int
 
 ---
 
-## 12. Random Curve (`random_curve`)
+## 11. Random Curve (`random_curve`)
 
 ### Description
 
@@ -419,7 +390,7 @@ The **Random Curve** strategy is a continuous stochastic search. The boresight m
 
 ---
 
-## 13. Nested Spiral (`nested_spiral`)
+## 12. Nested Spiral (`nested_spiral`)
 
 ### Description
 
@@ -439,7 +410,7 @@ The **Nested Spiral** is a high-confidence, "brute-force" strategy for scenarios
 
 ---
 
-## 14. Golden Angle Spiral (`golden_angle_spiral`)
+## 13. Golden Angle Spiral (`golden_angle_spiral`)
 
 ### Description
 
@@ -451,7 +422,7 @@ $\theta_n = n \cdot 137.508^\circ$
 
 ---
 
-## 15. Metadata/Strategy Chain (Runner Logic)
+## 14. Metadata/Strategy Chain (Runner Logic)
 
 The simulation supports **Strategy Chaining**. If the first strategy fails to achieve a lock, the simulation automatically escalates to the next strategy in the chain.
 
@@ -470,7 +441,6 @@ The simulation supports **Strategy Chaining**. If the first strategy fails to ac
 - Implement new strategies:
   - `dual_spiral`
   - `dual_raster` (serpentine)
-  - `hex_scan`
   - `lissajous_scan`
   - `rosette_scan`
   - `center_rebias`
