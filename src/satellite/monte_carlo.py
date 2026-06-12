@@ -2,6 +2,10 @@
 
 from __future__ import annotations
 
+import concurrent.futures
+import math
+import multiprocessing
+import sys
 import time
 from dataclasses import dataclass
 
@@ -113,12 +117,13 @@ def format_monte_carlo_run_complete(
 def run_monte_carlo_single(
     mc: MonteCarloConfig,
     sim,
-    rng: np.random.Generator,
+    seed: int,
     run_index: int,
     *,
     report: bool = False,
     total_runs: int | None = None,
 ) -> MonteCarloRunResult:
+    rng = np.random.default_rng(seed)
     s1_off, s2_off = sample_offsets(mc.error, rng)
     if report:
         if total_runs is None:
@@ -207,20 +212,93 @@ def _build_monte_carlo_summary(
     )
 
 
-def run_monte_carlo(mc: MonteCarloConfig) -> MonteCarloSummary:
+def _print_progress_bar(
+    completed: int,
+    total: int,
+    successes: int,
+    *,
+    width: int = 40,
+    finished: bool = False,
+) -> None:
+    fraction = completed / total if total > 0 else 0.0
+    filled = int(width * fraction)
+    bar = "#" * filled + " " * (width - filled)
+    percent = 100.0 * fraction
+    failures = completed - successes
+    line = (
+        f"[{bar}] {completed}/{total} ({percent:.1f}%) - "
+        f"Success: {successes} | Failed: {failures}"
+    )
+    if finished:
+        sys.stdout.write(f"\r{line}\n")
+    else:
+        sys.stdout.write(f"\r{line}")
+    sys.stdout.flush()
+
+
+def run_monte_carlo(
+    mc: MonteCarloConfig,
+    max_workers: int | None = None,
+) -> MonteCarloSummary:
     sim = load_simulation_config(mc.simulation_path)
-    rng = np.random.default_rng(mc.seed)
+    # Generate independent seeds for each run
+    master_rng = np.random.default_rng(mc.seed)
+    seeds = master_rng.integers(0, 2**32 - 1, size=mc.runs).tolist()
+
     run_results: list[MonteCarloRunResult] = []
     interrupted = False
+    successes = 0
+
+    # Number of workers (leave 1 core free for system if many cores)
+    if max_workers is None:
+        max_workers = max(1, multiprocessing.cpu_count() - 1)
 
     try:
-        for run_index in range(mc.runs):
-            run_result = run_monte_carlo_single(
-                mc, sim, rng, run_index, report=True, total_runs=mc.runs
-            )
-            run_results.append(run_result)
+        if max_workers > 1:
+            with concurrent.futures.ProcessPoolExecutor(
+                max_workers=max_workers
+            ) as executor:
+                future_to_index = {
+                    executor.submit(
+                        run_monte_carlo_single,
+                        mc,
+                        sim,
+                        seeds[i],
+                        i,
+                        report=False,
+                    ): i
+                    for i in range(mc.runs)
+                }
+
+                _print_progress_bar(0, mc.runs, 0)
+
+                for future in concurrent.futures.as_completed(future_to_index):
+                    try:
+                        res = future.result()
+                        run_results.append(res)
+                        if res.result.success:
+                            successes += 1
+                        _print_progress_bar(len(run_results), mc.runs, successes)
+                    except Exception as e:
+                        print(f"\nRun failed with error: {e}", file=sys.stderr)
+        else:
+            # Serial execution (max_workers=1)
+            _print_progress_bar(0, mc.runs, 0)
+            for i in range(mc.runs):
+                res = run_monte_carlo_single(
+                    mc, sim, seeds[i], i, report=False
+                )
+                run_results.append(res)
+                if res.result.success:
+                    successes += 1
+                _print_progress_bar(len(run_results), mc.runs, successes)
+
+        _print_progress_bar(len(run_results), mc.runs, successes, finished=True)
+
     except KeyboardInterrupt:
         interrupted = True
+        print("\nInterrupted. Cleaning up workers...", file=sys.stderr)
+        # ProcessPoolExecutor shutdown handles cleanup
 
     return _build_monte_carlo_summary(mc, run_results, interrupted=interrupted)
 

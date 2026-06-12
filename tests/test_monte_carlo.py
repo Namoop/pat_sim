@@ -65,7 +65,7 @@ def test_build_scenario_config_x_axis_positions():
 def test_monte_carlo_success_biased_fixture():
     mc = load_monte_carlo_config(FIXTURES / "MonteCarlo_success.toml")
     mc = replace(mc, simulation_path=(REPO_ROOT / "Simulation.toml").resolve())
-    summary = run_monte_carlo(mc)
+    summary = run_monte_carlo(mc, max_workers=1)
     assert summary.runs == 15
     assert summary.success_rate >= 0.8
 
@@ -73,7 +73,7 @@ def test_monte_carlo_success_biased_fixture():
 def test_monte_carlo_failure_biased_fixture():
     mc = load_monte_carlo_config(FIXTURES / "MonteCarlo_fail.toml")
     mc = replace(mc, simulation_path=(REPO_ROOT / "Simulation.toml").resolve())
-    summary = run_monte_carlo(mc)
+    summary = run_monte_carlo(mc, max_workers=1)
     assert summary.runs == 8
     assert summary.successes == 0
 
@@ -153,7 +153,7 @@ def test_monte_carlo_graceful_interrupt(monkeypatch):
         "satellite.monte_carlo.run_monte_carlo_single",
         interrupt_after_first,
     )
-    summary = run_monte_carlo(mc)
+    summary = run_monte_carlo(mc, max_workers=1)
     assert summary.interrupted is True
     assert summary.runs == 1
     assert summary.planned_runs == 5
