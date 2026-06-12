@@ -63,6 +63,8 @@ PARAMETER_SPACES = {
     "dual_raster": {
         "steps_a": ("int", 5, 100),
         "steps_b": ("int", 5, 100),
+        "speed_a": ("float", 0.1, 5.0),
+        "speed_ratio": ("float", 1.0, 3.0),
     },
     "concentric_shells": {
         "spiral_speed_a": ("float", 0.1, 5.0),

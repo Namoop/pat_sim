@@ -2,9 +2,9 @@
 simulation = "Simulation.toml"
 seed = 42
 
-#[[monte_carlo.chains]]
-#runs = 10
-#chain = ["dual_spiral"]
+[[monte_carlo.chains]]
+runs = 10
+chain = ["dual_spiral"]
 
 #[[monte_carlo.chains]]
 #runs = 10
@@ -29,9 +29,9 @@ seed = 42
 #runs = 10
 #chain = ["concentric_shells"]
 
-[[monte_carlo.chains]]
-runs = 10
-chain = ["random_walk"]
+#[[monte_carlo.chains]]
+#runs = 10
+#chain = ["random_walk"]
 
 #[[monte_carlo.chains]]
 #runs = 10
@@ -52,8 +52,8 @@ phi_std = 0.02
 k = 10.0
 
 [strategy.dual_spiral]
-speed_a = 1.0
-speed_ratio = 1.41421356
+speed_a = 4.990651
+speed_ratio = 1.883651
 
 [strategy.dual_raster]
 speed_a = 1.0
