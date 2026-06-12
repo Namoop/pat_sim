@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING
 
 from satellite.config import ScenarioConfig, default_beam_length
 from satellite.detection import beam_hits_dish
+from satellite.detection_fast import beam_hits_dish_fast
 from satellite.math3d import Vec3
 from satellite.strategy.actions import StrategyScript, validate_movement_durations
 
@@ -121,15 +122,18 @@ def link_established(
     beam_axis: Vec3,
     config: ScenarioConfig,
 ) -> bool:
-    geom = rx_sat.receiver.geometry_snapshot()
-    alpha = config.satellite.alpha
-    beam_length = beam_length_for(tx_sat, config)
-    return beam_hits_dish(
+    # Optimization: Use pre-calculated cosines and bypass geometry snapshot
+    dish_boresight = rx_sat.bench.dish_boresight_inertial()
+    mount = rx_sat.bench.dish_mount_for_boresight(
+        dish_boresight, rx_sat.receiver.body_radius
+    )
+
+    return beam_hits_dish_fast(
         tx_sat.position,
-        geom.mount,
-        geom.dish_boresight,
-        rx_sat.receiver.dish_fov,
+        mount,
+        dish_boresight,
+        rx_sat.receiver.cos_dish_fov,
         beam_axis,
-        alpha,
-        beam_length,
+        tx_sat.cos_alpha,
+        tx_sat.beam_length,
     )

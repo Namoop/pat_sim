@@ -4,9 +4,13 @@ from __future__ import annotations
 
 import math
 
+import numpy as np
+
 from satellite.geometry import (
-    global_spiral_frame,
+    local_spiral_angles,
     spherical_angles_from_direction,
+    spherical_to_cartesian,
+    transform_local_to_global,
     transmitter_basis,
 )
 from satellite.math3d import Vec3, normalize
@@ -30,12 +34,34 @@ def spiral_aim_at(
 ) -> Vec3:
     """Archimedean spiral aim; angular radius grows as w·u, capped at max_radius."""
     if w <= 0.0:
-        return normalize(u_z)
+        # Use a copy to avoid mutating the basis vector
+        return u_z.copy()
     u = speed * local_t
     if w * u > max_radius:
         u = max_radius / w
-    a_s, _, _ = global_spiral_frame(u, w, k, u_x, u_y, u_z)
-    return normalize(a_s)
+    
+    # Optimization: Calculate only the aim vector (A_l) as pure floats
+    theta_l, phi_l = w * u, k * u
+    
+    # spherical_to_cartesian unrolled
+    sin_theta = math.sin(theta_l)
+    cos_theta = math.cos(theta_l)
+    sin_phi = math.sin(phi_l)
+    cos_phi = math.cos(phi_l)
+    
+    al0 = sin_theta * cos_phi
+    al1 = sin_theta * sin_phi
+    al2 = cos_theta
+    
+    # transform_local_to_global unrolled
+    # result = al0 * u_x + al1 * u_y + al2 * u_z
+    asx = al0 * u_x[0] + al1 * u_y[0] + al2 * u_z[0]
+    asy = al0 * u_x[1] + al1 * u_y[1] + al2 * u_z[1]
+    asz = al0 * u_x[2] + al1 * u_y[2] + al2 * u_z[2]
+    
+    # normalize unrolled
+    norm = math.sqrt(asx * asx + asy * asy + asz * asz)
+    return np.array([asx / norm, asy / norm, asz / norm], dtype=np.float64)
 
 
 def circle_aim_at(
