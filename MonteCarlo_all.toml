@@ -2,12 +2,12 @@
 simulation = "Simulation.toml"
 seed = 42
 
+# general: they should keep trying until success
 
 #[[monte_carlo.chains]]
 #runs = 10
 #chain = ["dual_spiral"]
 
-# teleports to reset
 #[[monte_carlo.chains]]
 #runs = 10
 #chain = ["dual_raster"]
@@ -17,10 +17,9 @@ seed = 42
 #runs = 10
 #chain = ["hex_scan"]
 
-# needs separate parameters
-#[[monte_carlo.chains]]
-#runs = 10
-#chain = ["lissajous_scan"]
+[[monte_carlo.chains]]
+runs = 10
+chain = ["lissajous_scan"]
 
 [[monte_carlo.chains]]
 runs = 10
@@ -70,9 +69,12 @@ speed_a = 1.0
 speed_ratio = 1.41421356
 
 [strategy.lissajous_scan]
-wx = 1.0
-wy = 1.41421356
-delta = 0.0
+s1_wx = 1.0
+s1_wy = 1.41421356
+s1_delta = 0.0
+s2_wx = 1.61803399
+s2_wy = 2.28824561
+s2_delta = 0.5
 
 [strategy.rosette_scan]
 s1_w1 = 1.0
