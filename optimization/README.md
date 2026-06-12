@@ -30,6 +30,30 @@ The script supports three search methods:
 - **Random Search (`random`)**: Randomly samples parameters from predefined uniform bounds. Surprisingly robust for higher-dimensional spaces.
 - **Bayesian Optimization (`optuna`)**: Uses **Optuna**'s Tree-structured Parzen Estimator (TPE) to build a surrogate model of the objective function, predicting which parameters will perform best. Highly recommended for multi-parameter strategies.
 
+### 4. Physical Speed Validation
+
+Every candidate parameter set is checked analytically against the hardware `max_beam_speed` limit **before** any simulation is run.
+
+If the estimated peak beam angular speed would exceed the limit, the candidate is **resampled immediately** — a replacement candidate is drawn and the trial counter does not advance.  The optimizer always delivers exactly the number of valid evaluated trials you requested.
+
+For **grid search** there is no sampling budget, so out-of-range grid points are simply skipped and noted in the summary.
+
+For **Optuna**, pruned (unphysical) trials are still reported to the study so the surrogate model learns to avoid that region of parameter space, but they do not count toward the trial budget.
+
+This prevents the optimiser from wasting CPU time on parameter combinations that the hardware cannot physically execute, and avoids `ValueError` exceptions propagating up from the strategies.
+
+**Speed estimators by strategy:**
+
+| Strategy | Peak speed formula |
+|---|---|
+| `dual_spiral`, `concentric_shells` | `speed × √(w² + (k·sin(R))²)` at `R = max_search_radius` |
+| `dual_raster` | `2·R·steps·speed / 10` (widest raster chord) |
+| `lissajous_scan` | `A·√(wx² + wy²)` where `A = R/√2` |
+| `rosette_scan` | `A·(w1 + w2)` |
+| `random_curve`, `center_rebias` | `velocity_a × velocity_ratio` (faster satellite) |
+
+A preflight check also runs at startup and will abort with a clear error message if even the **minimum-bound** parameters across the entire search space exceed the limit — saving you from a run where every single trial is rejected.
+
 ---
 
 ## Pre-requisites & Setup
