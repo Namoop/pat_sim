@@ -15,20 +15,15 @@ k = 10.0
 chain = ["minor_offset", "single_miss"]
 
 [strategy.minor_offset]
-duration = 1.26
 max_spiral_radius = "fov"
 spiral_speed = 1.0
 
 [strategy.single_miss]
-phase1_duration = 3.15
 a_spiral_radius = 0.05
-reset_duration = 0.3
-phase2_duration = 3.15
 b_spiral_radius = 0.05
 spiral_speed = 1.0
 
-[strategy.asymmetric_probe]
-probe_duration = 3.15
+[strategy.asymmetric_swap]
 spiral_radius = 0.05
+lock_duration = 1.0
 spiral_speed = 1.0
-reset_duration = 0.3

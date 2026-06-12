@@ -4,18 +4,18 @@
 from __future__ import annotations
 
 from satellite.config import (
-    AsymmetricProbeStrategyConfig,
     MapVisualizationConfig,
-    MinorOffsetStrategyConfig,
     SatelliteInstanceConfig,
     ScenarioConfig,
     SharedSatelliteConfig,
     SimulationConfig,
-    SingleMissStrategyConfig,
     StrategyConfig,
     VisualizationConfig,
 )
 from satellite.math3d import as_vec3
+from satellite.strategy.strategies.asymmetric_swap import AsymmetricSwapConfig
+from satellite.strategy.strategies.minor_offset import MinorOffsetConfig
+from satellite.strategy.strategies.single_miss import SingleMissConfig
 
 
 def base_config(
@@ -24,9 +24,7 @@ def base_config(
     s1_phi: float = 0.001,
     s2_theta: float = 0.001,
     s2_phi: float = 0.001,
-    step_duration: float = 5.0,
     chain: tuple[str, ...] = ("minor_offset", "single_miss"),
-    reset_duration: float = 0.3,
 ) -> ScenarioConfig:
     return ScenarioConfig(
         name="test",
@@ -43,8 +41,8 @@ def base_config(
         satellite=SharedSatelliteConfig(
             body_radius=0.5,
             dish_fov=0.02,
-            bench_slew_time=0.3,
-            fsm_settle_time=0.0,
+            max_beam_speed=0.087,
+            max_fsm_speed=1.0,
             beam_width_mrad=5.0,
         ),
         simulation=SimulationConfig(
@@ -52,6 +50,7 @@ def base_config(
             t_step=0.01,
             beam_length=None,
             boresight_extension=5.0,
+            max_search_radius=0.07,
             profile_replay=False,
         ),
         visualization=VisualizationConfig(
@@ -70,24 +69,21 @@ def base_config(
         strategy=StrategyConfig(
             k=10.0,
             chain=chain,
-            minor_offset=MinorOffsetStrategyConfig(
-                duration=step_duration,
-                max_spiral_radius="fov",
-                spiral_speed=1.0,
-            ),
-            single_miss=SingleMissStrategyConfig(
-                phase1_duration=step_duration,
-                a_spiral_radius=0.05,
-                reset_duration=reset_duration,
-                phase2_duration=step_duration,
-                b_spiral_radius=0.05,
-                spiral_speed=1.0,
-            ),
-            asymmetric_probe=AsymmetricProbeStrategyConfig(
-                probe_duration=step_duration,
-                spiral_radius=0.05,
-                spiral_speed=1.0,
-                reset_duration=reset_duration,
-            ),
+            params={
+                "minor_offset": MinorOffsetConfig(
+                    max_spiral_radius="fov",
+                    spiral_speed=1.0,
+                ),
+                "single_miss": SingleMissConfig(
+                    a_spiral_radius=0.05,
+                    b_spiral_radius=0.05,
+                    spiral_speed=1.0,
+                ),
+                "asymmetric_swap": AsymmetricSwapConfig(
+                    spiral_radius=0.05,
+                    lock_duration=1.0,
+                    spiral_speed=1.0,
+                ),
+            },
         ),
     )

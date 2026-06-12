@@ -9,7 +9,7 @@ from tests.conftest import base_config
 
 
 def test_map_panel_hides_beam_and_fov_when_disabled():
-    cfg = base_config(chain=("asymmetric_probe",), step_duration=1.0)
+    cfg = base_config(chain=("asymmetric_swap",))
     result = run_scenario(cfg)
     s1 = build_panel(result, "S1", 0.0)
     s2 = build_panel(result, "S2", 0.0)

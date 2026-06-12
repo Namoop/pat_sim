@@ -107,15 +107,20 @@ def test_same_time_hardware_toggles():
 
 
 def test_validate_slew_speed_invoked_from_try_run():
-    from satellite.strategy.strategies.minor_offset import MinorOffsetStrategy
+    from satellite.strategy.strategies.minor_offset import (
+        MinorOffsetConfig,
+        MinorOffsetStrategy,
+    )
 
     ctx = _ctx()
     strat = MinorOffsetStrategy(
-        duration=1.0,
-        max_spiral_radius=0.02,
-        spiral_speed=1.0,
+        config=MinorOffsetConfig(
+            max_spiral_radius=0.02,
+            spiral_speed=1.0,
+        ),
         w=10.0,
         k=10.0,
     )
     result = strat.try_run(ctx, global_t_start=0.0)
-    assert result.elapsed_t == pytest.approx(1.0)
+    # T = R / (w * speed) = 0.02 / (10.0 * 1.0) = 0.002
+    assert result.elapsed_t == pytest.approx(0.002)

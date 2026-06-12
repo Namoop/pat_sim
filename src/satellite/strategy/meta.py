@@ -4,16 +4,16 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from satellite.config import ScenarioConfig, StrategyConfig
+from satellite.config import ScenarioConfig
 from satellite.strategy.actions import StrategyScript
-from satellite.strategy.base import SearchStrategy, StrategyContext, StrategyResult
-from satellite.strategy.schedule import LegSchedule, compile_trace
-from satellite.strategy.strategies import (
-    AsymmetricProbeStrategy,
-    ComprehensiveStrategy,
-    MinorOffsetStrategy,
-    SingleMissStrategy,
+from satellite.strategy.base import (
+    STRATEGY_REGISTRY,
+    SearchStrategy,
+    StrategyContext,
+    StrategyResult,
 )
+from satellite.strategy.schedule import LegSchedule, compile_trace
+import satellite.strategy.strategies  # Ensure registration
 
 
 @dataclass
@@ -36,56 +36,20 @@ class MetaStrategy:
     @classmethod
     def from_config(cls, config: ScenarioConfig) -> MetaStrategy:
         sc = config.strategy
-        w = sc.spiral_w(config.satellite)
-        k = sc.k
-        dish_fov = config.satellite.dish_fov
+        chain = []
 
-        registry: dict[str, SearchStrategy] = {
-            "minor_offset": MinorOffsetStrategy(
-                duration=sc.minor_offset.duration,
-                max_spiral_radius=StrategyConfig.resolve_radius(
-                    sc.minor_offset.max_spiral_radius,
-                    dish_fov,
-                ),
-                spiral_speed=sc.minor_offset.spiral_speed,
-                w=w,
-                k=k,
-            ),
-            "single_miss": SingleMissStrategy(
-                phase1_duration=sc.single_miss.phase1_duration,
-                a_spiral_radius=StrategyConfig.resolve_radius(
-                    sc.single_miss.a_spiral_radius,
-                    dish_fov,
-                ),
-                reset_duration=sc.single_miss.reset_duration,
-                phase2_duration=sc.single_miss.phase2_duration,
-                b_spiral_radius=StrategyConfig.resolve_radius(
-                    sc.single_miss.b_spiral_radius,
-                    dish_fov,
-                ),
-                spiral_speed=sc.single_miss.spiral_speed,
-                w=w,
-                k=k,
-            ),
-            "asymmetric_probe": AsymmetricProbeStrategy(
-                probe_duration=sc.asymmetric_probe.probe_duration,
-                spiral_radius=StrategyConfig.resolve_radius(
-                    sc.asymmetric_probe.spiral_radius,
-                    dish_fov,
-                ),
-                spiral_speed=sc.asymmetric_probe.spiral_speed,
-                reset_duration=sc.asymmetric_probe.reset_duration,
-                w=w,
-                k=k,
-            ),
-            "comprehensive": ComprehensiveStrategy(),
-        }
+        for name in sc.chain:
+            if name in STRATEGY_REGISTRY:
+                strat_cls = STRATEGY_REGISTRY[name]
+                chain.append(strat_cls.from_config(config))
+            elif name == "comprehensive":
+                # Special case or stub
+                from satellite.strategy.strategies.comprehensive import (
+                    ComprehensiveStrategy,
+                )
 
-        chain = [
-            registry[name]
-            for name in sc.chain
-            if name in registry
-        ]
+                chain.append(ComprehensiveStrategy())
+
         return cls(chain)
 
     def run(self, ctx: StrategyContext) -> MetaStrategyResult:

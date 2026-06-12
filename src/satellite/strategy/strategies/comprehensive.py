@@ -2,19 +2,35 @@
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 from satellite.strategy.actions import hold, strategy
-from satellite.strategy.base import SearchStrategy, StrategyContext, StrategyResult
+from satellite.strategy.base import (
+    SearchStrategy,
+    StrategyContext,
+    StrategyResult,
+    register_strategy,
+)
+
+if TYPE_CHECKING:
+    from satellite.config import ScenarioConfig
 
 
+@register_strategy("comprehensive")
 class ComprehensiveStrategy(SearchStrategy):
-    name = "comprehensive"
+    @classmethod
+    def from_config(cls, config: ScenarioConfig) -> ComprehensiveStrategy:
+        return cls()
 
     def build_script(self, ctx: StrategyContext):
+        # Placeholder duration
+        duration = max(ctx.config.simulation.t_step, 0.1)
+
         script = strategy(self.name)
         with script.satellite("S1"):
-            hold(duration=max(ctx.t_step, 1e-9))
+            hold(duration=duration)
         with script.satellite("S2"):
-            hold(duration=max(ctx.t_step, 1e-9))
+            hold(duration=duration)
         return script.build()
 
     def try_run(self, ctx: StrategyContext, global_t_start: float) -> StrategyResult:

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, Callable, TypeVar
 
 from satellite.config import ScenarioConfig, default_beam_length
 from satellite.detection import beam_hits_dish
@@ -14,6 +14,26 @@ from satellite.strategy.actions import StrategyScript, validate_movement_duratio
 
 if TYPE_CHECKING:
     from satellite.sda.satellite import Satellite
+
+T = TypeVar("T", bound="SearchStrategy")
+ConfigParser = Callable[[dict[str, Any]], Any]
+
+STRATEGY_REGISTRY: dict[str, type[SearchStrategy]] = {}
+CONFIG_PARSERS: dict[str, ConfigParser] = {}
+
+
+def register_strategy(
+    name: str,
+    parser: ConfigParser | None = None,
+) -> Callable[[type[T]], type[T]]:
+    def wrapper(cls: type[T]) -> type[T]:
+        cls.name = name
+        STRATEGY_REGISTRY[name] = cls
+        if parser is not None:
+            CONFIG_PARSERS[name] = parser
+        return cls
+
+    return wrapper
 
 
 @dataclass
@@ -90,6 +110,11 @@ class StrategyResult:
 
 class SearchStrategy(ABC):
     name: str
+
+    @classmethod
+    @abstractmethod
+    def from_config(cls, config: ScenarioConfig) -> SearchStrategy:
+        """Instantiate from scenario configuration."""
 
     @abstractmethod
     def build_script(self, ctx: StrategyContext) -> StrategyScript:

@@ -2,60 +2,97 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
+from typing import TYPE_CHECKING
+
+from satellite.config import StrategyConfig
 from satellite.strategy.actions import beam, hold, receiver, reset, spiral, strategy
-from satellite.strategy.base import SearchStrategy, StrategyContext
+from satellite.strategy.base import SearchStrategy, StrategyContext, register_strategy
+
+if TYPE_CHECKING:
+    from satellite.config import ScenarioConfig
 
 
+@dataclass(frozen=True)
+class SingleMissConfig:
+    a_spiral_radius: str | float
+    b_spiral_radius: str | float
+    spiral_speed: float
+
+
+def parse_single_miss_config(data: dict) -> SingleMissConfig:
+    return SingleMissConfig(
+        a_spiral_radius=data.get("a_spiral_radius", 0.05),
+        b_spiral_radius=data.get("b_spiral_radius", 0.05),
+        spiral_speed=float(data.get("spiral_speed", 1.0)),
+    )
+
+
+@register_strategy("single_miss", parse_single_miss_config)
 class SingleMissStrategy(SearchStrategy):
-    name = "single_miss"
-
     def __init__(
         self,
         *,
-        phase1_duration: float,
-        a_spiral_radius: float,
-        reset_duration: float,
-        phase2_duration: float,
-        b_spiral_radius: float,
-        spiral_speed: float,
+        config: SingleMissConfig,
         w: float,
         k: float,
     ) -> None:
-        self.phase1_duration = phase1_duration
-        self.a_spiral_radius = a_spiral_radius
-        self.reset_duration = reset_duration
-        self.phase2_duration = phase2_duration
-        self.b_spiral_radius = b_spiral_radius
-        self.spiral_speed = spiral_speed
+        self.config = config
         self.w = w
         self.k = k
 
+    @classmethod
+    def from_config(cls, config: ScenarioConfig) -> SingleMissStrategy:
+        return cls(
+            config=config.strategy.params["single_miss"],
+            w=config.strategy.spiral_w(config.satellite),
+            k=config.strategy.k,
+        )
+
     def build_script(self, ctx: StrategyContext):
+        dish_fov = ctx.config.satellite.dish_fov
+        a_radius = StrategyConfig.resolve_radius(self.config.a_spiral_radius, dish_fov)
+        b_radius = StrategyConfig.resolve_radius(self.config.b_spiral_radius, dish_fov)
+        max_beam_speed = ctx.config.satellite.max_beam_speed
+        strategy_config = ctx.config.strategy
+
+        p1_duration = strategy_config.spiral_duration(
+            a_radius, self.w, self.config.spiral_speed
+        )
+        p2_duration = strategy_config.spiral_duration(
+            b_radius, self.w, self.config.spiral_speed
+        )
+
+        # Reset from max radius back to center
+        reset_duration = strategy_config.reset_duration(
+            max(a_radius, b_radius), max_beam_speed
+        )
+
         script = strategy(self.name)
         with script.satellite("S1"):
             beam.enable()
             receiver.enable()
             spiral(
-                duration=self.phase1_duration,
+                duration=p1_duration,
                 w=self.w,
                 k=self.k,
-                max_radius=self.a_spiral_radius,
-                speed=self.spiral_speed,
+                max_radius=a_radius,
+                speed=self.config.spiral_speed,
                 label="S1 wide spiral",
             )
-            reset(duration=self.reset_duration, label="S1 bench reset")
-            hold(duration=self.phase2_duration, label="S1 hold")
+            reset(duration=reset_duration, label="S1 bench reset")
+            hold(duration=p2_duration, label="S1 hold")
         with script.satellite("S2"):
             beam.enable()
             receiver.enable()
-            hold(duration=self.phase1_duration, label="S2 hold")
-            hold(duration=self.reset_duration, label="S2 reset wait")
+            hold(duration=p1_duration, label="S2 hold")
+            hold(duration=reset_duration, label="S2 reset wait")
             spiral(
-                duration=self.phase2_duration,
+                duration=p2_duration,
                 w=self.w,
                 k=self.k,
-                max_radius=self.b_spiral_radius,
-                speed=self.spiral_speed,
+                max_radius=b_radius,
+                speed=self.config.spiral_speed,
                 label="S2 wide spiral",
             )
         return script.build()

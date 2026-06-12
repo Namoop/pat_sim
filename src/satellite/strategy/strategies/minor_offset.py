@@ -2,43 +2,73 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
+from typing import TYPE_CHECKING
+
+from satellite.config import StrategyConfig
 from satellite.strategy.actions import beam, hold, receiver, spiral, strategy
-from satellite.strategy.base import SearchStrategy, StrategyContext
+from satellite.strategy.base import SearchStrategy, StrategyContext, register_strategy
+
+if TYPE_CHECKING:
+    from satellite.config import ScenarioConfig
 
 
+@dataclass(frozen=True)
+class MinorOffsetConfig:
+    max_spiral_radius: str | float
+    spiral_speed: float
+
+
+def parse_minor_offset_config(data: dict) -> MinorOffsetConfig:
+    return MinorOffsetConfig(
+        max_spiral_radius=data.get("max_spiral_radius", "fov"),
+        spiral_speed=float(data.get("spiral_speed", 1.0)),
+    )
+
+
+@register_strategy("minor_offset", parse_minor_offset_config)
 class MinorOffsetStrategy(SearchStrategy):
-    name = "minor_offset"
-
     def __init__(
         self,
         *,
-        duration: float,
-        max_spiral_radius: float,
-        spiral_speed: float,
+        config: MinorOffsetConfig,
         w: float,
         k: float,
     ) -> None:
-        self.duration = duration
-        self.max_spiral_radius = max_spiral_radius
-        self.spiral_speed = spiral_speed
+        self.config = config
         self.w = w
         self.k = k
 
+    @classmethod
+    def from_config(cls, config: ScenarioConfig) -> MinorOffsetStrategy:
+        return cls(
+            config=config.strategy.params["minor_offset"],
+            w=config.strategy.spiral_w(config.satellite),
+            k=config.strategy.k,
+        )
+
     def build_script(self, ctx: StrategyContext):
+        radius = StrategyConfig.resolve_radius(
+            self.config.max_spiral_radius, ctx.config.satellite.dish_fov
+        )
+        duration = ctx.config.strategy.spiral_duration(
+            radius, self.w, self.config.spiral_speed
+        )
+
         script = strategy(self.name)
         with script.satellite("S1"):
             beam.enable()
             receiver.enable()
             spiral(
-                duration=self.duration,
+                duration=duration,
                 w=self.w,
                 k=self.k,
-                max_radius=self.max_spiral_radius,
-                speed=self.spiral_speed,
+                max_radius=radius,
+                speed=self.config.spiral_speed,
                 label="S1 FOV spiral",
             )
         with script.satellite("S2"):
             beam.enable()
             receiver.enable()
-            hold(duration=self.duration, label="S2 hold")
+            hold(duration=duration, label="S2 hold")
         return script.build()

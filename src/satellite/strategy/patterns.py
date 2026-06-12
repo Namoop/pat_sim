@@ -122,3 +122,87 @@ def grid_aim_at(
     u_off = (col - (n - 1) / 2.0) * spacing
     v_off = (row - (n - 1) / 2.0) * spacing
     return normalize(u_z + u_off * u_x + v_off * u_y)
+
+
+def rosette_aim_at(
+    local_t: float,
+    *,
+    A: float,
+    w1: float,
+    w2: float,
+    u_x: Vec3,
+    u_y: Vec3,
+    u_z: Vec3,
+) -> Vec3:
+    u_off = A * math.cos(w1 * local_t)
+    v_off = A * math.cos(w2 * local_t)
+    return normalize(u_z + u_off * u_x + v_off * u_y)
+
+
+def lissajous_aim_at(
+    local_t: float,
+    *,
+    A: float,
+    wx: float,
+    wy: float,
+    delta: float,
+    u_x: Vec3,
+    u_y: Vec3,
+    u_z: Vec3,
+) -> Vec3:
+    u_off = A * math.sin(wx * local_t + delta)
+    v_off = A * math.sin(wy * local_t)
+    return normalize(u_z + u_off * u_x + v_off * u_y)
+
+
+def raster_aim_at(
+    local_t: float,
+    *,
+    duration: float,
+    radius: float,
+    steps: int,
+    horizontal: bool = True,
+    serpentine: bool = True,
+    u_x: Vec3,
+    u_y: Vec3,
+    u_z: Vec3,
+) -> Vec3:
+    if duration <= 0.0 or steps <= 1:
+        return normalize(u_z)
+
+    # progress 0.0 to 1.0
+    p = local_t / duration
+    
+    # line_index 0 to steps-1
+    # each line takes 1/steps of the total duration
+    line_progress = p * steps
+    line_idx = min(int(line_progress), steps - 1)
+    # progress within the current line (0.0 to 1.0)
+    t_line = line_progress - line_idx
+    
+    # offset from center for this line (-radius to radius)
+    # spread steps lines across 2*radius
+    line_offset = -radius + (line_idx / (steps - 1)) * 2.0 * radius
+    
+    # calculate the length of the chord at this offset
+    # r^2 = x^2 + y^2 => x = sqrt(r^2 - y^2)
+    chord_half_length = math.sqrt(max(0.0, radius**2 - line_offset**2))
+    
+    # scan along the chord
+    if serpentine and line_idx % 2 == 1:
+        # scan in reverse
+        scan_offset = chord_half_length * (1.0 - 2.0 * t_line)
+    else:
+        # scan forward
+        scan_offset = chord_half_length * (2.0 * t_line - 1.0)
+        
+    if horizontal:
+        # scan in X (u_x), offset in Y (u_y)
+        u_off = scan_offset
+        v_off = line_offset
+    else:
+        # scan in Y (u_y), offset in X (u_x)
+        u_off = line_offset
+        v_off = scan_offset
+        
+    return normalize(u_z + u_off * u_x + v_off * u_y)

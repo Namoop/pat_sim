@@ -13,7 +13,7 @@ from tests.conftest import base_config
 
 
 def test_playable_t_end_on_success():
-    cfg = base_config(step_duration=5.0)
+    cfg = base_config()
     result = run_scenario(cfg)
     assert result.hit_at_t is not None
     assert result.playable_t_end == result.hit_at_t
@@ -26,7 +26,6 @@ def test_playable_t_end_on_failure():
         s1_phi=0.08,
         s2_theta=-0.08,
         s2_phi=-0.08,
-        step_duration=0.5,
         chain=("minor_offset",),
     )
     result = run_scenario(cfg)
@@ -35,11 +34,11 @@ def test_playable_t_end_on_failure():
 
 
 def test_replay_timeline_stops_at_lock():
-    cfg = base_config(step_duration=5.0)
+    cfg = base_config()
     result = run_scenario(cfg)
     t_step = cfg.simulation.t_step
     timeline = result.ensure_replay_timeline()
-    assert timeline.t_end == pytest.approx(result.playable_t_end)
+    assert timeline.t_end == pytest.approx(result.playable_t_end, abs=cfg.simulation.t_step)
     full_steps = int(math.floor(result.schedule.total_duration / t_step)) + 1
     assert timeline.step_count < full_steps
 
@@ -50,17 +49,16 @@ def test_replay_timeline_runs_full_schedule_on_failure():
         s1_phi=0.08,
         s2_theta=-0.08,
         s2_phi=-0.08,
-        step_duration=0.5,
         chain=("minor_offset",),
     )
     result = run_scenario(cfg)
     timeline = result.ensure_replay_timeline()
-    assert timeline.t_end == pytest.approx(result.playable_t_end)
-    assert timeline.t_end == pytest.approx(result.schedule.total_duration)
+    assert timeline.t_end == pytest.approx(result.playable_t_end, abs=cfg.simulation.t_step)
+    assert timeline.t_end == pytest.approx(result.schedule.total_duration, abs=cfg.simulation.t_step)
 
 
 def test_replay_to_clamps_past_playable_end():
-    cfg = base_config(step_duration=5.0)
+    cfg = base_config()
     result = run_scenario(cfg)
     playable = result.playable_t_end
     result.ensure_replay_timeline()

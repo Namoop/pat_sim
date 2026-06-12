@@ -54,7 +54,6 @@ def test_total_failure_when_strategy_times_out():
         s1_phi=0.08,
         s2_theta=0.08,
         s2_phi=0.08,
-        step_duration=0.5,
         chain=("minor_offset",),
     )
     result = run_scenario(cfg)
