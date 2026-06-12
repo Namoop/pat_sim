@@ -107,3 +107,47 @@ def test_later_hardware_toggle_applies():
     assert any("beam enabled" in e for e in result_mid.events)
     result_late = FrameRunner(ctx).step(runtime, 0.75, ctx.t_step)
     assert any("beam disabled" in e for e in result_late.events)
+
+
+def test_reset_slew_motion():
+    from satellite.strategy.actions import reset, spiral, receiver
+    from satellite.math3d import angle_between
+    import math
+
+    ctx = _ctx()
+    script = strategy("test_reset")
+    with script.satellite("S1"):
+        receiver.disable()
+        spiral(duration=1.0, w=10.0, k=20.0, max_radius=0.05)
+        reset(duration=2.0)
+    with script.satellite("S2"):
+        hold(duration=3.0)
+    built = script.build()
+
+    runtime = FrameRunner(ctx).begin(built)
+    
+    # Step to the end of the spiral movement (t = 1.0)
+    t = 0.0
+    while t < 1.0:
+        FrameRunner(ctx).step(runtime, t, ctx.t_step)
+        t += ctx.t_step
+
+    # Save the boresight at the end of the spiral / start of reset
+    boresight_at_start_of_reset = ctx.s1.bench.bench_boresight.copy()
+    center = ctx.s1.bench.initial_boresight.copy()
+
+    # The spiral should have moved the boresight away from the initial boresight (center)
+    offset_dist = angle_between(boresight_at_start_of_reset, center)
+    assert offset_dist > 0.01, f"Boresight offset is too small: {math.degrees(offset_dist):.3f} deg"
+
+    # Step slightly into the reset movement (t = 1.01)
+    FrameRunner(ctx).step(runtime, 1.0 + ctx.t_step, ctx.t_step)
+    boresight_after_small_step = ctx.s1.bench.bench_boresight.copy()
+
+    # It should not have teleported to center immediately, but remain close to start boresight
+    dist_to_center = angle_between(boresight_after_small_step, center)
+    dist_to_start = angle_between(boresight_after_small_step, boresight_at_start_of_reset)
+
+    assert dist_to_center > 0.01, f"Boresight jumped directly to center (teleported)! Dist: {math.degrees(dist_to_center):.3f} deg"
+    assert dist_to_start < dist_to_center, "Boresight is not closer to starting position than center"
+

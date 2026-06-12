@@ -11,6 +11,9 @@ from satellite.strategy.patterns import (
     circle_aim_at,
     grid_aim_at,
     line_aim_at,
+    lissajous_aim_at,
+    raster_aim_at,
+    rosette_aim_at,
     spiral_aim_at,
 )
 
@@ -40,10 +43,14 @@ class Hold(MovementPattern):
 
 @dataclass(frozen=True)
 class Reset(MovementPattern):
-    """Reset bench to initial offset at step start, then hold."""
+    """Slew bench from current offset back to center boresight."""
 
     def aim_at(self, local_t: float, duration: float, ctx: AimContext) -> Vec3:
-        return ctx.center
+        if duration <= 0:
+            return ctx.center
+        progress = min(local_t / duration, 1.0)
+        from satellite.math3d import slerp
+        return slerp(ctx.step_start_aim, ctx.center, progress)
 
 
 @dataclass(frozen=True)
@@ -117,17 +124,89 @@ class Grid(MovementPattern):
         )
 
 
+@dataclass(frozen=True)
+class Rosette(MovementPattern):
+    A: float
+    w1: float
+    w2: float
+
+    def aim_at(self, local_t: float, duration: float, ctx: AimContext) -> Vec3:
+        return rosette_aim_at(
+            local_t,
+            A=self.A,
+            w1=self.w1,
+            w2=self.w2,
+            u_x=ctx.u_x,
+            u_y=ctx.u_y,
+            u_z=ctx.u_z,
+        )
+
+
+@dataclass(frozen=True)
+class Lissajous(MovementPattern):
+    A: float
+    wx: float
+    wy: float
+    delta: float
+
+    def aim_at(self, local_t: float, duration: float, ctx: AimContext) -> Vec3:
+        return lissajous_aim_at(
+            local_t,
+            A=self.A,
+            wx=self.wx,
+            wy=self.wy,
+            delta=self.delta,
+            u_x=ctx.u_x,
+            u_y=ctx.u_y,
+            u_z=ctx.u_z,
+        )
+
+
+@dataclass(frozen=True)
+class SerpentineRaster(MovementPattern):
+    radius: float
+    steps: int
+    horizontal: bool = True
+
+    def aim_at(self, local_t: float, duration: float, ctx: AimContext) -> Vec3:
+        return raster_aim_at(
+            local_t,
+            duration=duration,
+            radius=self.radius,
+            steps=self.steps,
+            horizontal=self.horizontal,
+            serpentine=True,
+            u_x=ctx.u_x,
+            u_y=ctx.u_y,
+            u_z=ctx.u_z,
+        )
+
+
+@dataclass(frozen=True)
+class DiscretePattern(MovementPattern):
+    points: tuple[tuple[float, float], ...]
+    step_duration: float
+
+    def aim_at(self, local_t: float, duration: float, ctx: AimContext) -> Vec3:
+        idx = min(int(local_t / self.step_duration), len(self.points) - 1)
+        u_off, v_off = self.points[idx]
+        # patterns.py normalize unrolled is faster but we need it here
+        from satellite.math3d import normalize as norm3d
+        return norm3d(ctx.u_z + u_off * ctx.u_x + v_off * ctx.u_y)
+
+
 def build_aim_context(satellite, *, reset: bool = False) -> AimContext:
     from satellite.sda.satellite import Satellite
 
     sat: Satellite = satellite
+    step_start_aim = sat.bench.bench_boresight.copy()
     if reset:
         sat.receiver.reset_dish_tracking()
     center = sat.bench.initial_boresight.copy()
     u_x, u_y, u_z = basis_at_direction(center)
     return AimContext(
         center=center,
-        step_start_aim=sat.bench.bench_boresight.copy(),
+        step_start_aim=step_start_aim,
         u_x=u_x,
         u_y=u_y,
         u_z=u_z,
