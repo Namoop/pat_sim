@@ -95,13 +95,44 @@ Strategy step durations are explicit in `[strategy.*]` tables (total sim time = 
 
 `beam_width` is the transmitter cone half-angle in **milliradians** (e.g. `5.0` → α = 0.005 rad).
 
+### Monte Carlo Multi-Chain Configuration
+
+You can run multiple independent strategy chains in a single Monte Carlo run. Each chain has its own sequence of strategies and number of runs. The pseudorandom seed generator resets for each chain to ensure that the error distribution of runs is exactly reproducible, independent of the order or number of other chains in the file.
+
+Example configuration in `MonteCarlo.toml`:
+
+```toml
+[monte_carlo]
+simulation = "Simulation.toml"
+seed = 42
+
+[[monte_carlo.chains]]
+runs = 500
+chain = ["minor_offset", "single_miss"]
+
+[[monte_carlo.chains]]
+runs = 300
+chain = ["asymmetric_swap"]
+```
+
 ### Built-in strategies
 
 | Name | Behavior |
 |------|----------|
 | `minor_offset` | Both TX/RX on; S1 FOV spiral, S2 holds |
 | `single_miss` | Alternating wide spirals with bench reset between phases |
-| `asymmetric_probe` | S1 probes with RX off; reciprocal lock after B acquires (opt-in via `chain`) |
+| `asymmetric_swap` | S1 probes with RX off and resets, swap roles to establish reciprocal lock |
+| `dual_spiral` | Both satellites execute spirals simultaneously |
+| `dual_raster` | Satellites perform orthogonal raster scans (one horizontal, one vertical) |
+| `hex_scan` | Discrete hexagonal grid point-to-point scanning |
+| `lissajous_scan` | Continuous Lissajous figure scan |
+| `rosette_scan` | Rosette-pattern scan from center boresight |
+| `center_rebias` | Stochastic search with periodic center resets |
+| `concentric_shells` | Progressive depth concentric circle scans |
+| `random_walk` | Stochastic step-by-step random walk |
+| `random_curve` | Smooth random walk in angle space |
+| `nested_spiral` | Concentric Archimedean spirals |
+| `golden_angle_spiral` | Spiral search utilizing golden angle distribution |
 
 Custom strategies use the Python DSL in `strategy/actions.py`; TOML configures built-in chain parameters only.
 
