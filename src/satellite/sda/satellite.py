@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import numpy as np
 from dataclasses import dataclass, field
 
 from satellite.config import ScenarioConfig, SatelliteInstanceConfig, default_beam_length
@@ -20,6 +21,8 @@ class Satellite:
     bench: OpticalBench
     transmitter: TransmitterSDA
     receiver: ReceiverSDA
+    cos_alpha: float
+    beam_length: float
     phase2_transmitter: TransmitterSDA | None = field(default=None)
 
     @property
@@ -66,4 +69,6 @@ class Satellite:
             bench=bench,
             transmitter=transmitter,
             receiver=receiver,
+            cos_alpha=float(np.cos(hw.alpha)),
+            beam_length=beam_length,
         )

@@ -25,6 +25,7 @@ class ReceiverSDA:
         self.fsm = fsm
         self.body_radius = body_radius
         self.dish_fov = dish_fov
+        self.cos_dish_fov = float(np.cos(dish_fov))
 
     @property
     def position(self) -> Vec3:
