@@ -69,8 +69,8 @@ class Spiral(MovementPattern):
                 return ctx.center
             progress = min(local_t / duration, 1.0)
             theta_l = R_start * (1.0 - progress)
-            u = (R_start / self.w) * (1.0 - progress) if self.w > 0.0 else 0.0
-            phi_l = self.k * u
+            u_start = (R_start / self.w) if self.w > 0.0 else 0.0
+            phi_l = self.k * u_start * (1.0 + progress)
             
             sin_theta = math.sin(theta_l)
             cos_theta = math.cos(theta_l)
