@@ -54,47 +54,62 @@ from satellite.scenario import run_scenario
 # Search spaces
 # ---------------------------------------------------------------------------
 
+# Bounds are scaled to match the downscaled world parameters:
+#   max_search_radius = 0.005 rad (10x smaller than original 0.05 rad)
+#   beam_width        = 0.5 mrad  →  alpha = 0.0005 rad (10x smaller than original 5.0 mrad)
+#   error std         = 0.002 rad (10x smaller than original 0.02 rad)
+#
+# Since the spatial scale and error distribution are 10x smaller, the sweep speeds
+# are scaled down by 10x to yield geometrically similar trajectories over the same timeout.
+# Frequencies (wx, wy, w1, w2) are not scaled down, because the 10x smaller search amplitude
+# automatically reduces the peak scan speed at any given frequency by 10x.
 PARAMETER_SPACES = {
+    # velocity_a scaled down 10x from original [0.001, 0.05]
     "random_curve": {
-        "velocity_a": ("float", 0.001, 0.05),
-        "velocity_ratio": ("float", 1.0, 3.0),
-        "drift_sigma": ("float", 0.001, 0.5),
-        "max_turn_radius": ("float", 0.1, 2.0),
+        "velocity_a":     ("float", 0.0001, 0.005),
+        "velocity_ratio": ("float", 1.0,    3.0),
+        "drift_sigma":    ("float", 0.001,  0.5),
+        "max_turn_radius":("float", 0.1,    2.0),
     },
     "center_rebias": {
-        "velocity_a": ("float", 0.001, 0.05),
-        "velocity_ratio": ("float", 1.0, 3.0),
-        "drift_sigma": ("float", 0.001, 0.5),
-        "max_turn_radius": ("float", 0.1, 2.0),
-        "bias_strength": ("float", 0.0, 1.0),
+        "velocity_a":     ("float", 0.0001, 0.005),
+        "velocity_ratio": ("float", 1.0,    3.0),
+        "drift_sigma":    ("float", 0.001,  0.5),
+        "max_turn_radius":("float", 0.1,    2.0),
+        "bias_strength":  ("float", 0.0,    1.0),
     },
+    # Frequencies wx, wy kept in full original [0.1, 10.0] range
     "lissajous_scan": {
-        "s1_wx": ("float", 0.1, 10.0),
-        "s1_wy": ("float", 0.1, 10.0),
-        "s1_delta": ("float", 0.0, 6.283185),
-        "s2_wx": ("float", 0.1, 10.0),
-        "s2_wy": ("float", 0.1, 10.0),
-        "s2_delta": ("float", 0.0, 6.283185),
+        "s1_wx":    ("float", 0.1,  10.0),
+        "s1_wy":    ("float", 0.1,  10.0),
+        "s1_delta": ("float", 0.0,  6.283185),
+        "s2_wx":    ("float", 0.1,  10.0),
+        "s2_wy":    ("float", 0.1,  10.0),
+        "s2_delta": ("float", 0.0,  6.283185),
     },
+    # Rosette w1, w2 kept in full original [0.1, 10.0] range
     "rosette_scan": {
-        "s1_w1": ("float", 0.1, 10.0),
-        "s1_w2": ("float", 0.1, 10.0),
-        "s2_w1": ("float", 0.1, 10.0),
-        "s2_w2": ("float", 0.1, 10.0),
+        "s1_w1": ("float", 0.1,  10.0),
+        "s1_w2": ("float", 0.1,  10.0),
+        "s2_w1": ("float", 0.1,  10.0),
+        "s2_w2": ("float", 0.1,  10.0),
     },
+    # speed_a scaled down 10x from original [0.001, 1.0]
     "dual_spiral": {
-        "speed_a": ("float", 0.001, 1.0),
-        "speed_ratio": ("float", 1.0, 3.0),
+        "speed_a":     ("float", 0.0001, 0.1),
+        "speed_ratio": ("float", 1.0,    3.0),
     },
+    # speed_a scaled down 10x from original [0.001, 1.0]
     "dual_raster": {
-        "steps_a": ("int", 5, 100),
-        "steps_b": ("int", 5, 100),
-        "speed_a": ("float", 0.001, 1.0),
-        "speed_ratio": ("float", 1.0, 3.0),
+        "steps_a":     ("int",   5,     100),
+        "steps_b":     ("int",   5,     100),
+        "speed_a":     ("float", 0.0001, 0.1),
+        "speed_ratio": ("float", 1.0,    3.0),
     },
+    # spiral_speed_a scaled down 10x from original [0.001, 1.0]
     "concentric_shells": {
-        "spiral_speed_a": ("float", 0.001, 1.0),
-        "speed_ratio": ("float", 1.0, 3.0),
+        "spiral_speed_a": ("float", 0.0001, 0.1),
+        "speed_ratio":    ("float", 1.0,    3.0),
     },
 }
 

@@ -12,7 +12,7 @@ boresight_extension = 5.0
 max_search_radius = 0.005
 profile_replay = false
 timeout = 100.0
-enforce_speed_limit = false
+enforce_speed_limit = true
 
 [visualization]
 enabled = false
