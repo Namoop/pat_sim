@@ -2,25 +2,25 @@
 simulation = "Simulation.toml"
 seed = 42
 
-[[monte_carlo.chains]]
-runs = 10
-chain = ["asymmetric_swap"]
 
-[[monte_carlo.chains]]
-runs = 10
-chain = ["dual_spiral"]
+#[[monte_carlo.chains]]
+#runs = 10
+#chain = ["dual_spiral"]
 
-[[monte_carlo.chains]]
-runs = 10
-chain = ["dual_raster"]
+# teleports to reset
+#[[monte_carlo.chains]]
+#runs = 10
+#chain = ["dual_raster"]
 
-[[monte_carlo.chains]]
-runs = 10
-chain = ["hex_scan"]
+# no idea whats going on but this is bad
+#[[monte_carlo.chains]]
+#runs = 10
+#chain = ["hex_scan"]
 
-[[monte_carlo.chains]]
-runs = 10
-chain = ["lissajous_scan"]
+# needs separate parameters
+#[[monte_carlo.chains]]
+#runs = 10
+#chain = ["lissajous_scan"]
 
 [[monte_carlo.chains]]
 runs = 10
@@ -42,6 +42,7 @@ chain = ["random_walk"]
 runs = 10
 chain = ["random_curve"]
 
+# first one not stepping
 [[monte_carlo.chains]]
 runs = 10
 chain = ["nested_spiral"]
@@ -59,3 +60,40 @@ phi_std = 0.02
 
 [strategy]
 k = 10.0
+
+[strategy.dual_spiral]
+speed_a = 1.0
+speed_ratio = 1.41421356
+
+[strategy.dual_raster]
+speed_a = 1.0
+speed_ratio = 1.41421356
+
+[strategy.lissajous_scan]
+wx = 1.0
+wy = 1.41421356
+delta = 0.0
+
+[strategy.rosette_scan]
+s1_w1 = 1.0
+s1_w2 = 1.41421356
+s2_w1 = 1.0
+s2_w2 = 1.61803399
+
+[strategy.center_rebias]
+step_duration_a = 0.5
+step_duration_ratio = 1.41421356
+bias_strength = 0.2
+
+[strategy.concentric_shells]
+spiral_speed_a = 1.0
+speed_ratio = 1.41421356
+
+[strategy.random_walk]
+step_duration_a = 1.0
+step_duration_ratio = 1.41421356
+
+[strategy.random_curve]
+velocity_a = 0.01
+velocity_ratio = 1.41421356
+drift_sigma = 0.1

@@ -44,7 +44,7 @@ class RosetteScanStrategy(SearchStrategy):
         from satellite.strategy.movements import Rosette
 
         max_radius = ctx.config.simulation.max_search_radius
-        duration = self.config.duration
+        duration = ctx.config.simulation.timeout
 
         script = strategy(self.name)
         

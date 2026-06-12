@@ -18,17 +18,17 @@ if TYPE_CHECKING:
 
 @dataclass(frozen=True)
 class RandomCurveConfig:
-    velocity: float = 0.01
+    velocity_a: float = 0.01
+    velocity_ratio: float = 1.41421356
     drift_sigma: float = 0.1
-    total_duration: float = 20.0
     seed: int = 42
 
 
 def parse_random_curve_config(data: dict) -> RandomCurveConfig:
     return RandomCurveConfig(
-        velocity=float(data.get("velocity", 0.01)),
+        velocity_a=float(data.get("velocity_a", data.get("velocity", 0.01))),
+        velocity_ratio=float(data.get("velocity_ratio", 1.41421356)),
         drift_sigma=float(data.get("drift_sigma", 0.1)),
-        total_duration=float(data.get("total_duration", 20.0)),
         seed=int(data.get("seed", 42)),
     )
 
@@ -82,19 +82,33 @@ class RandomCurveStrategy(SearchStrategy):
 
     def build_script(self, ctx: StrategyContext):
         max_radius = ctx.config.simulation.max_search_radius
+        timeout = ctx.config.simulation.timeout
+        velocity_a = self.config.velocity_a
+        velocity_b = velocity_a * self.config.velocity_ratio
         
         script = strategy(self.name)
-        for sat_name in ["S1", "S2"]:
-            with script.satellite(sat_name):
-                beam.enable(); receiver.enable()
-                script._builders[sat_name].movement(
-                    RandomCurvePattern(
-                        velocity=self.config.velocity,
-                        drift_sigma=self.config.drift_sigma,
-                        seed=self.config.seed + (1 if sat_name == "S2" else 0),
-                        radius_limit=max_radius
-                    ),
-                    duration=self.config.total_duration,
-                    label=f"{sat_name} random curve"
-                )
+        with script.satellite("S1"):
+            beam.enable(); receiver.enable()
+            script._builders["S1"].movement(
+                RandomCurvePattern(
+                    velocity=velocity_a,
+                    drift_sigma=self.config.drift_sigma,
+                    seed=self.config.seed,
+                    radius_limit=max_radius
+                ),
+                duration=timeout,
+                label="S1 random curve"
+            )
+        with script.satellite("S2"):
+            beam.enable(); receiver.enable()
+            script._builders["S2"].movement(
+                RandomCurvePattern(
+                    velocity=velocity_b,
+                    drift_sigma=self.config.drift_sigma,
+                    seed=self.config.seed + 1,
+                    radius_limit=max_radius
+                ),
+                duration=timeout,
+                label="S2 random curve"
+            )
         return script.build()

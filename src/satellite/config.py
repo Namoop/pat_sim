@@ -48,6 +48,7 @@ class SimulationConfig:
     boresight_extension: float
     max_search_radius: float
     profile_replay: bool
+    timeout: float = 100.0
 
 
 @dataclass(frozen=True)
@@ -196,6 +197,7 @@ def _load_simulation_section(data: dict) -> SimulationConfig:
         boresight_extension=float(data.get("boresight_extension", 5.0)),
         max_search_radius=float(data.get("max_search_radius", 0.07)),
         profile_replay=bool(data.get("profile_replay", False)),
+        timeout=float(data.get("timeout", 100.0)),
     )
 
 

@@ -41,6 +41,8 @@ class DualSpiralStrategy(SearchStrategy):
         )
 
     def build_script(self, ctx: StrategyContext):
+        from satellite.strategy.actions import hold
+
         max_radius = ctx.config.simulation.max_search_radius
         speed_a = self.config.speed_a
         speed_b = speed_a * self.config.speed_ratio
@@ -49,24 +51,32 @@ class DualSpiralStrategy(SearchStrategy):
         # Duration for out-and-back spiral
         duration_a = strategy_config.spiral_duration(max_radius, self.w, speed_a)
         duration_b = strategy_config.spiral_duration(max_radius, self.w, speed_b)
-        
-        total_duration = max(duration_a, duration_b) * 2.0
+        timeout = ctx.config.simulation.timeout
 
         script = strategy(self.name)
+        
         with script.satellite("S1"):
             beam.enable(); receiver.enable()
-            spiral(duration=duration_a, w=self.w, k=self.k, max_radius=max_radius, speed=speed_a)
-            spiral(duration=duration_a, w=self.w, k=self.k, max_radius=0, speed=speed_a)
-            if total_duration > 2 * duration_a:
-                from satellite.strategy.actions import hold
-                hold(duration=total_duration - 2 * duration_a)
+            current_t = 0.0
+            cycle_a = 2 * duration_a
+            if cycle_a > 0.0:
+                while current_t + cycle_a <= timeout:
+                    spiral(duration=duration_a, w=self.w, k=self.k, max_radius=max_radius, speed=speed_a)
+                    spiral(duration=duration_a, w=self.w, k=self.k, max_radius=0, speed=speed_a)
+                    current_t += cycle_a
+            if current_t < timeout:
+                hold(duration=timeout - current_t)
 
         with script.satellite("S2"):
             beam.enable(); receiver.enable()
-            spiral(duration=duration_b, w=self.w, k=self.k, max_radius=max_radius, speed=speed_b)
-            spiral(duration=duration_b, w=self.w, k=self.k, max_radius=0, speed=speed_b)
-            if total_duration > 2 * duration_b:
-                from satellite.strategy.actions import hold
-                hold(duration=total_duration - 2 * duration_b)
+            current_t = 0.0
+            cycle_b = 2 * duration_b
+            if cycle_b > 0.0:
+                while current_t + cycle_b <= timeout:
+                    spiral(duration=duration_b, w=self.w, k=self.k, max_radius=max_radius, speed=speed_b)
+                    spiral(duration=duration_b, w=self.w, k=self.k, max_radius=0, speed=speed_b)
+                    current_t += cycle_b
+            if current_t < timeout:
+                hold(duration=timeout - current_t)
 
         return script.build()

@@ -9,8 +9,9 @@ beam_width = 5.0
 distance = 1000.0
 t_step = 0.01
 boresight_extension = 5.0
-max_search_radius = 0.07
+max_search_radius = 0.05
 profile_replay = false
+timeout = 100.0
 
 [visualization]
 enabled = false

@@ -14,18 +14,22 @@ if TYPE_CHECKING:
 
 @dataclass(frozen=True)
 class LissajousScanConfig:
-    wx: float = 1.0
-    wy: float = 1.41421356
-    delta: float = 0.0
-    duration: float = 10.0
+    s1_wx: float = 1.0
+    s1_wy: float = 1.41421356
+    s1_delta: float = 0.0
+    s2_wx: float = 1.0
+    s2_wy: float = 1.41421356
+    s2_delta: float = 0.0
 
 
 def parse_lissajous_scan_config(data: dict) -> LissajousScanConfig:
     return LissajousScanConfig(
-        wx=float(data.get("wx", 1.0)),
-        wy=float(data.get("wy", 1.41421356)),
-        delta=float(data.get("delta", 0.0)),
-        duration=float(data.get("duration", 10.0)),
+        s1_wx=float(data.get("s1_wx", data.get("wx", 1.0))),
+        s1_wy=float(data.get("s1_wy", data.get("wy", 1.41421356))),
+        s1_delta=float(data.get("s1_delta", data.get("delta", 0.0))),
+        s2_wx=float(data.get("s2_wx", 1.0)),
+        s2_wy=float(data.get("s2_wy", 1.41421356)),
+        s2_delta=float(data.get("s2_delta", 0.0)),
     )
 
 
@@ -40,22 +44,35 @@ class LissajousScanStrategy(SearchStrategy):
 
     def build_script(self, ctx: StrategyContext):
         from satellite.strategy.movements import Lissajous
+        import math
 
         max_radius = ctx.config.simulation.max_search_radius
-        duration = self.config.duration
+        A = max_radius / math.sqrt(2.0)
+        duration = ctx.config.simulation.timeout
 
         script = strategy(self.name)
-        for sat_name in ["S1", "S2"]:
-            with script.satellite(sat_name):
-                beam.enable(); receiver.enable()
-                script._builders[sat_name].movement(
-                    Lissajous(
-                        A=max_radius,
-                        wx=self.config.wx,
-                        wy=self.config.wy,
-                        delta=self.config.delta,
-                    ),
-                    duration=duration,
-                    label=f"{sat_name} lissajous scan"
-                )
+        with script.satellite("S1"):
+            beam.enable(); receiver.enable()
+            script._builders["S1"].movement(
+                Lissajous(
+                    A=A,
+                    wx=self.config.s1_wx,
+                    wy=self.config.s1_wy,
+                    delta=self.config.s1_delta,
+                ),
+                duration=duration,
+                label="S1 lissajous scan"
+            )
+        with script.satellite("S2"):
+            beam.enable(); receiver.enable()
+            script._builders["S2"].movement(
+                Lissajous(
+                    A=A,
+                    wx=self.config.s2_wx,
+                    wy=self.config.s2_wy,
+                    delta=self.config.s2_delta,
+                ),
+                duration=duration,
+                label="S2 lissajous scan"
+            )
         return script.build()
