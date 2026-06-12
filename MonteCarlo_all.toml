@@ -1,0 +1,61 @@
+[monte_carlo]
+simulation = "Simulation.toml"
+seed = 42
+
+[[monte_carlo.chains]]
+runs = 10
+chain = ["asymmetric_swap"]
+
+[[monte_carlo.chains]]
+runs = 10
+chain = ["dual_spiral"]
+
+[[monte_carlo.chains]]
+runs = 10
+chain = ["dual_raster"]
+
+[[monte_carlo.chains]]
+runs = 10
+chain = ["hex_scan"]
+
+[[monte_carlo.chains]]
+runs = 10
+chain = ["lissajous_scan"]
+
+[[monte_carlo.chains]]
+runs = 10
+chain = ["rosette_scan"]
+
+[[monte_carlo.chains]]
+runs = 10
+chain = ["center_rebias"]
+
+[[monte_carlo.chains]]
+runs = 10
+chain = ["concentric_shells"]
+
+[[monte_carlo.chains]]
+runs = 10
+chain = ["random_walk"]
+
+[[monte_carlo.chains]]
+runs = 10
+chain = ["random_curve"]
+
+[[monte_carlo.chains]]
+runs = 10
+chain = ["nested_spiral"]
+
+[[monte_carlo.chains]]
+runs = 10
+chain = ["golden_angle_spiral"]
+
+[error]
+distribution = "gaussian"
+theta_mean = 0.0
+theta_std = 0.02
+phi_mean = 0.0
+phi_std = 0.02
+
+[strategy]
+k = 10.0
