@@ -43,21 +43,70 @@ class NestedSpiralStrategy(SearchStrategy):
         )
 
     def build_script(self, ctx: StrategyContext):
-        # S1 moves slowly (stays stationary for each S2 spiral)
-        # S2 performs a complete spiral for every 'step' of S1
+        from satellite.strategy.movements import DiscretePattern
+        import math
+
+        max_radius = ctx.config.simulation.max_search_radius
+        timeout = ctx.config.simulation.timeout
         
-        # Simplified stub: S1 holds while S2 spirals
+        # S2 performs a spiral out to max_radius (or back) in duration_inner
         duration_inner = ctx.config.strategy.spiral_duration(
-            self.config.inner_radius, self.w, self.config.spiral_speed
+            max_radius, self.w, self.config.spiral_speed
         )
         
+        # Generate step points for S1 along a slow spiral of pitch and spacing equal to beam width (alpha)
+        d = ctx.config.satellite.alpha
+        if d <= 0.0:
+            d = 0.005  # fallback
+            
+        num_steps_needed = max(1, int(timeout / duration_inner)) + 2
+        
+        base_points = [(0.0, 0.0)]
+        i = 1
+        while True:
+            # Angle theta_i
+            theta = 2.0 * math.sqrt(math.pi * i)
+            # Radius r_i
+            r = d * math.sqrt(i / math.pi)
+            if r > max_radius:
+                break
+            u = r * math.cos(theta)
+            v = r * math.sin(theta)
+            base_points.append((u, v))
+            i += 1
+            
+        # Repeat base points to cover the entire duration of the simulation
+        points = []
+        while len(points) < num_steps_needed:
+            points.extend(base_points)
+        points = points[:num_steps_needed]
+
         script = strategy(self.name)
+        
         with script.satellite("S1"):
             beam.enable(); receiver.enable()
-            hold(duration=duration_inner)
+            script._builders["S1"].movement(
+                DiscretePattern(points=tuple(points), step_duration=duration_inner),
+                duration=timeout,
+                label="S1 stepping"
+            )
             
         with script.satellite("S2"):
             beam.enable(); receiver.enable()
-            spiral(duration=duration_inner, w=self.w, k=self.k, max_radius=self.config.inner_radius, speed=self.config.spiral_speed)
+            current_t = 0.0
+            out_spiral = True
+            if duration_inner > 0.0:
+                while current_t + duration_inner <= timeout:
+                    spiral(
+                        duration=duration_inner,
+                        w=self.w,
+                        k=self.k,
+                        max_radius=max_radius if out_spiral else 0.0,
+                        speed=self.config.spiral_speed
+                    )
+                    out_spiral = not out_spiral
+                    current_t += duration_inner
+            if current_t < timeout:
+                hold(duration=timeout - current_t)
             
         return script.build()
