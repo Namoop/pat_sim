@@ -7,7 +7,7 @@ from pathlib import Path
 
 import numpy as np
 
-from satellite.config import load_monte_carlo_config, load_simulation_config, load_single_scenario
+from satellite.config import load_monte_carlo_config, load_simulation_config, load_single_scenario, MonteCarloChainConfig
 from satellite.monte_carlo import run_monte_carlo_single
 from satellite.scenario import run_scenario
 from satellite.visualize.session import MonteCarloVizSession, SingleResultSession
@@ -36,7 +36,7 @@ def test_single_result_session_advance_closes():
 
 def test_monte_carlo_viz_session_first_run_reproducible():
     mc = _mc_fixture()
-    mc = replace(mc, runs=3)
+    mc = replace(mc, chains=(MonteCarloChainConfig(runs=3, chain=mc.strategy.chain),))
     sim = load_simulation_config(mc.simulation_path)
     # Match the logic in MonteCarloVizSession: 
     # first run uses first integer from rng seeded with mc.seed
@@ -57,7 +57,7 @@ def test_monte_carlo_viz_session_first_run_reproducible():
 
 def test_monte_carlo_viz_session_advance_and_last_returns_none():
     mc = _mc_fixture()
-    mc = replace(mc, runs=3)
+    mc = replace(mc, chains=(MonteCarloChainConfig(runs=3, chain=mc.strategy.chain),))
     session = MonteCarloVizSession(mc)
 
     r0 = session.current()
@@ -76,7 +76,7 @@ def test_monte_carlo_viz_session_advance_and_last_returns_none():
 
 def test_monte_carlo_viz_session_offsets_match_batch():
     mc = _mc_fixture()
-    mc = replace(mc, runs=2)
+    mc = replace(mc, chains=(MonteCarloChainConfig(runs=2, chain=mc.strategy.chain),))
     sim = load_simulation_config(mc.simulation_path)
     
     rng = np.random.default_rng(mc.seed)

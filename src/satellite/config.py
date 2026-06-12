@@ -160,36 +160,14 @@ class MonteCarloChainConfig:
 @dataclass(frozen=True)
 class MonteCarloConfig:
     simulation_path: Path
-    runs: int
     seed: int
     error: ErrorDistributionConfig
     strategy: StrategyConfig
-    chains: tuple[MonteCarloChainConfig, ...] = ()
+    chains: tuple[MonteCarloChainConfig, ...]
 
-    def __post_init__(self) -> None:
-        if not hasattr(self, "chains") or not self.chains:
-            chain_seq = self.strategy.chain if self.strategy else ()
-            object.__setattr__(
-                self,
-                "chains",
-                (MonteCarloChainConfig(runs=self.runs, chain=chain_seq),),
-            )
-        else:
-            total_chain_runs = sum(c.runs for c in self.chains)
-            if total_chain_runs != self.runs:
-                if len(self.chains) == 1:
-                    object.__setattr__(
-                        self,
-                        "chains",
-                        (MonteCarloChainConfig(runs=self.runs, chain=self.chains[0].chain),),
-                    )
-                else:
-                    chain_seq = self.strategy.chain if self.strategy else ()
-                    object.__setattr__(
-                        self,
-                        "chains",
-                        (MonteCarloChainConfig(runs=self.runs, chain=chain_seq),),
-                    )
+    @property
+    def runs(self) -> int:
+        return sum(c.runs for c in self.chains)
 
 
 def positions_for_distance(distance: float) -> tuple[Vec3, Vec3]:
@@ -337,24 +315,21 @@ def load_monte_carlo_config(path: str | Path) -> MonteCarloConfig:
     simulation_rel = str(mc.get("simulation", "Simulation.toml"))
     simulation_path = (config_path.parent / simulation_rel).resolve()
     
-    chains_data = mc.get("chains") or data.get("chains") or []
+    chains_data = mc.get("chains") or data.get("chains")
+    if not chains_data:
+        raise ValueError("monte_carlo.chains is required")
     strategy = _load_strategy(data.get("strategy", {}), chains_data=chains_data)
     
     chains = []
-    if chains_data:
-        runs = 0
-        for c in chains_data:
-            chain_list = list(c.get("chain", []))
-            r = int(c.get("runs", 1))
-            runs += r
-            chains.append(MonteCarloChainConfig(runs=r, chain=tuple(chain_list)))
-    else:
-        runs = int(mc.get("runs", 1))
-        chains.append(MonteCarloChainConfig(runs=runs, chain=strategy.chain))
+    for c in chains_data:
+        chain_list = list(c.get("chain", []))
+        if not chain_list:
+            raise ValueError("each chain in monte_carlo.chains must specify a non-empty 'chain' list of strategy names")
+        r = int(c.get("runs", 1))
+        chains.append(MonteCarloChainConfig(runs=r, chain=tuple(chain_list)))
 
     return MonteCarloConfig(
         simulation_path=simulation_path,
-        runs=runs,
         seed=int(mc.get("seed", 0)),
         error=_load_error(data.get("error", {})),
         strategy=strategy,

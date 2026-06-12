@@ -135,10 +135,11 @@ def test_monte_carlo_summary_statistics_formatting():
 
 def test_monte_carlo_graceful_interrupt(monkeypatch):
     mc = load_monte_carlo_config(FIXTURES / "MonteCarlo_success.toml")
+    from satellite.config import MonteCarloChainConfig
     mc = replace(
         mc,
         simulation_path=(REPO_ROOT / "Simulation.toml").resolve(),
-        runs=5,
+        chains=(MonteCarloChainConfig(runs=5, chain=mc.strategy.chain),),
     )
     calls = {"n": 0}
     real_single = run_monte_carlo_single

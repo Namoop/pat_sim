@@ -1,7 +1,10 @@
 [monte_carlo]
 simulation = "Simulation.toml"
-runs = 1000
 seed = 42
+
+[[monte_carlo.chains]]
+runs = 1000
+chain = ["minor_offset", "single_miss"]
 
 [error]
 distribution = "uniform"
@@ -12,7 +15,6 @@ phi_max = 0.02
 
 [strategy]
 k = 10.0
-chain = ["minor_offset", "single_miss"]
 
 [strategy.minor_offset]
 max_spiral_radius = "fov"
