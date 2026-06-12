@@ -1,13 +1,16 @@
-"""Strategy 9: Stochastic Center Re-bias — Random walk with center-heavy pull."""
+"""Strategy 9: Stochastic Center Re-bias — Stochastic curve with center-heavy pull."""
 
 from __future__ import annotations
 
+import math
 import random
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
+from satellite.math3d import Vec3, normalize
 from satellite.strategy.actions import beam, receiver, strategy
 from satellite.strategy.base import SearchStrategy, StrategyContext, register_strategy
+from satellite.strategy.movements import AimContext, MovementPattern
 
 if TYPE_CHECKING:
     from satellite.config import ScenarioConfig
@@ -15,19 +18,80 @@ if TYPE_CHECKING:
 
 @dataclass(frozen=True)
 class CenterRebiasConfig:
-    step_duration_a: float = 0.5
-    step_duration_ratio: float = 1.41421356
+    velocity_a: float = 0.01
+    velocity_ratio: float = 1.41421356
+    drift_sigma: float = 0.1
+    max_turn_radius: float = 0.5
     bias_strength: float = 0.2
     seed: int = 123
 
 
 def parse_center_rebias_config(data: dict) -> CenterRebiasConfig:
     return CenterRebiasConfig(
-        step_duration_a=float(data.get("step_duration_a", data.get("step_duration", 0.5))),
-        step_duration_ratio=float(data.get("step_duration_ratio", 1.41421356)),
+        velocity_a=float(data.get("velocity_a", data.get("velocity", 0.01))),
+        velocity_ratio=float(data.get("velocity_ratio", 1.41421356)),
+        drift_sigma=float(data.get("drift_sigma", 0.1)),
+        max_turn_radius=float(data.get("max_turn_radius", 0.5)),
         bias_strength=float(data.get("bias_strength", 0.2)),
         seed=int(data.get("seed", 123)),
     )
+
+
+@dataclass(frozen=True)
+class CenterRebiasPattern(MovementPattern):
+    velocity: float
+    drift_sigma: float
+    max_turn_radius: float
+    bias_strength: float
+    seed: int
+    radius_limit: float
+    dt_sim: float = 0.01
+    _cache: list[tuple[float, float]] = field(
+        default_factory=list, init=False, hash=False, compare=False
+    )
+
+    def aim_at(self, local_t: float, duration: float, ctx: AimContext) -> Vec3:
+        if not self._cache:
+            rng = random.Random(self.seed)
+            
+            curr_u, curr_v = 0.0, 0.0
+            heading = rng.uniform(0, 2 * math.pi)
+            current_dir = 0.0  # steering wheel angle
+            
+            # Simple integration up to duration
+            t = 0.0
+            while t <= duration + 1e-9:
+                self._cache.append((curr_u, curr_v))
+                
+                # Drift the steering wheel angle
+                current_dir += rng.gauss(0, self.drift_sigma) * math.sqrt(self.dt_sim)
+                current_dir = max(-self.max_turn_radius, min(self.max_turn_radius, current_dir))
+                
+                # Heading updates based on steering angle
+                heading += current_dir * self.dt_sim
+                
+                # Position updates stochastically
+                curr_u += self.velocity * math.cos(heading) * self.dt_sim
+                curr_v += self.velocity * math.sin(heading) * self.dt_sim
+                
+                # Gravitational center pull (bias_strength)
+                curr_u *= (1.0 - self.bias_strength * self.dt_sim)
+                curr_v *= (1.0 - self.bias_strength * self.dt_sim)
+                
+                # Boundary reflection
+                dist = math.sqrt(curr_u**2 + curr_v**2)
+                if dist > self.radius_limit:
+                    angle_to_center = math.atan2(-curr_v, -curr_u)
+                    heading = angle_to_center + rng.uniform(-math.pi/4, math.pi/4)
+                    current_dir = 0.0
+                    curr_u *= self.radius_limit / dist
+                    curr_v *= self.radius_limit / dist
+                t += self.dt_sim
+            
+        # O(1) lookup
+        idx = min(int(local_t / self.dt_sim), len(self._cache) - 1)
+        curr_u, curr_v = self._cache[idx]
+        return normalize(ctx.u_z + curr_u * ctx.u_x + curr_v * ctx.u_y)
 
 
 @register_strategy("center_rebias", parse_center_rebias_config)
@@ -40,60 +104,37 @@ class CenterRebiasStrategy(SearchStrategy):
         return cls(config=config.strategy.params.get("center_rebias", CenterRebiasConfig()))
 
     def build_script(self, ctx: StrategyContext):
-        from satellite.strategy.movements import DiscretePattern
-
         max_radius = ctx.config.simulation.max_search_radius
-        beam_width = ctx.config.satellite.alpha
         timeout = ctx.config.simulation.timeout
+        velocity_a = self.config.velocity_a
+        velocity_b = velocity_a * self.config.velocity_ratio
         
-        # S1 points
-        rng1 = random.Random(self.config.seed)
-        step_duration_a = self.config.step_duration_a
-        steps_s1 = max(1, int(timeout / step_duration_a))
-        
-        points_s1 = [(0.0, 0.0)]
-        curr_u, curr_v = 0.0, 0.0
-        for _ in range(steps_s1 - 1):
-            curr_u += beam_width * (rng1.random() - 0.5)
-            curr_v += beam_width * (rng1.random() - 0.5)
-            curr_u *= (1.0 - self.config.bias_strength)
-            curr_v *= (1.0 - self.config.bias_strength)
-            dist = (curr_u**2 + curr_v**2)**0.5
-            if dist > max_radius:
-                curr_u *= max_radius / dist
-                curr_v *= max_radius / dist
-            points_s1.append((curr_u, curr_v))
-
-        # S2 points
-        rng2 = random.Random(self.config.seed + 1)
-        step_duration_b = step_duration_a * self.config.step_duration_ratio
-        steps_s2 = max(1, int(timeout / step_duration_b))
-        
-        points_s2 = [(0.0, 0.0)]
-        curr_u, curr_v = 0.0, 0.0
-        for _ in range(steps_s2 - 1):
-            curr_u += beam_width * (rng2.random() - 0.5)
-            curr_v += beam_width * (rng2.random() - 0.5)
-            curr_u *= (1.0 - self.config.bias_strength)
-            curr_v *= (1.0 - self.config.bias_strength)
-            dist = (curr_u**2 + curr_v**2)**0.5
-            if dist > max_radius:
-                curr_u *= max_radius / dist
-                curr_v *= max_radius / dist
-            points_s2.append((curr_u, curr_v))
-
         script = strategy(self.name)
         with script.satellite("S1"):
             beam.enable(); receiver.enable()
             script._builders["S1"].movement(
-                DiscretePattern(points=tuple(points_s1), step_duration=step_duration_a),
+                CenterRebiasPattern(
+                    velocity=velocity_a,
+                    drift_sigma=self.config.drift_sigma,
+                    max_turn_radius=self.config.max_turn_radius,
+                    bias_strength=self.config.bias_strength,
+                    seed=self.config.seed,
+                    radius_limit=max_radius
+                ),
                 duration=timeout,
                 label="S1 center rebias"
             )
         with script.satellite("S2"):
             beam.enable(); receiver.enable()
             script._builders["S2"].movement(
-                DiscretePattern(points=tuple(points_s2), step_duration=step_duration_b),
+                CenterRebiasPattern(
+                    velocity=velocity_b,
+                    drift_sigma=self.config.drift_sigma,
+                    max_turn_radius=self.config.max_turn_radius,
+                    bias_strength=self.config.bias_strength,
+                    seed=self.config.seed + 1,
+                    radius_limit=max_radius
+                ),
                 duration=timeout,
                 label="S2 center rebias"
             )

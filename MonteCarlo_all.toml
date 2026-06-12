@@ -86,8 +86,10 @@ s2_w1 = 1.0
 s2_w2 = 1.61803399
 
 [strategy.center_rebias]
-step_duration_a = 0.5
-step_duration_ratio = 1.41421356
+velocity_a = 0.01
+velocity_ratio = 1.41421356
+drift_sigma = 0.1
+max_turn_radius = 0.5
 bias_strength = 0.2
 
 [strategy.concentric_shells]
