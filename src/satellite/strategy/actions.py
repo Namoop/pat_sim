@@ -102,7 +102,7 @@ class StrategyScript:
         *,
         strict: bool = False,
     ) -> list[str]:
-        """Verify all point-to-point transitions are achievable at max_beam_speed."""
+        """Verify all point-to-point transitions and internal movement speeds are physical."""
         errors: list[str] = []
         max_beam_speed = ctx.config.satellite.max_beam_speed
         if max_beam_speed <= 0:
@@ -132,20 +132,40 @@ class StrategyScript:
                 # Practically, we allow a small buffer or assume the jump takes 
                 # some of the step's duration.
                 if dist > _ANGULAR_TOLERANCE:
-                    # In this DSL model, if dist > 0, the previous step should 
-                    # have ended at this step's start, or a dedicated Slew/Reset
-                    # step should have existed.
-                    # For now, we just log it as a warning or error.
                     msg = (
                         f"{timeline.name} jump of {math.degrees(dist):.3f} deg "
                         f"detected at start of '{step.label}' (t={step.start:.2f})"
                     )
                     if strict:
                         errors.append(msg)
+                        raise ValueError(msg)
 
-                # Internal pattern check (optional/complex)
-                # Most patterns like Spiral are continuous.
-                
+                # Continuous internal speed check within the step
+                if step.duration > 0.0:
+                    n_samples = 100
+                    dt = step.duration / n_samples
+                    last_aim = start_aim
+                    enforce = ctx.config.simulation.enforce_speed_limit
+                    for i in range(1, n_samples + 1):
+                        t_curr = i * dt
+                        curr_aim = step.movement.aim_at(t_curr, step.duration, aim_ctx)
+                        step_dist = angle_between(last_aim, curr_aim)
+                        step_speed = step_dist / dt
+
+                        # 1.05 tolerance to account for discretization/floating point variations
+                        if step_speed > max_beam_speed * 1.05:
+                            msg = (
+                                f"{timeline.name} movement '{step.label}' requires speed "
+                                f"{step_speed:.4f} rad/s (at t={step.start + t_curr:.2f}s), "
+                                f"which exceeds the maximum physical beam speed limit "
+                                f"of {max_beam_speed:.4f} rad/s."
+                            )
+                            errors.append(msg)
+                            if enforce:
+                                raise ValueError(msg)
+                            break  # record once per step, then move on
+                        last_aim = curr_aim
+
                 prev_end_aim = step.movement.aim_at(step.duration, step.duration, aim_ctx)
                 sat.bench.set_bench_aim(prev_end_aim)
                 aim_ctx = build_aim_context(sat)

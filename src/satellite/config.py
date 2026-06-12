@@ -49,6 +49,7 @@ class SimulationConfig:
     max_search_radius: float
     profile_replay: bool
     timeout: float = 100.0
+    enforce_speed_limit: bool = True
 
 
 @dataclass(frozen=True)
@@ -198,6 +199,7 @@ def _load_simulation_section(data: dict) -> SimulationConfig:
         max_search_radius=float(data.get("max_search_radius", 0.07)),
         profile_replay=bool(data.get("profile_replay", False)),
         timeout=float(data.get("timeout", 100.0)),
+        enforce_speed_limit=bool(data.get("enforce_speed_limit", True)),
     )
 
 
