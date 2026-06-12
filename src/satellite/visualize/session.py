@@ -52,13 +52,13 @@ class MonteCarloVizSession:
 
     def current(self) -> ScenarioResult:
         if self._current is None:
+            seed = int(self._rng.integers(0, 2**32 - 1))
             run = run_monte_carlo_single(
                 self._mc,
                 self._sim,
-                self._rng,
+                seed,
                 self._run_index,
-                report=True,
-                total_runs=self._mc.runs,
+                report=False,
             )
             self._current = run.result
         return self._current
@@ -70,13 +70,13 @@ class MonteCarloVizSession:
         if self._run_index >= self._mc.runs - 1:
             return None
         self._run_index += 1
+        seed = int(self._rng.integers(0, 2**32 - 1))
         run = run_monte_carlo_single(
             self._mc,
             self._sim,
-            self._rng,
+            seed,
             self._run_index,
-            report=True,
-            total_runs=self._mc.runs,
+            report=False,
         )
         self._current = run.result
         return self._current

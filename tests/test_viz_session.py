@@ -38,8 +38,11 @@ def test_monte_carlo_viz_session_first_run_reproducible():
     mc = _mc_fixture()
     mc = replace(mc, runs=3)
     sim = load_simulation_config(mc.simulation_path)
+    # Match the logic in MonteCarloVizSession: 
+    # first run uses first integer from rng seeded with mc.seed
     rng = np.random.default_rng(mc.seed)
-    expected = run_monte_carlo_single(mc, sim, rng, 0)
+    seed = int(rng.integers(0, 2**32 - 1))
+    expected = run_monte_carlo_single(mc, sim, seed, 0)
 
     session = MonteCarloVizSession(mc)
     first = session.current()
@@ -75,8 +78,10 @@ def test_monte_carlo_viz_session_offsets_match_batch():
     mc = _mc_fixture()
     mc = replace(mc, runs=2)
     sim = load_simulation_config(mc.simulation_path)
+    
     rng = np.random.default_rng(mc.seed)
-    batch = [run_monte_carlo_single(mc, sim, rng, i) for i in range(2)]
+    seeds = [int(rng.integers(0, 2**32 - 1)) for _ in range(2)]
+    batch = [run_monte_carlo_single(mc, sim, seeds[i], i) for i in range(2)]
 
     session = MonteCarloVizSession(mc)
     assert session.current().config.s1.bench_theta_offset == batch[0].s1_theta

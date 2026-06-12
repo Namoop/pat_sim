@@ -54,14 +54,12 @@ def run_visualizer(
         QHBoxLayout,
         QLabel,
         QMainWindow,
-        QProgressBar,
         QPushButton,
         QSlider,
         QStackedWidget,
         QVBoxLayout,
         QWidget,
-    )
-
+        )
     result = session.current()
     if not isinstance(session, MonteCarloVizSession):
         print(format_summary(result))
@@ -147,11 +145,7 @@ def run_visualizer(
             self.next_btn.clicked.connect(self._on_next)
             controls.addWidget(self.next_btn)
 
-            self._progress = QProgressBar()
-            self._progress.setRange(0, 0)
-            self._progress.setFixedWidth(120)
-            self._progress.setVisible(False)
-            controls.addWidget(self._progress)
+            controls.addStretch()
 
             root_layout.addWidget(self._controls_bar)
 
@@ -320,12 +314,10 @@ def run_visualizer(
             self._play_timer.stop()
             self._playing = False
             self._set_controls_enabled(False)
-            self._progress.setVisible(True)
             QApplication.processEvents()
 
             new_result = self._session.advance()
 
-            self._progress.setVisible(False)
             self._set_controls_enabled(True)
 
             if new_result is None:
