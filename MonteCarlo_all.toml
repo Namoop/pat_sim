@@ -40,13 +40,13 @@ seed = 42
 #chain = ["random_walk"]
 
 # long time to calculate
-#[[monte_carlo.chains]]
-#runs = 10
-#chain = ["random_curve"]
-
 [[monte_carlo.chains]]
 runs = 10
-chain = ["nested_spiral"]
+chain = ["random_curve"]
+
+#[[monte_carlo.chains]]
+#runs = 10
+#chain = ["nested_spiral"]
 
 # not remotely as intended
 #[[monte_carlo.chains]]
@@ -102,7 +102,7 @@ step_duration_ratio = 1.41421356
 velocity_a = 0.1
 velocity_ratio = 1.41421356
 drift_sigma = 10
-max_turn_radius = 30
+max_turn_radius = 50
 
 [strategy.nested_spiral]
 outer_radius = 0.05

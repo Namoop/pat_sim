@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import math
 import random
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
 from satellite.math3d import Vec3, normalize
@@ -43,42 +43,50 @@ class RandomCurvePattern(MovementPattern):
     seed: int
     radius_limit: float
     dt_sim: float = 0.01  # Simulation step for internal integration
+    _cache: list[tuple[float, float]] = field(
+        default_factory=list, init=False, hash=False, compare=False
+    )
 
     def aim_at(self, local_t: float, duration: float, ctx: AimContext) -> Vec3:
-        rng = random.Random(self.seed)
-        
-        curr_u, curr_v = 0.0, 0.0
-        heading = rng.uniform(0, 2 * math.pi)
-        current_dir = 0.0  # steering wheel angle
-        
-        # Simple integration up to local_t
-        t = 0.0
-        while t < local_t:
-            step = min(self.dt_sim, local_t - t)
-            # Drift the steering wheel angle
-            current_dir += rng.gauss(0, self.drift_sigma) * math.sqrt(step)
-            # Clamp to max_turn_radius
-            current_dir = max(-self.max_turn_radius, min(self.max_turn_radius, current_dir))
+        if not self._cache:
+            rng = random.Random(self.seed)
             
-            # Heading changes at a rate proportional to steering wheel angle (current_dir)
-            heading += current_dir * step
+            curr_u, curr_v = 0.0, 0.0
+            heading = rng.uniform(0, 2 * math.pi)
+            current_dir = 0.0  # steering wheel angle
             
-            curr_u += self.velocity * math.cos(heading) * step
-            curr_v += self.velocity * math.sin(heading) * step
+            # Simple integration up to duration
+            t = 0.0
+            while t <= duration + 1e-9:
+                self._cache.append((curr_u, curr_v))
+                
+                # Drift the steering wheel angle
+                current_dir += rng.gauss(0, self.drift_sigma) * math.sqrt(self.dt_sim)
+                # Clamp to max_turn_radius
+                current_dir = max(-self.max_turn_radius, min(self.max_turn_radius, current_dir))
+                
+                # Heading changes at a rate proportional to steering wheel angle (current_dir)
+                heading += current_dir * self.dt_sim
+                
+                curr_u += self.velocity * math.cos(heading) * self.dt_sim
+                curr_v += self.velocity * math.sin(heading) * self.dt_sim
+                
+                # Boundary reflection
+                dist = math.sqrt(curr_u**2 + curr_v**2)
+                if dist > self.radius_limit:
+                    # Reflect heading back toward center
+                    angle_to_center = math.atan2(-curr_v, -curr_u)
+                    heading = angle_to_center + rng.uniform(-math.pi/4, math.pi/4)
+                    # Reset steering wheel to point straight / turn back
+                    current_dir = 0.0
+                    # Snap back
+                    curr_u *= self.radius_limit / dist
+                    curr_v *= self.radius_limit / dist
+                t += self.dt_sim
             
-            # Boundary reflection
-            dist = math.sqrt(curr_u**2 + curr_v**2)
-            if dist > self.radius_limit:
-                # Reflect heading back toward center
-                angle_to_center = math.atan2(-curr_v, -curr_u)
-                heading = angle_to_center + rng.uniform(-math.pi/4, math.pi/4)
-                # Reset steering wheel to point straight / turn back
-                current_dir = 0.0
-                # Snap back
-                curr_u *= self.radius_limit / dist
-                curr_v *= self.radius_limit / dist
-            t += step
-            
+        # O(1) lookup
+        idx = min(int(local_t / self.dt_sim), len(self._cache) - 1)
+        curr_u, curr_v = self._cache[idx]
         return normalize(ctx.u_z + curr_u * ctx.u_x + curr_v * ctx.u_y)
 
 
