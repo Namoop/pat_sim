@@ -41,11 +41,6 @@ chain = ["random_walk"]
 #runs = 10
 #chain = ["nested_spiral"]
 
-# not remotely as intended
-#[[monte_carlo.chains]]
-#runs = 10
-#chain = ["golden_angle_spiral"]
-
 [error]
 distribution = "gaussian"
 theta_mean = 0.0

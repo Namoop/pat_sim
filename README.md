@@ -131,7 +131,6 @@ chain = ["asymmetric_swap"]
 | `random_walk` | Stochastic step-by-step random walk |
 | `random_curve` | Smooth random walk in angle space |
 | `nested_spiral` | Concentric Archimedean spirals |
-| `golden_angle_spiral` | Spiral search utilizing golden angle distribution |
 
 Custom strategies use the Python DSL in `strategy/actions.py`; TOML configures built-in chain parameters only.
 

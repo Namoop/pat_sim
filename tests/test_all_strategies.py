@@ -24,7 +24,6 @@ from tests.conftest import base_config
         "random_walk",
         "random_curve",
         "nested_spiral",
-        "golden_angle_spiral",
     ],
 )
 def test_strategy_execution_does_not_crash(strategy_name):

@@ -410,19 +410,7 @@ The **Nested Spiral** is a high-confidence, "brute-force" strategy for scenarios
 
 ---
 
-## 13. Golden Angle Spiral (`golden_angle_spiral`)
-
-### Description
-
-The **Golden Angle Spiral** (Vogel's Spiral) is a discrete search pattern that provides a nearly optimal uniform distribution of points within a circle. 
-
-The point positions are defined by:
-$r_n = c \sqrt{n}$
-$\theta_n = n \cdot 137.508^\circ$
-
----
-
-## 14. Metadata/Strategy Chain (Runner Logic)
+## 13. Metadata/Strategy Chain (Runner Logic)
 
 The simulation supports **Strategy Chaining**. If the first strategy fails to achieve a lock, the simulation automatically escalates to the next strategy in the chain.
 
@@ -448,5 +436,4 @@ The simulation supports **Strategy Chaining**. If the first strategy fails to ac
   - `random_walk`
   - `random_curve`
   - `nested_spiral`
-  - `golden_angle_spiral`
 

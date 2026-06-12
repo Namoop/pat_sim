@@ -6,7 +6,6 @@ from satellite.strategy.strategies.comprehensive import ComprehensiveStrategy
 from satellite.strategy.strategies.concentric_shells import ConcentricShellsStrategy
 from satellite.strategy.strategies.dual_raster import DualRasterStrategy
 from satellite.strategy.strategies.dual_spiral import DualSpiralStrategy
-from satellite.strategy.strategies.golden_angle_spiral import GoldenAngleStrategy
 from satellite.strategy.strategies.lissajous_scan import LissajousScanStrategy
 from satellite.strategy.strategies.minor_offset import MinorOffsetStrategy
 from satellite.strategy.strategies.nested_spiral import NestedSpiralStrategy
@@ -22,7 +21,6 @@ __all__ = [
     "ConcentricShellsStrategy",
     "DualRasterStrategy",
     "DualSpiralStrategy",
-    "GoldenAngleStrategy",
     "LissajousScanStrategy",
     "MinorOffsetStrategy",
     "NestedSpiralStrategy",
