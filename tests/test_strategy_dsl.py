@@ -107,12 +107,14 @@ def test_same_time_hardware_toggles():
 
 
 def test_validate_slew_speed_invoked_from_try_run():
+    from dataclasses import replace
     from satellite.strategy.strategies.minor_offset import (
         MinorOffsetConfig,
         MinorOffsetStrategy,
     )
 
     ctx = _ctx()
+    ctx.config = replace(ctx.config, satellite=replace(ctx.config.satellite, max_beam_speed=20.0))
     strat = MinorOffsetStrategy(
         config=MinorOffsetConfig(
             max_spiral_radius=0.02,

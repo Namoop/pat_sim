@@ -16,6 +16,9 @@ from satellite.math3d import as_vec3
 from satellite.strategy.strategies.asymmetric_swap import AsymmetricSwapConfig
 from satellite.strategy.strategies.minor_offset import MinorOffsetConfig
 from satellite.strategy.strategies.single_miss import SingleMissConfig
+from satellite.strategy.strategies.dual_spiral import DualSpiralConfig
+from satellite.strategy.strategies.dual_raster import DualRasterConfig
+from satellite.strategy.strategies.concentric_shells import ConcentricShellsConfig
 
 
 def base_config(
@@ -72,18 +75,34 @@ def base_config(
             params={
                 "minor_offset": MinorOffsetConfig(
                     max_spiral_radius="fov",
-                    spiral_speed=1.0,
+                    spiral_speed=0.4,
                 ),
                 "single_miss": SingleMissConfig(
                     a_spiral_radius=0.05,
                     b_spiral_radius=0.05,
-                    spiral_speed=1.0,
+                    spiral_speed=0.16,
                 ),
                 "asymmetric_swap": AsymmetricSwapConfig(
                     spiral_radius=0.05,
                     lock_duration=1.0,
-                    spiral_speed=1.0,
+                    spiral_speed=0.16,
                 ),
+                "dual_spiral": DualSpiralConfig(
+                    speed_a=0.05,
+                    speed_ratio=1.41421356,
+                ),
+                "dual_raster": DualRasterConfig(
+                    steps_a=20,
+                    steps_b=20,
+                    speed_a=0.1,
+                    speed_ratio=1.41421356,
+                ),
+                "concentric_shells": ConcentricShellsConfig(
+                    radii_factors=(0.2, 0.5, 1.0),
+                    spiral_speed_a=0.05,
+                    speed_ratio=1.41421356,
+                ),
+
             },
         ),
     )

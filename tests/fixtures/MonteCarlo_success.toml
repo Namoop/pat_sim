@@ -18,14 +18,14 @@ k = 10.0
 
 [strategy.minor_offset]
 max_spiral_radius = "fov"
-spiral_speed = 1.0
+spiral_speed = 0.4
 
 [strategy.single_miss]
 a_spiral_radius = 0.05
 b_spiral_radius = 0.05
-spiral_speed = 1.0
+spiral_speed = 0.16
 
 [strategy.asymmetric_swap]
 spiral_radius = 0.05
 lock_duration = 1.0
-spiral_speed = 1.0
+spiral_speed = 0.16

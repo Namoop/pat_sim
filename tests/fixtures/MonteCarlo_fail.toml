@@ -8,24 +8,24 @@ chain = ["minor_offset", "single_miss"]
 
 [error]
 distribution = "uniform"
-theta_min = -0.08
-theta_max = 0.08
-phi_min = -0.08
-phi_max = 0.08
+theta_min = 0.06
+theta_max = 0.09
+phi_min = 0.06
+phi_max = 0.09
 
 [strategy]
 k = 10.0
 
 [strategy.minor_offset]
 max_spiral_radius = "fov"
-spiral_speed = 1.0
+spiral_speed = 0.4
 
 [strategy.single_miss]
 a_spiral_radius = 0.05
 b_spiral_radius = 0.05
-spiral_speed = 1.0
+spiral_speed = 0.16
 
 [strategy.asymmetric_swap]
 spiral_radius = 0.05
 lock_duration = 1.0
-spiral_speed = 1.0
+spiral_speed = 0.16

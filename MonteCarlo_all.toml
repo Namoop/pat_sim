@@ -44,9 +44,9 @@ chain = ["concentric_shells"]
 [error]
 distribution = "gaussian"
 theta_mean = 0.0
-theta_std = 0.02
+theta_std = 0.002
 phi_mean = 0.0
-phi_std = 0.02
+phi_std = 0.002
 
 [strategy]
 k = 10.0
@@ -83,8 +83,8 @@ max_turn_radius = 0.863263
 bias_strength = 0.389001
 
 [strategy.concentric_shells]
-spiral_speed_a = 3.636251
-speed_ratio = 2.071850
+spiral_speed_a = 1.0
+speed_ratio = 1.41421356
 
 [strategy.random_walk]
 step_duration_a = 1.0

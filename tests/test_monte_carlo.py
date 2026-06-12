@@ -227,6 +227,20 @@ phi_max = 0.02
 [strategy]
 k = 10.0
 chain = ["minor_offset"]
+
+[strategy.minor_offset]
+max_spiral_radius = "fov"
+spiral_speed = 0.4
+
+[strategy.single_miss]
+a_spiral_radius = 0.05
+b_spiral_radius = 0.05
+spiral_speed = 0.16
+
+[strategy.asymmetric_swap]
+spiral_radius = 0.05
+lock_duration = 1.0
+spiral_speed = 0.16
 """
     toml_b_content = """
 [monte_carlo]
@@ -251,6 +265,20 @@ phi_max = 0.02
 [strategy]
 k = 10.0
 chain = ["minor_offset"]
+
+[strategy.minor_offset]
+max_spiral_radius = "fov"
+spiral_speed = 0.4
+
+[strategy.single_miss]
+a_spiral_radius = 0.05
+b_spiral_radius = 0.05
+spiral_speed = 0.16
+
+[strategy.asymmetric_swap]
+spiral_radius = 0.05
+lock_duration = 1.0
+spiral_speed = 0.16
 """
     pa = tmp_path / "mc_a.toml"
     pa.write_text(toml_a_content)
