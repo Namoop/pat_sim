@@ -83,11 +83,13 @@ QT_QPA_PLATFORM=xcb python -m satellite [...]
 
 ## Configuration
 
-| File | Purpose |
-|------|---------|
-| [`Simulation.toml`](Simulation.toml) | Hardware, `distance`, `t_step`, visualization |
-| [`default.toml`](default.toml) | Per-run bench offsets; optional `[scenario].distance` override |
-| [`MonteCarlo.toml`](MonteCarlo.toml) | MC runs, error distribution, strategy chain |
+
+| File                                 | Purpose                                                        |
+| ------------------------------------ | -------------------------------------------------------------- |
+| `[Simulation.toml](Simulation.toml)` | Hardware, `distance`, `t_step`, visualization                  |
+| `[default.toml](default.toml)`       | Per-run bench offsets; optional `[scenario].distance` override |
+| `[MonteCarlo.toml](MonteCarlo.toml)` | MC runs, error distribution, strategy chain                    |
+
 
 Satellites are placed on the **x axis**: S1 at origin, S2 at `[distance, 0, 0]`.
 
@@ -117,20 +119,22 @@ chain = ["asymmetric_swap"]
 
 ### Built-in strategies
 
-| Name | Behavior |
-|------|----------|
-| `minor_offset` | Both TX/RX on; S1 FOV spiral, S2 holds |
-| `single_miss` | Alternating wide spirals with bench reset between phases |
-| `asymmetric_swap` | S1 probes with RX off and resets, swap roles to establish reciprocal lock |
-| `dual_spiral` | Both satellites execute spirals simultaneously |
-| `dual_raster` | Satellites perform orthogonal raster scans (one horizontal, one vertical) |
-| `lissajous_scan` | Continuous Lissajous figure scan |
-| `rosette_scan` | Rosette-pattern scan from center boresight |
-| `center_rebias` | Stochastic search with periodic center resets |
-| `concentric_shells` | Progressive depth concentric circle scans |
-| `random_walk` | Stochastic step-by-step random walk |
-| `random_curve` | Smooth random walk in angle space |
-| `nested_spiral` | Concentric Archimedean spirals |
+
+| Name                | Behavior                                                                  |
+| ------------------- | ------------------------------------------------------------------------- |
+| `minor_offset`      | Both TX/RX on; S1 FOV spiral, S2 holds                                    |
+| `single_miss`       | Alternating wide spirals with bench reset between phases                  |
+| `asymmetric_swap`   | S1 probes with RX off and resets, swap roles to establish reciprocal lock |
+| `dual_spiral`       | Both satellites execute spirals simultaneously                            |
+| `dual_raster`       | Satellites perform orthogonal raster scans (one horizontal, one vertical) |
+| `lissajous_scan`    | Continuous Lissajous figure scan                                          |
+| `rosette_scan`      | Rosette-pattern scan from center boresight                                |
+| `center_rebias`     | Stochastic search with periodic center resets                             |
+| `concentric_shells` | Progressive depth concentric circle scans                                 |
+| `random_walk`       | Stochastic step-by-step random walk                                       |
+| `random_curve`      | Smooth random walk in angle space                                         |
+| `nested_spiral`     | Concentric Archimedean spirals                                            |
+
 
 Custom strategies use the Python DSL in `strategy/actions.py`; TOML configures built-in chain parameters only.
 
@@ -159,3 +163,15 @@ src/satellite/
 - **Lock:** both satellites transmitting and receiving, both slews complete, simultaneous `visible_12 ∧ visible_21`.
 - **Partial acquisition:** if one satellite acquires the other before a strategy times out, the acquirer keeps tracking and ignores later scripted search; the non-acquired satellite continues the strategy chain normally.
 - **Replay:** headless and visualizer share one coupled replay timeline, capped at lock time on successful runs.
+
+## Running Tests
+
+To run the test suite, notably in automated environments:
+
+1. **Install Test Dependencies**: If `pytest` is not already installed in your virtual environment:
+  ```bash
+   .venv/bin/pip install pytest
+  ```
+2. **Run Pytest with Environment Variables**: The project uses an auto-bootstrap mechanism in `[src/satellite/__init__.py](file:///home/theodore/Documents/satellite/src/satellite/__init__.py)` that can cause issues or unexpected argument stripping if re-executed.
+  To bypass this auto-bootstrap and run the tests correctly, set `SATELLITE_NO_GPU=1` and ensure the project path is in your `PYTHONPATH`:
+
