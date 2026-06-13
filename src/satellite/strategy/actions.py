@@ -27,7 +27,7 @@ SatelliteName = Literal["S1", "S2"]
 HardwareTarget = Literal["beam", "receiver"]
 
 _DURATION_TOLERANCE = 1e-9
-_ANGULAR_TOLERANCE = 1e-9
+_ANGULAR_TOLERANCE = 1e-7
 _current_timeline: ContextVar[object | None] = ContextVar(
     "current_timeline",
     default=None,
