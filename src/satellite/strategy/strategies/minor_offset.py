@@ -20,8 +20,11 @@ class MinorOffsetConfig:
 
 
 def parse_minor_offset_config(data: dict) -> MinorOffsetConfig:
+    radius = data.get("max_spiral_radius", "fov")
+    if isinstance(radius, (int, float)):
+        radius = float(radius) * 1e-3
     return MinorOffsetConfig(
-        max_spiral_radius=data.get("max_spiral_radius", "fov"),
+        max_spiral_radius=radius,
         spiral_speed=float(data.get("spiral_speed", 1.0)),
     )
 

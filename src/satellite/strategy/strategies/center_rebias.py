@@ -28,10 +28,10 @@ class CenterRebiasConfig:
 
 def parse_center_rebias_config(data: dict) -> CenterRebiasConfig:
     return CenterRebiasConfig(
-        velocity_a=float(data.get("velocity_a", data.get("velocity", 0.01))),
+        velocity_a=float(data.get("velocity_a", data.get("velocity", 10.0))) * 1e-3,
         velocity_ratio=float(data.get("velocity_ratio", 1.41421356)),
-        drift_sigma=float(data.get("drift_sigma", 0.1)),
-        max_turn_radius=float(data.get("max_turn_radius", 0.5)),
+        drift_sigma=float(data.get("drift_sigma", 100.0)) * 1e-3,
+        max_turn_radius=float(data.get("max_turn_radius", 500.0)) * 1e-3,
         bias_strength=float(data.get("bias_strength", 0.2)),
         seed=int(data.get("seed", 123)),
     )

@@ -33,6 +33,7 @@ class SharedSatelliteConfig:
     max_beam_speed: float
     max_fsm_speed: float
     beam_width_mrad: float
+    k: float
 
     @property
     def alpha(self) -> float:
@@ -180,10 +181,11 @@ def positions_for_distance(distance: float) -> tuple[Vec3, Vec3]:
 def _load_shared_satellite(data: dict) -> SharedSatelliteConfig:
     return SharedSatelliteConfig(
         body_radius=float(data.get("body_radius", 0.5)),
-        dish_fov=float(data.get("dish_fov", 0.002)),
-        max_beam_speed=float(data.get("max_beam_speed", 0.087)),  # ~5 deg/s
-        max_fsm_speed=float(data.get("max_fsm_speed", 1.0)),
+        dish_fov=float(data.get("dish_fov", 0.002)) * 1e-3,
+        max_beam_speed=float(data.get("max_beam_speed", 0.087)) * 1e-3,  # ~5 deg/s
+        max_fsm_speed=float(data.get("max_fsm_speed", 1.0)) * 1e-3,
         beam_width_mrad=float(data["beam_width"]),
+        k=float(data.get("k", 10.0)),
     )
 
 
@@ -196,7 +198,7 @@ def _load_simulation_section(data: dict) -> SimulationConfig:
         t_step=float(data["t_step"]),
         beam_length=beam_length,
         boresight_extension=float(data.get("boresight_extension", 5.0)),
-        max_search_radius=float(data.get("max_search_radius", 0.07)),
+        max_search_radius=float(data.get("max_search_radius", 0.07)) * 1e-3,
         profile_replay=bool(data.get("profile_replay", False)),
         timeout=float(data.get("timeout", 100.0)),
         enforce_speed_limit=bool(data.get("enforce_speed_limit", True)),
@@ -216,7 +218,7 @@ def _load_visualization(data: dict) -> VisualizationConfig:
 
 def _load_map_visualization(data: dict) -> MapVisualizationConfig:
     return MapVisualizationConfig(
-        axis_limit=float(data.get("axis_limit", 0.1)),
+        axis_limit=float(data.get("axis_limit", 0.1)) * 1e-3,
         profile_frames=bool(data.get("profile_frames", False)),
         slider_debounce_ms=int(data.get("slider_debounce_ms", 16)),
     )
@@ -228,11 +230,8 @@ def _require_float(section: dict, key: str, context: str) -> float:
     return float(section[key])
 
 
-def _load_strategy(data: dict, chains_data: list | None = None) -> StrategyConfig:
+def _load_strategy(data: dict, chains_data: list | None = None, default_k: float = 10.0) -> StrategyConfig:
     from satellite.strategy.base import CONFIG_PARSERS
-
-    if "k" not in data:
-        raise ValueError("[strategy].k is required")
 
     global_chain = data.get("chain", ["minor_offset", "single_miss"])
     all_strategy_names = set(global_chain)
@@ -250,7 +249,7 @@ def _load_strategy(data: dict, chains_data: list | None = None) -> StrategyConfi
             params[name] = section
 
     return StrategyConfig(
-        k=float(data["k"]),
+        k=float(data.get("k", default_k)),
         chain=tuple(global_chain),
         params=params,
     )
@@ -261,18 +260,18 @@ def _load_error(data: dict) -> ErrorDistributionConfig:
     if distribution == "uniform":
         return UniformErrorConfig(
             distribution="uniform",
-            theta_min=_require_float(data, "theta_min", "[error]"),
-            theta_max=_require_float(data, "theta_max", "[error]"),
-            phi_min=_require_float(data, "phi_min", "[error]"),
-            phi_max=_require_float(data, "phi_max", "[error]"),
+            theta_min=_require_float(data, "theta_min", "[error]") * 1e-3,
+            theta_max=_require_float(data, "theta_max", "[error]") * 1e-3,
+            phi_min=_require_float(data, "phi_min", "[error]") * 1e-3,
+            phi_max=_require_float(data, "phi_max", "[error]") * 1e-3,
         )
     if distribution == "gaussian":
         return GaussianErrorConfig(
             distribution="gaussian",
-            theta_mean=float(data.get("theta_mean", 0.0)),
-            theta_std=_require_float(data, "theta_std", "[error]"),
-            phi_mean=float(data.get("phi_mean", 0.0)),
-            phi_std=_require_float(data, "phi_std", "[error]"),
+            theta_mean=float(data.get("theta_mean", 0.0)) * 1e-3,
+            theta_std=_require_float(data, "theta_std", "[error]") * 1e-3,
+            phi_mean=float(data.get("phi_mean", 0.0)) * 1e-3,
+            phi_std=_require_float(data, "phi_std", "[error]") * 1e-3,
         )
     raise ValueError(f"Unsupported [error].distribution: {distribution!r}")
 
@@ -301,12 +300,12 @@ def load_scenario_config(path: str | Path) -> ScenarioInstance:
         name=str(scenario.get("name", "unnamed")),
         distance=float(distance) if distance is not None else None,
         s1=BenchOffsetConfig(
-            bench_theta_offset=float(s1.get("bench_theta_offset", 0.0)),
-            bench_phi_offset=float(s1.get("bench_phi_offset", 0.0)),
+            bench_theta_offset=float(s1.get("bench_theta_offset", 0.0)) * 1e-3,
+            bench_phi_offset=float(s1.get("bench_phi_offset", 0.0)) * 1e-3,
         ),
         s2=BenchOffsetConfig(
-            bench_theta_offset=float(s2.get("bench_theta_offset", 0.0)),
-            bench_phi_offset=float(s2.get("bench_phi_offset", 0.0)),
+            bench_theta_offset=float(s2.get("bench_theta_offset", 0.0)) * 1e-3,
+            bench_phi_offset=float(s2.get("bench_phi_offset", 0.0)) * 1e-3,
         ),
     )
 
@@ -319,10 +318,22 @@ def load_monte_carlo_config(path: str | Path) -> MonteCarloConfig:
     simulation_rel = str(mc.get("simulation", "Simulation.toml"))
     simulation_path = (config_path.parent / simulation_rel).resolve()
     
+    if not simulation_path.exists():
+        for candidate in [
+            config_path.parent.parent / simulation_rel,
+            Path.cwd() / simulation_rel,
+        ]:
+            candidate = candidate.resolve()
+            if candidate.exists():
+                simulation_path = candidate
+                break
+
+    sim_bundle = load_simulation_config(simulation_path)
+    
     chains_data = mc.get("chains") or data.get("chains")
     if not chains_data:
         raise ValueError("monte_carlo.chains is required")
-    strategy = _load_strategy(data.get("strategy", {}), chains_data=chains_data)
+    strategy = _load_strategy(data.get("strategy", {}), chains_data=chains_data, default_k=sim_bundle.satellite.k)
     
     chains = []
     for c in chains_data:

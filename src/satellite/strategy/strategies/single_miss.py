@@ -21,9 +21,15 @@ class SingleMissConfig:
 
 
 def parse_single_miss_config(data: dict) -> SingleMissConfig:
+    a_radius = data.get("a_spiral_radius", 50.0)
+    if isinstance(a_radius, (int, float)):
+        a_radius = float(a_radius) * 1e-3
+    b_radius = data.get("b_spiral_radius", 50.0)
+    if isinstance(b_radius, (int, float)):
+        b_radius = float(b_radius) * 1e-3
     return SingleMissConfig(
-        a_spiral_radius=data.get("a_spiral_radius", 0.05),
-        b_spiral_radius=data.get("b_spiral_radius", 0.05),
+        a_spiral_radius=a_radius,
+        b_spiral_radius=b_radius,
         spiral_speed=float(data.get("spiral_speed", 1.0)),
     )
 

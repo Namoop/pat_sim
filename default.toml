@@ -2,9 +2,9 @@
 name = "default"
 
 [s1]
-bench_theta_offset = 0.01
-bench_phi_offset = 0.01
+bench_theta_offset = 1.0
+bench_phi_offset = 1.0
 
 [s2]
-bench_theta_offset = 0.02
-bench_phi_offset = 0.015
+bench_theta_offset = 2.0
+bench_phi_offset = 1.5

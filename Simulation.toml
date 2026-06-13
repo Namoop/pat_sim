@@ -1,15 +1,16 @@
 [satellite]
 body_radius = 0.5
-dish_fov = 0.002 # radians
-max_beam_speed = 0.087
-max_fsm_speed = 1.0
+dish_fov = 2.0 # milliradians
+max_beam_speed = 87.0
+max_fsm_speed = 1000.0
 beam_width = 0.5 # milliradians
+k = 10.0
 
 [simulation]
 distance = 1000.0
 t_step = 0.01
 boresight_extension = 5.0
-max_search_radius = 0.005
+max_search_radius = 5.0
 profile_replay = false
 timeout = 100.0
 enforce_speed_limit = true
@@ -23,5 +24,5 @@ ribbon_v_steps = 8
 profile_frames = false
 
 [map_visualization]
-axis_limit = 0.01
+axis_limit = 10.0
 slider_debounce_ms = 16

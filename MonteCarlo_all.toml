@@ -44,12 +44,12 @@ chain = ["concentric_shells"]
 [error]
 distribution = "gaussian"
 theta_mean = 0.0
-theta_std = 0.002
+theta_std = 2.0
 phi_mean = 0.0
-phi_std = 0.002
+phi_std = 2.0
 
 [strategy]
-k = 10.0
+
 
 [strategy.dual_spiral]
 speed_a = 4.990651
@@ -76,10 +76,10 @@ s2_w1 = 7.542091
 s2_w2 = 9.304704
 
 [strategy.center_rebias]
-velocity_a = 0.043708
+velocity_a = 43.708
 velocity_ratio = 2.316948
-drift_sigma = 0.160874
-max_turn_radius = 0.863263
+drift_sigma = 160.874
+max_turn_radius = 863.263
 bias_strength = 0.389001
 
 [strategy.concentric_shells]
@@ -91,12 +91,12 @@ step_duration_a = 1.0
 step_duration_ratio = 1.41421356
 
 [strategy.random_curve]
-velocity_a = 0.1
+velocity_a = 100.0
 velocity_ratio = 1.41421356
-drift_sigma = 10
-max_turn_radius = 50
+drift_sigma = 10000.0
+max_turn_radius = 50000.0
 
 [strategy.nested_spiral]
-outer_radius = 0.05
-inner_radius = 0.05
+outer_radius = 50.0
+inner_radius = 50.0
 spiral_speed = 1.0

@@ -21,8 +21,11 @@ class AsymmetricSwapConfig:
 
 
 def parse_asymmetric_swap_config(data: dict) -> AsymmetricSwapConfig:
+    radius = data.get("spiral_radius", 50.0)
+    if isinstance(radius, (int, float)):
+        radius = float(radius) * 1e-3
     return AsymmetricSwapConfig(
-        spiral_radius=data.get("spiral_radius", 0.05),
+        spiral_radius=radius,
         lock_duration=float(data.get("lock_duration", 1.0)),
         spiral_speed=float(data.get("spiral_speed", 1.0)),
     )
