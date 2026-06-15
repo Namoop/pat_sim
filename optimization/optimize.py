@@ -496,10 +496,24 @@ def run_optuna_search(
     # Check if GPU batching is supported
     from satellite.cuda_monte_carlo import is_strategy_chain_supported_on_gpu, run_monte_carlo_cuda_batch, CUDA_AVAILABLE
     
+    # Construct a valid dummy parameters object using midpoints of the search space
+    dummy_params = {}
+    for param, spec in space.items():
+        ptype, start, end = spec
+        dummy_params[param] = (start + end) / 2.0 if ptype == "float" else int((start + end) / 2)
+        
+    if strategy_name == "lissajous_scan":
+        dummy_params["s1_delta"] = 1.570796
+        dummy_params["s2_delta"] = 1.570796
+        
+    from satellite.strategy.base import CONFIG_PARSERS
+    if strategy_name in CONFIG_PARSERS:
+        dummy_params = CONFIG_PARSERS[strategy_name](dummy_params)
+        
     dummy_strategy = StrategyConfig(
         k=mc_cfg.strategy.k,
         chain=(strategy_name,),
-        params={strategy_name: {}},
+        params={strategy_name: dummy_params},
     )
     dummy_mc = MonteCarloConfig(
         simulation_path=mc_cfg.simulation_path,
