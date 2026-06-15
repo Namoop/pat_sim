@@ -374,34 +374,37 @@ if CUDA_AVAILABLE:
 
     @cuda.jit
     def simulate_batch_kernel(
-        offsets,        # (N, 4) -> s1_theta, s1_phi, s2_theta, s2_phi
-        legs_s1,        # (M, 7) -> start, end, type, p1, p2, p3, p4
-        legs_s2,        # (M, 7)
-        hw_steps_s1,    # (H, 3) -> time, target_type (0=beam, 1=rx), enabled (0 or 1)
-        hw_steps_s2,    # (H, 3)
-        sim_params,     # [t_step, timeout, beam_length, body_radius, dish_fov, cos_dish_fov, max_beam_speed, max_fsm_speed, alpha, cos_alpha]
-        positions,      # [s1_x, s1_y, s1_z, s2_x, s2_y, s2_z]
-        results         # Output: (N, 2) -> locked (1.0 or 0.0), hit_at_t
+        offsets,        # (B * N, 4) -> s1_theta, s1_phi, s2_theta, s2_phi
+        legs_s1,        # (B, M, 7) -> start, end, type, p1, p2, p3, p4
+        legs_s2,        # (B, M, 7)
+        hw_steps_s1,    # (B, H, 3) -> time, target_type (0=beam, 1=rx), enabled (0 or 1)
+        hw_steps_s2,    # (B, H, 3)
+        sim_params,     # (B, 10) -> [t_step, timeout, beam_length, body_radius, dish_fov, cos_dish_fov, max_beam_speed, max_fsm_speed, alpha, cos_alpha]
+        positions,      # (B, 6) -> [s1_x, s1_y, s1_z, s2_x, s2_y, s2_z]
+        results,        # Output: (B * N, 2) -> locked (1.0 or 0.0), hit_at_t
+        runs_per_trial  # scalar int (N)
     ):
         idx = cuda.grid(1)
         if idx >= offsets.shape[0]:
             return
 
+        trial_idx = idx // runs_per_trial
+
         # Load positions
-        s1_pos = (positions[0], positions[1], positions[2])
-        s2_pos = (positions[3], positions[4], positions[5])
+        s1_pos = (positions[trial_idx, 0], positions[trial_idx, 1], positions[trial_idx, 2])
+        s2_pos = (positions[trial_idx, 3], positions[trial_idx, 4], positions[trial_idx, 5])
         
         # Load physics constants
-        t_step = sim_params[0]
-        timeout = sim_params[1]
-        beam_length = sim_params[2]
-        body_radius = sim_params[3]
-        dish_fov = sim_params[4]
-        cos_dish_fov = sim_params[5]
-        max_beam_speed = sim_params[6]
-        max_fsm_speed = sim_params[7]
-        alpha = sim_params[8]
-        cos_alpha = sim_params[9]
+        t_step = sim_params[trial_idx, 0]
+        timeout = sim_params[trial_idx, 1]
+        beam_length = sim_params[trial_idx, 2]
+        body_radius = sim_params[trial_idx, 3]
+        dish_fov = sim_params[trial_idx, 4]
+        cos_dish_fov = sim_params[trial_idx, 5]
+        max_beam_speed = sim_params[trial_idx, 6]
+        max_fsm_speed = sim_params[trial_idx, 7]
+        alpha = sim_params[trial_idx, 8]
+        cos_alpha = sim_params[trial_idx, 9]
 
         # Scenario initial error offsets
         s1_theta_off = offsets[idx, 0]
@@ -496,27 +499,38 @@ if CUDA_AVAILABLE:
         success = False
         hit_time = -1.0
 
+        # Phase 4: Consolidate scratch arrays at top of kernel to reduce register pressure
+        aim_temp = cuda.local.array(3, dtype=FLOAT_DTYPE)
+        rx_aim_temp = cuda.local.array(3, dtype=FLOAT_DTYPE)
+        angles_temp = cuda.local.array(2, dtype=FLOAT_DTYPE)
+        ux_temp = cuda.local.array(3, dtype=FLOAT_DTYPE)
+        uy_temp = cuda.local.array(3, dtype=FLOAT_DTYPE)
+        uz_temp = cuda.local.array(3, dtype=FLOAT_DTYPE)
+        mount_temp = cuda.local.array(3, dtype=FLOAT_DTYPE)
+        toward_temp = cuda.local.array(3, dtype=FLOAT_DTYPE)
+        fsm_targets_temp = cuda.local.array(2, dtype=FLOAT_DTYPE)
+
         # Loop through simulation steps
         while local_t <= timeout + 1e-12:
             # 1. Update hardware states based on timeline
-            while hw_idx_s1 < hw_steps_s1.shape[0]:
-                hw_time = hw_steps_s1[hw_idx_s1, 0]
+            while hw_idx_s1 < hw_steps_s1.shape[1]:
+                hw_time = hw_steps_s1[trial_idx, hw_idx_s1, 0]
                 if hw_time > local_t + 1e-12:
                     break
-                hw_target = hw_steps_s1[hw_idx_s1, 1]
-                hw_enabled = hw_steps_s1[hw_idx_s1, 2] > 0.5
+                hw_target = hw_steps_s1[trial_idx, hw_idx_s1, 1]
+                hw_enabled = hw_steps_s1[trial_idx, hw_idx_s1, 2] > 0.5
                 if hw_target == 0.0:
                     s1_beam_enabled = hw_enabled
                 else:
                     s1_rx_enabled = hw_enabled
                 hw_idx_s1 += 1
 
-            while hw_idx_s2 < hw_steps_s2.shape[0]:
-                hw_time = hw_steps_s2[hw_idx_s2, 0]
+            while hw_idx_s2 < hw_steps_s2.shape[1]:
+                hw_time = hw_steps_s2[trial_idx, hw_idx_s2, 0]
                 if hw_time > local_t + 1e-12:
                     break
-                hw_target = hw_steps_s2[hw_idx_s2, 1]
-                hw_enabled = hw_steps_s2[hw_idx_s2, 2] > 0.5
+                hw_target = hw_steps_s2[trial_idx, hw_idx_s2, 1]
+                hw_enabled = hw_steps_s2[trial_idx, hw_idx_s2, 2] > 0.5
                 if hw_target == 0.0:
                     s2_beam_enabled = hw_enabled
                 else:
@@ -530,12 +544,12 @@ if CUDA_AVAILABLE:
             else:
                 # Find current movement step
                 leg_idx = -1
-                for i in range(legs_s1.shape[0]):
-                    if local_t < legs_s1[i, 1] - 1e-9:
+                for i in range(legs_s1.shape[1]):
+                    if local_t < legs_s1[trial_idx, i, 1] - 1e-9:
                         leg_idx = i
                         break
                 if leg_idx == -1:
-                    leg_idx = legs_s1.shape[0] - 1
+                    leg_idx = legs_s1.shape[1] - 1
                 
                 # Check for leg boundary transition
                 if leg_idx != prev_leg_idx_s1:
@@ -544,28 +558,27 @@ if CUDA_AVAILABLE:
                     s1_step_start_aim[1] = s1_bench_boresight[1]
                     s1_step_start_aim[2] = s1_bench_boresight[2]
                 
-                leg_start = legs_s1[leg_idx, 0]
-                leg_duration = legs_s1[leg_idx, 1] - leg_start
-                leg_type = int(legs_s1[leg_idx, 2])
-                leg_params = (legs_s1[leg_idx, 3], legs_s1[leg_idx, 4], legs_s1[leg_idx, 5], legs_s1[leg_idx, 6])
+                leg_start = legs_s1[trial_idx, leg_idx, 0]
+                leg_duration = legs_s1[trial_idx, leg_idx, 1] - leg_start
+                leg_type = int(legs_s1[trial_idx, leg_idx, 2])
+                leg_params = (legs_s1[trial_idx, leg_idx, 3], legs_s1[trial_idx, leg_idx, 4], legs_s1[trial_idx, leg_idx, 5], legs_s1[trial_idx, leg_idx, 6])
                 
-                aim = cuda.local.array(3, dtype=FLOAT_DTYPE)
-                get_aim_device(leg_type, leg_params, local_t - leg_start, leg_duration, s1_step_start_aim, s1_u_x, s1_u_y, s1_u_z, aim)
-                s1_bench_boresight[0] = aim[0]
-                s1_bench_boresight[1] = aim[1]
-                s1_bench_boresight[2] = aim[2]
+                get_aim_device(leg_type, leg_params, local_t - leg_start, leg_duration, s1_step_start_aim, s1_u_x, s1_u_y, s1_u_z, aim_temp)
+                s1_bench_boresight[0] = aim_temp[0]
+                s1_bench_boresight[1] = aim_temp[1]
+                s1_bench_boresight[2] = aim_temp[2]
 
             # S2
             if s2_has_seen:
                 pass
             else:
                 leg_idx = -1
-                for i in range(legs_s2.shape[0]):
-                    if local_t < legs_s2[i, 1] - 1e-9:
+                for i in range(legs_s2.shape[1]):
+                    if local_t < legs_s2[trial_idx, i, 1] - 1e-9:
                         leg_idx = i
                         break
                 if leg_idx == -1:
-                    leg_idx = legs_s2.shape[0] - 1
+                    leg_idx = legs_s2.shape[1] - 1
                 
                 if leg_idx != prev_leg_idx_s2:
                     prev_leg_idx_s2 = leg_idx
@@ -573,59 +586,48 @@ if CUDA_AVAILABLE:
                     s2_step_start_aim[1] = s2_bench_boresight[1]
                     s2_step_start_aim[2] = s2_bench_boresight[2]
                 
-                leg_start = legs_s2[leg_idx, 0]
-                leg_duration = legs_s2[leg_idx, 1] - leg_start
-                leg_type = int(legs_s2[leg_idx, 2])
-                leg_params = (legs_s2[leg_idx, 3], legs_s2[leg_idx, 4], legs_s2[leg_idx, 5], legs_s2[leg_idx, 6])
+                leg_start = legs_s2[trial_idx, leg_idx, 0]
+                leg_duration = legs_s2[trial_idx, leg_idx, 1] - leg_start
+                leg_type = int(legs_s2[trial_idx, leg_idx, 2])
+                leg_params = (legs_s2[trial_idx, leg_idx, 3], legs_s2[trial_idx, leg_idx, 4], legs_s2[trial_idx, leg_idx, 5], legs_s2[trial_idx, leg_idx, 6])
                 
-                aim = cuda.local.array(3, dtype=FLOAT_DTYPE)
-                get_aim_device(leg_type, leg_params, local_t - leg_start, leg_duration, s2_step_start_aim, s2_u_x, s2_u_y, s2_u_z, aim)
-                s2_bench_boresight[0] = aim[0]
-                s2_bench_boresight[1] = aim[1]
-                s2_bench_boresight[2] = aim[2]
+                get_aim_device(leg_type, leg_params, local_t - leg_start, leg_duration, s2_step_start_aim, s2_u_x, s2_u_y, s2_u_z, aim_temp)
+                s2_bench_boresight[0] = aim_temp[0]
+                s2_bench_boresight[1] = aim_temp[1]
+                s2_bench_boresight[2] = aim_temp[2]
 
             # 3. Check link visibility
             # S1 to S2 pointing
             s1_tx_aim = s1_bench_boresight  # TX has no FSM deflection
             
             # S2 receiver effective boresight (apply FSM deflection if locked)
-            s2_rx_aim = cuda.local.array(3, dtype=FLOAT_DTYPE)
             if s2_fsm_locked:
-                s2_angles = cuda.local.array(2, dtype=FLOAT_DTYPE)
-                spherical_angles_from_direction_device(s2_bench_boresight, s2_angles)
-                s2_ux = cuda.local.array(3, dtype=FLOAT_DTYPE)
-                s2_uy = cuda.local.array(3, dtype=FLOAT_DTYPE)
-                s2_uz = cuda.local.array(3, dtype=FLOAT_DTYPE)
-                transmitter_basis_device(s2_angles[0], s2_angles[1], s2_ux, s2_uy, s2_uz)
-                direction_with_tangent_offset_device(s2_bench_boresight, s2_ux, s2_uy, s2_fsm_theta, s2_fsm_phi, s2_rx_aim)
+                spherical_angles_from_direction_device(s2_bench_boresight, angles_temp)
+                transmitter_basis_device(angles_temp[0], angles_temp[1], ux_temp, uy_temp, uz_temp)
+                direction_with_tangent_offset_device(s2_bench_boresight, ux_temp, uy_temp, s2_fsm_theta, s2_fsm_phi, rx_aim_temp)
             else:
-                s2_rx_aim[0] = s2_bench_boresight[0]
-                s2_rx_aim[1] = s2_bench_boresight[1]
-                s2_rx_aim[2] = s2_bench_boresight[2]
+                rx_aim_temp[0] = s2_bench_boresight[0]
+                rx_aim_temp[1] = s2_bench_boresight[1]
+                rx_aim_temp[2] = s2_bench_boresight[2]
                 
             visible_12 = s1_beam_enabled and s2_rx_enabled and beam_hits_dish_device(
-                s1_pos, s2_pos, s2_rx_aim, cos_dish_fov, s1_tx_aim, cos_alpha, beam_length, body_radius
+                s1_pos, s2_pos, rx_aim_temp, cos_dish_fov, s1_tx_aim, cos_alpha, beam_length, body_radius
             )
 
             # S2 to S1 pointing
             s2_tx_aim = s2_bench_boresight
             
-            s1_rx_aim = cuda.local.array(3, dtype=FLOAT_DTYPE)
             if s1_fsm_locked:
-                s1_angles = cuda.local.array(2, dtype=FLOAT_DTYPE)
-                spherical_angles_from_direction_device(s1_bench_boresight, s1_angles)
-                s1_ux = cuda.local.array(3, dtype=FLOAT_DTYPE)
-                s1_uy = cuda.local.array(3, dtype=FLOAT_DTYPE)
-                s1_uz = cuda.local.array(3, dtype=FLOAT_DTYPE)
-                transmitter_basis_device(s1_angles[0], s1_angles[1], s1_ux, s1_uy, s1_uz)
-                direction_with_tangent_offset_device(s1_bench_boresight, s1_ux, s1_uy, s1_fsm_theta, s1_fsm_phi, s1_rx_aim)
+                spherical_angles_from_direction_device(s1_bench_boresight, angles_temp)
+                transmitter_basis_device(angles_temp[0], angles_temp[1], ux_temp, uy_temp, uz_temp)
+                direction_with_tangent_offset_device(s1_bench_boresight, ux_temp, uy_temp, s1_fsm_theta, s1_fsm_phi, rx_aim_temp)
             else:
-                s1_rx_aim[0] = s1_bench_boresight[0]
-                s1_rx_aim[1] = s1_bench_boresight[1]
-                s1_rx_aim[2] = s1_bench_boresight[2]
+                rx_aim_temp[0] = s1_bench_boresight[0]
+                rx_aim_temp[1] = s1_bench_boresight[1]
+                rx_aim_temp[2] = s1_bench_boresight[2]
                 
             visible_21 = s2_beam_enabled and s1_rx_enabled and beam_hits_dish_device(
-                s2_pos, s1_pos, s1_rx_aim, cos_dish_fov, s2_tx_aim, cos_alpha, beam_length, body_radius
+                s2_pos, s1_pos, rx_aim_temp, cos_dish_fov, s2_tx_aim, cos_alpha, beam_length, body_radius
             )
 
             # 4. Acquisition logic updates
@@ -633,36 +635,33 @@ if CUDA_AVAILABLE:
             s1_just_detected = False
             s1_slewed = False
             if visible_21 and not s1_has_seen:
-                s1_mount = cuda.local.array(3, dtype=FLOAT_DTYPE)
-                s1_mount[0] = s1_pos[0] + s1_bench_boresight[0] * body_radius
-                s1_mount[1] = s1_pos[1] + s1_bench_boresight[1] * body_radius
-                s1_mount[2] = s1_pos[2] + s1_bench_boresight[2] * body_radius
+                mount_temp[0] = s1_pos[0] + s1_bench_boresight[0] * body_radius
+                mount_temp[1] = s1_pos[1] + s1_bench_boresight[1] * body_radius
+                mount_temp[2] = s1_pos[2] + s1_bench_boresight[2] * body_radius
                 
-                dx_m = s2_pos[0] - s1_mount[0]
-                dy_m = s2_pos[1] - s1_mount[1]
-                dz_m = s2_pos[2] - s1_mount[2]
-                toward_source = cuda.local.array(3, dtype=FLOAT_DTYPE)
-                normalize_device((dx_m, dy_m, dz_m), toward_source)
+                dx_m = s2_pos[0] - mount_temp[0]
+                dy_m = s2_pos[1] - mount_temp[1]
+                dz_m = s2_pos[2] - mount_temp[2]
+                normalize_device((dx_m, dy_m, dz_m), toward_temp)
                 
-                s1_incident = angle_between_device(s1_bench_boresight, toward_source)
-                s1_track_target[0] = toward_source[0]
-                s1_track_target[1] = toward_source[1]
-                s1_track_target[2] = toward_source[2]
+                s1_incident = angle_between_device(s1_bench_boresight, toward_temp)
+                s1_track_target[0] = toward_temp[0]
+                s1_track_target[1] = toward_temp[1]
+                s1_track_target[2] = toward_temp[2]
                 
                 s1_has_seen = True
                 s1_fsm_locked = False
                 s1_slew_complete = False
                 s1_bench_slew_rate = max_beam_speed
                 
-                fsm_targets = cuda.local.array(2, dtype=FLOAT_DTYPE)
-                offsets_to_target_device(s1_bench_boresight, toward_source, fsm_targets)
-                s1_fsm_theta = fsm_targets[0]
-                s1_fsm_phi = fsm_targets[1]
+                offsets_to_target_device(s1_bench_boresight, toward_temp, fsm_targets_temp)
+                s1_fsm_theta = fsm_targets_temp[0]
+                s1_fsm_phi = fsm_targets_temp[1]
                 
                 if max_beam_speed == 0.0:
-                    s1_bench_boresight[0] = toward_source[0]
-                    s1_bench_boresight[1] = toward_source[1]
-                    s1_bench_boresight[2] = toward_source[2]
+                    s1_bench_boresight[0] = toward_temp[0]
+                    s1_bench_boresight[1] = toward_temp[1]
+                    s1_bench_boresight[2] = toward_temp[2]
                     s1_slew_complete = True
                 s1_just_detected = True
 
@@ -670,57 +669,53 @@ if CUDA_AVAILABLE:
             s2_just_detected = False
             s2_slewed = False
             if visible_12 and not s2_has_seen:
-                s2_mount = cuda.local.array(3, dtype=FLOAT_DTYPE)
-                s2_mount[0] = s2_pos[0] + s2_bench_boresight[0] * body_radius
-                s2_mount[1] = s2_pos[1] + s2_bench_boresight[1] * body_radius
-                s2_mount[2] = s2_pos[2] + s2_bench_boresight[2] * body_radius
+                mount_temp[0] = s2_pos[0] + s2_bench_boresight[0] * body_radius
+                mount_temp[1] = s2_pos[1] + s2_bench_boresight[1] * body_radius
+                mount_temp[2] = s2_pos[2] + s2_bench_boresight[2] * body_radius
                 
-                dx_m = s1_pos[0] - s2_mount[0]
-                dy_m = s1_pos[1] - s2_mount[1]
-                dz_m = s1_pos[2] - s2_mount[2]
-                toward_source = cuda.local.array(3, dtype=FLOAT_DTYPE)
-                normalize_device((dx_m, dy_m, dz_m), toward_source)
+                dx_m = s1_pos[0] - mount_temp[0]
+                dy_m = s1_pos[1] - mount_temp[1]
+                dz_m = s1_pos[2] - mount_temp[2]
+                normalize_device((dx_m, dy_m, dz_m), toward_temp)
                 
-                s2_incident = angle_between_device(s2_bench_boresight, toward_source)
-                s2_track_target[0] = toward_source[0]
-                s2_track_target[1] = toward_source[1]
-                s2_track_target[2] = toward_source[2]
+                s2_incident = angle_between_device(s2_bench_boresight, toward_temp)
+                s2_track_target[0] = toward_temp[0]
+                s2_track_target[1] = toward_temp[1]
+                s2_track_target[2] = toward_temp[2]
                 
                 s2_has_seen = True
                 s2_fsm_locked = False
                 s2_slew_complete = False
                 s2_bench_slew_rate = max_beam_speed
                 
-                fsm_targets = cuda.local.array(2, dtype=FLOAT_DTYPE)
-                offsets_to_target_device(s2_bench_boresight, toward_source, fsm_targets)
-                s2_fsm_theta = fsm_targets[0]
-                s2_fsm_phi = fsm_targets[1]
+                offsets_to_target_device(s2_bench_boresight, toward_temp, fsm_targets_temp)
+                s2_fsm_theta = fsm_targets_temp[0]
+                s2_fsm_phi = fsm_targets_temp[1]
                 
                 if max_beam_speed == 0.0:
-                    s2_bench_boresight[0] = toward_source[0]
-                    s2_bench_boresight[1] = toward_source[1]
-                    s2_bench_boresight[2] = toward_source[2]
+                    s2_bench_boresight[0] = toward_temp[0]
+                    s2_bench_boresight[1] = toward_temp[1]
+                    s2_bench_boresight[2] = toward_temp[2]
                     s2_slew_complete = True
                 s2_just_detected = True
 
             # 5. Tracking logic updates (slews)
             # S1 Slews
             if s1_has_seen:
-                fsm_targets = cuda.local.array(2, dtype=FLOAT_DTYPE)
-                offsets_to_target_device(s1_bench_boresight, s1_track_target, fsm_targets)
+                offsets_to_target_device(s1_bench_boresight, s1_track_target, fsm_targets_temp)
                 
                 if max_fsm_speed <= 0.0:
-                    s1_fsm_theta = fsm_targets[0]
-                    s1_fsm_phi = fsm_targets[1]
+                    s1_fsm_theta = fsm_targets_temp[0]
+                    s1_fsm_phi = fsm_targets_temp[1]
                     s1_fsm_locked = True
                 else:
-                    du = fsm_targets[0] - s1_fsm_theta
-                    dv = fsm_targets[1] - s1_fsm_phi
+                    du = fsm_targets_temp[0] - s1_fsm_theta
+                    dv = fsm_targets_temp[1] - s1_fsm_phi
                     dist = (du*du + dv*dv) ** 0.5
                     max_step = max_fsm_speed * t_step
                     if dist <= max_step + 1e-12:
-                        s1_fsm_theta = fsm_targets[0]
-                        s1_fsm_phi = fsm_targets[1]
+                        s1_fsm_theta = fsm_targets_temp[0]
+                        s1_fsm_phi = fsm_targets_temp[1]
                         s1_fsm_locked = True
                     else:
                         s1_fsm_theta += (du / dist) * max_step
@@ -730,15 +725,14 @@ if CUDA_AVAILABLE:
                 if not s1_just_detected and not s1_slew_complete:
                     max_step = s1_bench_slew_rate * t_step
                     remaining = angle_between_device(s1_bench_boresight, s1_track_target)
-                    slew_dir = cuda.local.array(3, dtype=FLOAT_DTYPE)
-                    rotate_toward_device(s1_bench_boresight, s1_track_target, max_step, slew_dir)
-                    s1_bench_boresight[0] = slew_dir[0]
-                    s1_bench_boresight[1] = slew_dir[1]
-                    s1_bench_boresight[2] = slew_dir[2]
+                    rotate_toward_device(s1_bench_boresight, s1_track_target, max_step, aim_temp)
+                    s1_bench_boresight[0] = aim_temp[0]
+                    s1_bench_boresight[1] = aim_temp[1]
+                    s1_bench_boresight[2] = aim_temp[2]
                     
-                    offsets_to_target_device(s1_bench_boresight, s1_track_target, fsm_targets)
-                    s1_fsm_theta = fsm_targets[0]
-                    s1_fsm_phi = fsm_targets[1]
+                    offsets_to_target_device(s1_bench_boresight, s1_track_target, fsm_targets_temp)
+                    s1_fsm_theta = fsm_targets_temp[0]
+                    s1_fsm_phi = fsm_targets_temp[1]
                     
                     if remaining <= max_step + 1e-12:
                         s1_bench_boresight[0] = s1_track_target[0]
@@ -749,21 +743,20 @@ if CUDA_AVAILABLE:
 
             # S2 Slews
             if s2_has_seen:
-                fsm_targets = cuda.local.array(2, dtype=FLOAT_DTYPE)
-                offsets_to_target_device(s2_bench_boresight, s2_track_target, fsm_targets)
+                offsets_to_target_device(s2_bench_boresight, s2_track_target, fsm_targets_temp)
                 
                 if max_fsm_speed <= 0.0:
-                    s2_fsm_theta = fsm_targets[0]
-                    s2_fsm_phi = fsm_targets[1]
+                    s2_fsm_theta = fsm_targets_temp[0]
+                    s2_fsm_phi = fsm_targets_temp[1]
                     s2_fsm_locked = True
                 else:
-                    du = fsm_targets[0] - s2_fsm_theta
-                    dv = fsm_targets[1] - s2_fsm_phi
+                    du = fsm_targets_temp[0] - s2_fsm_theta
+                    dv = fsm_targets_temp[1] - s2_fsm_phi
                     dist = (du*du + dv*dv) ** 0.5
                     max_step = max_fsm_speed * t_step
                     if dist <= max_step + 1e-12:
-                        s2_fsm_theta = fsm_targets[0]
-                        s2_fsm_phi = fsm_targets[1]
+                        s2_fsm_theta = fsm_targets_temp[0]
+                        s2_fsm_phi = fsm_targets_temp[1]
                         s2_fsm_locked = True
                     else:
                         s2_fsm_theta += (du / dist) * max_step
@@ -773,15 +766,14 @@ if CUDA_AVAILABLE:
                 if not s2_just_detected and not s2_slew_complete:
                     max_step = s2_bench_slew_rate * t_step
                     remaining = angle_between_device(s2_bench_boresight, s2_track_target)
-                    slew_dir = cuda.local.array(3, dtype=FLOAT_DTYPE)
-                    rotate_toward_device(s2_bench_boresight, s2_track_target, max_step, slew_dir)
-                    s2_bench_boresight[0] = slew_dir[0]
-                    s2_bench_boresight[1] = slew_dir[1]
-                    s2_bench_boresight[2] = slew_dir[2]
+                    rotate_toward_device(s2_bench_boresight, s2_track_target, max_step, aim_temp)
+                    s2_bench_boresight[0] = aim_temp[0]
+                    s2_bench_boresight[1] = aim_temp[1]
+                    s2_bench_boresight[2] = aim_temp[2]
                     
-                    offsets_to_target_device(s2_bench_boresight, s2_track_target, fsm_targets)
-                    s2_fsm_theta = fsm_targets[0]
-                    s2_fsm_phi = fsm_targets[1]
+                    offsets_to_target_device(s2_bench_boresight, s2_track_target, fsm_targets_temp)
+                    s2_fsm_theta = fsm_targets_temp[0]
+                    s2_fsm_phi = fsm_targets_temp[1]
                     
                     if remaining <= max_step + 1e-12:
                         s2_bench_boresight[0] = s2_track_target[0]
@@ -795,30 +787,20 @@ if CUDA_AVAILABLE:
                 s1_final_aim = s1_bench_boresight
                 s2_final_aim = s2_bench_boresight
                 
-                s2_final_rx_aim = cuda.local.array(3, dtype=FLOAT_DTYPE)
-                s2_angles = cuda.local.array(2, dtype=FLOAT_DTYPE)
-                spherical_angles_from_direction_device(s2_bench_boresight, s2_angles)
-                s2_ux = cuda.local.array(3, dtype=FLOAT_DTYPE)
-                s2_uy = cuda.local.array(3, dtype=FLOAT_DTYPE)
-                s2_uz = cuda.local.array(3, dtype=FLOAT_DTYPE)
-                transmitter_basis_device(s2_angles[0], s2_angles[1], s2_ux, s2_uy, s2_uz)
-                direction_with_tangent_offset_device(s2_bench_boresight, s2_ux, s2_uy, s2_fsm_theta, s2_fsm_phi, s2_final_rx_aim)
+                spherical_angles_from_direction_device(s2_bench_boresight, angles_temp)
+                transmitter_basis_device(angles_temp[0], angles_temp[1], ux_temp, uy_temp, uz_temp)
+                direction_with_tangent_offset_device(s2_bench_boresight, ux_temp, uy_temp, s2_fsm_theta, s2_fsm_phi, rx_aim_temp)
                 
                 final_12 = s1_beam_enabled and s2_rx_enabled and beam_hits_dish_device(
-                    s1_pos, s2_pos, s2_final_rx_aim, cos_dish_fov, s1_final_aim, cos_alpha, beam_length, body_radius
+                    s1_pos, s2_pos, rx_aim_temp, cos_dish_fov, s1_final_aim, cos_alpha, beam_length, body_radius
                 )
                 
-                s1_final_rx_aim = cuda.local.array(3, dtype=FLOAT_DTYPE)
-                s1_angles = cuda.local.array(2, dtype=FLOAT_DTYPE)
-                spherical_angles_from_direction_device(s1_bench_boresight, s1_angles)
-                s1_ux = cuda.local.array(3, dtype=FLOAT_DTYPE)
-                s1_uy = cuda.local.array(3, dtype=FLOAT_DTYPE)
-                s1_uz = cuda.local.array(3, dtype=FLOAT_DTYPE)
-                transmitter_basis_device(s1_angles[0], s1_angles[1], s1_ux, s1_uy, s1_uz)
-                direction_with_tangent_offset_device(s1_bench_boresight, s1_ux, s1_uy, s1_fsm_theta, s1_fsm_phi, s1_final_rx_aim)
+                spherical_angles_from_direction_device(s1_bench_boresight, angles_temp)
+                transmitter_basis_device(angles_temp[0], angles_temp[1], ux_temp, uy_temp, uz_temp)
+                direction_with_tangent_offset_device(s1_bench_boresight, ux_temp, uy_temp, s1_fsm_theta, s1_fsm_phi, rx_aim_temp)
                 
                 final_21 = s2_beam_enabled and s1_rx_enabled and beam_hits_dish_device(
-                    s2_pos, s1_pos, s1_final_rx_aim, cos_dish_fov, s2_final_aim, cos_alpha, beam_length, body_radius
+                    s2_pos, s1_pos, rx_aim_temp, cos_dish_fov, s2_final_aim, cos_alpha, beam_length, body_radius
                 )
 
                 if final_12 and final_21 and s1_slew_complete and s2_slew_complete:
@@ -882,154 +864,203 @@ def is_strategy_chain_supported_on_gpu(mc: MonteCarloConfig) -> bool:
 # ==============================================================================
 
 def run_monte_carlo_cuda(mc: MonteCarloConfig) -> MonteCarloSummary:
-    """Launch Monte Carlo simulation batch on the RTX 3050 GPU using Numba CUDA."""
+    """Launch Monte Carlo simulation batch on the GPU using Numba CUDA."""
+    return run_monte_carlo_cuda_batch([mc])[0]
+
+def run_monte_carlo_cuda_batch(configs: list[MonteCarloConfig]) -> list[MonteCarloSummary]:
+    """Launch multiple Monte Carlo configs in a single GPU kernel batch."""
     import time
     
+    B = len(configs)
+    if B == 0:
+        return []
+        
+    mc = configs[0]
     sim = load_simulation_config(mc.simulation_path)
+    
     from satellite.sda.satellite import Satellite
+    from satellite.config import BenchOffsetConfig
+    
     dummy_pos = np.array([0.0, 0.0, 0.0], dtype=FLOAT_DTYPE)
     partner_pos = np.array([sim.simulation.distance, 0.0, 0.0], dtype=FLOAT_DTYPE)
-    
-    from satellite.config import BenchOffsetConfig
     dummy_offset = BenchOffsetConfig(0.0, 0.0)
-    mock_config = build_scenario_config(sim, ScenarioInstance("dummy_s", None, dummy_offset, dummy_offset), strategy=mc.strategy)
-    s1 = Satellite.build("S1", mock_config.s1, partner_pos, mock_config)
-    s2 = Satellite.build("S2", mock_config.s2, dummy_pos, mock_config)
-    ctx = StrategyContext(s1=s1, s2=s2, config=mock_config)
     
-    meta = MetaStrategy.from_config(mock_config)
+    all_legs_s1 = []
+    all_legs_s2 = []
+    all_hw_s1 = []
+    all_hw_s2 = []
+    all_global_t_starts = []
     
-    legs_s1_list = []
-    legs_s2_list = []
-    hw_s1_list = []
-    hw_s2_list = []
-    
-    global_t_start = 0.0
-    for strategy in meta.strategies:
-        script = strategy.build_script(ctx)
+    for mc_cfg in configs:
+        mock_config = build_scenario_config(sim, ScenarioInstance("dummy_s", None, dummy_offset, dummy_offset), strategy=mc_cfg.strategy)
+        s1 = Satellite.build("S1", mock_config.s1, partner_pos, mock_config)
+        s2 = Satellite.build("S2", mock_config.s2, dummy_pos, mock_config)
+        ctx = StrategyContext(s1=s1, s2=s2, config=mock_config)
+        meta = MetaStrategy.from_config(mock_config)
         
-        for step in script.s1.movement_steps:
-            t_type = 0
-            p = [0.0, 0.0, 0.0, 0.0]
-            mv = step.movement
-            if isinstance(mv, Hold):
+        legs_s1_list = []
+        legs_s2_list = []
+        hw_s1_list = []
+        hw_s2_list = []
+        
+        global_t_start = 0.0
+        for strategy in meta.strategies:
+            script = strategy.build_script(ctx)
+            
+            for step in script.s1.movement_steps:
                 t_type = 0
-            elif isinstance(mv, Reset):
-                t_type = 1
-            elif isinstance(mv, Spiral):
-                t_type = 2
-                p = [mv.w, mv.k, mv.max_radius, mv.speed]
-            elif isinstance(mv, SerpentineRaster):
-                t_type = 3
-                p = [mv.radius, float(mv.steps), 1.0 if mv.horizontal else 0.0, 1.0]
-            elif isinstance(mv, Rosette):
-                t_type = 4
-                p = [mv.A, mv.w1, mv.w2, 0.0]
-            elif isinstance(mv, Lissajous):
-                t_type = 5
-                p = [mv.A, mv.wx, mv.wy, mv.delta]
-            
-            legs_s1_list.append([global_t_start + step.start, global_t_start + step.end, float(t_type), p[0], p[1], p[2], p[3]])
-            
-        for step in script.s2.movement_steps:
-            t_type = 0
-            p = [0.0, 0.0, 0.0, 0.0]
-            mv = step.movement
-            if isinstance(mv, Hold):
+                p = [0.0, 0.0, 0.0, 0.0]
+                mv = step.movement
+                if isinstance(mv, Hold):
+                    t_type = 0
+                elif isinstance(mv, Reset):
+                    t_type = 1
+                elif isinstance(mv, Spiral):
+                    t_type = 2
+                    p = [mv.w, mv.k, mv.max_radius, mv.speed]
+                elif isinstance(mv, SerpentineRaster):
+                    t_type = 3
+                    p = [mv.radius, float(mv.steps), 1.0 if mv.horizontal else 0.0, 1.0]
+                elif isinstance(mv, Rosette):
+                    t_type = 4
+                    p = [mv.A, mv.w1, mv.w2, 0.0]
+                elif isinstance(mv, Lissajous):
+                    t_type = 5
+                    p = [mv.A, mv.wx, mv.wy, mv.delta]
+                
+                legs_s1_list.append([global_t_start + step.start, global_t_start + step.end, float(t_type), p[0], p[1], p[2], p[3]])
+                
+            for step in script.s2.movement_steps:
                 t_type = 0
-            elif isinstance(mv, Reset):
-                t_type = 1
-            elif isinstance(mv, Spiral):
-                t_type = 2
-                p = [mv.w, mv.k, mv.max_radius, mv.speed]
-            elif isinstance(mv, SerpentineRaster):
-                t_type = 3
-                p = [mv.radius, float(mv.steps), 1.0 if mv.horizontal else 0.0, 1.0]
-            elif isinstance(mv, Rosette):
-                t_type = 4
-                p = [mv.A, mv.w1, mv.w2, 0.0]
-            elif isinstance(mv, Lissajous):
-                t_type = 5
-                p = [mv.A, mv.wx, mv.wy, mv.delta]
+                p = [0.0, 0.0, 0.0, 0.0]
+                mv = step.movement
+                if isinstance(mv, Hold):
+                    t_type = 0
+                elif isinstance(mv, Reset):
+                    t_type = 1
+                elif isinstance(mv, Spiral):
+                    t_type = 2
+                    p = [mv.w, mv.k, mv.max_radius, mv.speed]
+                elif isinstance(mv, SerpentineRaster):
+                    t_type = 3
+                    p = [mv.radius, float(mv.steps), 1.0 if mv.horizontal else 0.0, 1.0]
+                elif isinstance(mv, Rosette):
+                    t_type = 4
+                    p = [mv.A, mv.w1, mv.w2, 0.0]
+                elif isinstance(mv, Lissajous):
+                    t_type = 5
+                    p = [mv.A, mv.wx, mv.wy, mv.delta]
+                
+                legs_s2_list.append([global_t_start + step.start, global_t_start + step.end, float(t_type), p[0], p[1], p[2], p[3]])
+
+            for step in script.s1.hardware_steps:
+                target_type = 0 if step.target == "beam" else 1
+                hw_s1_list.append([global_t_start + step.time, float(target_type), 1.0 if step.enabled else 0.0])
+                
+            for step in script.s2.hardware_steps:
+                target_type = 0 if step.target == "beam" else 1
+                hw_s2_list.append([global_t_start + step.time, float(target_type), 1.0 if step.enabled else 0.0])
+                
+            global_t_start += script.total_duration
+
+        if not hw_s1_list:
+            hw_s1_list.append([0.0, 0.0, 1.0])
+        if not hw_s2_list:
+            hw_s2_list.append([0.0, 0.0, 1.0])
             
-            legs_s2_list.append([global_t_start + step.start, global_t_start + step.end, float(t_type), p[0], p[1], p[2], p[3]])
+        all_legs_s1.append(legs_s1_list)
+        all_legs_s2.append(legs_s2_list)
+        all_hw_s1.append(hw_s1_list)
+        all_hw_s2.append(hw_s2_list)
+        all_global_t_starts.append(global_t_start)
 
-        for step in script.s1.hardware_steps:
-            target_type = 0 if step.target == "beam" else 1
-            hw_s1_list.append([global_t_start + step.time, float(target_type), 1.0 if step.enabled else 0.0])
-            
-        for step in script.s2.hardware_steps:
-            target_type = 0 if step.target == "beam" else 1
-            hw_s2_list.append([global_t_start + step.time, float(target_type), 1.0 if step.enabled else 0.0])
-            
-        global_t_start += script.total_duration
-
-    if not hw_s1_list:
-        hw_s1_list.append([0.0, 0.0, 1.0])
-    if not hw_s2_list:
-        hw_s2_list.append([0.0, 0.0, 1.0])
-
-    legs_s1_arr = np.array(legs_s1_list, dtype=FLOAT_DTYPE)
-    legs_s2_arr = np.array(legs_s2_list, dtype=FLOAT_DTYPE)
-    hw_s1_arr = np.array(hw_s1_list, dtype=FLOAT_DTYPE)
-    hw_s2_arr = np.array(hw_s2_list, dtype=FLOAT_DTYPE)
-
-    hw_s1_arr = hw_s1_arr[np.argsort(hw_s1_arr[:, 0])]
-    hw_s2_arr = hw_s2_arr[np.argsort(hw_s2_arr[:, 0])]
-
-    hw = mock_config.satellite
-    beam_length = mock_config.simulation.beam_length or (sim.simulation.distance + mock_config.simulation.boresight_extension)
+    max_legs_s1 = max(len(l) for l in all_legs_s1)
+    max_legs_s2 = max(len(l) for l in all_legs_s2)
+    max_hw_s1 = max(len(l) for l in all_hw_s1)
+    max_hw_s2 = max(len(l) for l in all_hw_s2)
     
-    sim_params = np.array([
-        mock_config.simulation.t_step,
-        global_t_start,
-        beam_length,
-        hw.body_radius,
-        hw.dish_fov,
-        float(np.cos(hw.dish_fov)),
-        hw.max_beam_speed,
-        hw.max_fsm_speed,
-        hw.alpha,
-        float(np.cos(hw.alpha)),
-    ], dtype=FLOAT_DTYPE)
+    legs_s1_arr = np.zeros((B, max_legs_s1, 7), dtype=FLOAT_DTYPE)
+    legs_s2_arr = np.zeros((B, max_legs_s2, 7), dtype=FLOAT_DTYPE)
+    hw_s1_arr = np.zeros((B, max_hw_s1, 3), dtype=FLOAT_DTYPE)
+    hw_s2_arr = np.zeros((B, max_hw_s2, 3), dtype=FLOAT_DTYPE)
+    
+    for b in range(B):
+        l_s1 = all_legs_s1[b]
+        legs_s1_arr[b, :len(l_s1), :] = l_s1
+        if len(l_s1) < max_legs_s1:
+            legs_s1_arr[b, len(l_s1):, :] = l_s1[-1]
+            
+        l_s2 = all_legs_s2[b]
+        legs_s2_arr[b, :len(l_s2), :] = l_s2
+        if len(l_s2) < max_legs_s2:
+            legs_s2_arr[b, len(l_s2):, :] = l_s2[-1]
+            
+        h_s1 = all_hw_s1[b]
+        hw_s1_arr[b, :len(h_s1), :] = h_s1
+        if len(h_s1) < max_hw_s1:
+            hw_s1_arr[b, len(h_s1):, 0] = all_global_t_starts[b] + 1.0
+            
+        h_s2 = all_hw_s2[b]
+        hw_s2_arr[b, :len(h_s2), :] = h_s2
+        if len(h_s2) < max_hw_s2:
+            hw_s2_arr[b, len(h_s2):, 0] = all_global_t_starts[b] + 1.0
 
-    positions = np.array([
-        s1.position[0], s1.position[1], s1.position[2],
-        s2.position[0], s2.position[1], s2.position[2]
-    ], dtype=FLOAT_DTYPE)
+    for b in range(B):
+        hw_s1_arr[b] = hw_s1_arr[b, np.argsort(hw_s1_arr[b, :, 0])]
+        hw_s2_arr[b] = hw_s2_arr[b, np.argsort(hw_s2_arr[b, :, 0])]
 
-    tasks = []
-    global_run_idx = 0
-    for chain_cfg in mc.chains:
-        chain_rng = np.random.default_rng(mc.seed)
-        seeds = chain_rng.integers(0, 2**32 - 1, size=chain_cfg.runs).tolist()
-        for run_in_chain_idx in range(chain_cfg.runs):
-            rng = np.random.default_rng(seeds[run_in_chain_idx])
-            s1_off, s2_off = sample_offsets(mc.error, rng)
-            tasks.append((
-                global_run_idx,
-                s1_off.bench_theta_offset,
-                s1_off.bench_phi_offset,
-                s2_off.bench_theta_offset,
-                s2_off.bench_phi_offset
-            ))
-            global_run_idx += 1
-
-    total_runs = len(tasks)
+    sim_params_arr = np.zeros((B, 10), dtype=FLOAT_DTYPE)
+    positions_arr = np.zeros((B, 6), dtype=FLOAT_DTYPE)
+    
+    runs_per_config = configs[0].runs
+    total_runs = B * runs_per_config
     offsets_arr = np.zeros((total_runs, 4), dtype=FLOAT_DTYPE)
-    for idx, t1, p1, t2, p2 in tasks:
-        offsets_arr[idx, 0] = t1
-        offsets_arr[idx, 1] = p1
-        offsets_arr[idx, 2] = t2
-        offsets_arr[idx, 3] = p2
+    
+    for b, mc_cfg in enumerate(configs):
+        mock_config = build_scenario_config(sim, ScenarioInstance("dummy_s", None, dummy_offset, dummy_offset), strategy=mc_cfg.strategy)
+        s1 = Satellite.build("S1", mock_config.s1, partner_pos, mock_config)
+        s2 = Satellite.build("S2", mock_config.s2, dummy_pos, mock_config)
+        
+        beam_length = mock_config.simulation.beam_length or (sim.simulation.distance + mock_config.simulation.boresight_extension)
+        sim_params_arr[b] = [
+            mock_config.simulation.t_step,
+            all_global_t_starts[b],
+            beam_length,
+            mock_config.satellite.body_radius,
+            mock_config.satellite.dish_fov,
+            float(np.cos(mock_config.satellite.dish_fov)),
+            mock_config.satellite.max_beam_speed,
+            mock_config.satellite.max_fsm_speed,
+            mock_config.satellite.alpha,
+            float(np.cos(mock_config.satellite.alpha)),
+        ]
+        positions_arr[b] = [
+            s1.position[0], s1.position[1], s1.position[2],
+            s2.position[0], s2.position[1], s2.position[2]
+        ]
+        
+        global_run_idx = 0
+        for chain_cfg in mc_cfg.chains:
+            chain_rng = np.random.default_rng(mc_cfg.seed)
+            seeds = chain_rng.integers(0, 2**32 - 1, size=chain_cfg.runs).tolist()
+            for run_in_chain_idx in range(chain_cfg.runs):
+                rng = np.random.default_rng(seeds[run_in_chain_idx])
+                s1_off, s2_off = sample_offsets(mc_cfg.error, rng)
+                offsets_arr[b * runs_per_config + global_run_idx] = [
+                    s1_off.bench_theta_offset,
+                    s1_off.bench_phi_offset,
+                    s2_off.bench_theta_offset,
+                    s2_off.bench_phi_offset
+                ]
+                global_run_idx += 1
 
     d_offsets = cuda.to_device(offsets_arr)
     d_legs_s1 = cuda.to_device(legs_s1_arr)
     d_legs_s2 = cuda.to_device(legs_s2_arr)
     d_hw_steps_s1 = cuda.to_device(hw_s1_arr)
     d_hw_steps_s2 = cuda.to_device(hw_s2_arr)
-    d_sim_params = cuda.to_device(sim_params)
-    d_positions = cuda.to_device(positions)
+    d_sim_params = cuda.to_device(sim_params_arr)
+    d_positions = cuda.to_device(positions_arr)
     
     d_results = cuda.device_array((total_runs, 2), dtype=FLOAT_DTYPE)
 
@@ -1038,7 +1069,7 @@ def run_monte_carlo_cuda(mc: MonteCarloConfig) -> MonteCarloSummary:
 
     t0 = time.perf_counter()
     simulate_batch_kernel[blocks_per_grid, threads_per_block](
-        d_offsets, d_legs_s1, d_legs_s2, d_hw_steps_s1, d_hw_steps_s2, d_sim_params, d_positions, d_results
+        d_offsets, d_legs_s1, d_legs_s2, d_hw_steps_s1, d_hw_steps_s2, d_sim_params, d_positions, d_results, runs_per_config
     )
     cuda.synchronize()
     gpu_time_ms = (time.perf_counter() - t0) * 1000.0
@@ -1046,84 +1077,96 @@ def run_monte_carlo_cuda(mc: MonteCarloConfig) -> MonteCarloSummary:
     results_arr = d_results.copy_to_host()
 
     from satellite.config import positions_for_distance, ScenarioConfig, SatelliteInstanceConfig, StrategyConfig
-    
     s1_pos, s2_pos = positions_for_distance(sim.simulation.distance)
     
-    # Precompute strategy durations
-    strategy_durations = []
-    for strategy in meta.strategies:
-        strategy_durations.append((strategy.name, strategy.build_script(ctx).total_duration))
+    summaries = []
+    for b, mc_cfg in enumerate(configs):
+        mock_config = build_scenario_config(sim, ScenarioInstance("dummy_s", None, dummy_offset, dummy_offset), strategy=mc_cfg.strategy)
+        s1 = Satellite.build("S1", mock_config.s1, partner_pos, mock_config)
+        s2 = Satellite.build("S2", mock_config.s2, dummy_pos, mock_config)
+        ctx = StrategyContext(s1=s1, s2=s2, config=mock_config)
+        meta = MetaStrategy.from_config(mock_config)
         
-    mock_schedule = _MockSchedule(total_duration=global_t_start)
-    
-    # Precompute run strategy configs
-    run_strategy_configs = []
-    for chain_cfg in mc.chains:
-        run_strat = StrategyConfig(
-            k=mc.strategy.k,
-            chain=chain_cfg.chain,
-            params=mc.strategy.params,
-        )
-        for _ in range(chain_cfg.runs):
-            run_strategy_configs.append(run_strat)
+        # Precompute strategy durations
+        strategy_durations = []
+        for strategy in meta.strategies:
+            strategy_durations.append((strategy.name, strategy.build_script(ctx).total_duration))
             
-    run_results = []
-    for idx in range(total_runs):
-        locked = results_arr[idx, 0] > 0.5
-        hit_at_t = float(results_arr[idx, 1]) if locked else None
+        mock_schedule = _MockSchedule(total_duration=all_global_t_starts[b])
         
-        winning_strat_name = None
-        if locked:
-            accum_t = 0.0
-            for strat_name, duration in strategy_durations:
-                if hit_at_t <= accum_t + duration + 1e-9:
-                    winning_strat_name = strat_name
-                    break
-                accum_t += duration
+        # Precompute run strategy configs
+        run_strategy_configs = []
+        for chain_cfg in mc_cfg.chains:
+            run_strat = StrategyConfig(
+                k=mc_cfg.strategy.k,
+                chain=chain_cfg.chain,
+                params=mc_cfg.strategy.params,
+            )
+            for _ in range(chain_cfg.runs):
+                run_strategy_configs.append(run_strat)
+                
+        run_results = []
+        for r in range(runs_per_config):
+            idx = b * runs_per_config + r
+            locked = results_arr[idx, 0] > 0.5
+            hit_at_t = float(results_arr[idx, 1]) if locked else None
+            
+            winning_strat_name = None
+            if locked:
+                accum_t = 0.0
+                for strat_name, duration in strategy_durations:
+                    if hit_at_t <= accum_t + duration + 1e-9:
+                        winning_strat_name = strat_name
+                        break
+                    accum_t += duration
 
-        run_strategy_config = run_strategy_configs[idx]
-        
-        s1_theta = float(offsets_arr[idx, 0])
-        s1_phi   = float(offsets_arr[idx, 1])
-        s2_theta = float(offsets_arr[idx, 2])
-        s2_phi   = float(offsets_arr[idx, 3])
-        
-        run_config = ScenarioConfig(
-            name=f"mc_run_{idx}",
-            s1=SatelliteInstanceConfig(
-                position=s1_pos,
-                bench_theta_offset=s1_theta,
-                bench_phi_offset=s1_phi,
-            ),
-            s2=SatelliteInstanceConfig(
-                position=s2_pos,
-                bench_theta_offset=s2_theta,
-                bench_phi_offset=s2_phi,
-            ),
-            satellite=sim.satellite,
-            simulation=sim.simulation,
-            visualization=sim.visualization,
-            map_visualization=sim.map_visualization,
-            strategy=run_strategy_config,
-        )
-        
-        mock_result = _MockScenarioResult(
-            success=locked,
-            hit_at_t=hit_at_t,
-            strategy_name=winning_strat_name,
-            schedule=mock_schedule,
-            config=run_config
-        )
-        
-        run_result = MonteCarloRunResult(
-            run_index=idx,
-            s1_theta=s1_theta,
-            s1_phi=s1_phi,
-            s2_theta=s2_theta,
-            s2_phi=s2_phi,
-            result=mock_result,
-            computation_time_ms=gpu_time_ms / total_runs,
-        )
-        run_results.append(run_result)
+            run_strategy_config = run_strategy_configs[r]
+            
+            s1_theta = float(offsets_arr[idx, 0])
+            s1_phi   = float(offsets_arr[idx, 1])
+            s2_theta = float(offsets_arr[idx, 2])
+            s2_phi   = float(offsets_arr[idx, 3])
+            
+            run_config = ScenarioConfig(
+                name=f"mc_run_{r}",
+                s1=SatelliteInstanceConfig(
+                    position=s1_pos,
+                    bench_theta_offset=s1_theta,
+                    bench_phi_offset=s1_phi,
+                ),
+                s2=SatelliteInstanceConfig(
+                    position=s2_pos,
+                    bench_theta_offset=s2_theta,
+                    bench_phi_offset=s2_phi,
+                ),
+                satellite=sim.satellite,
+                simulation=sim.simulation,
+                visualization=sim.visualization,
+                map_visualization=sim.map_visualization,
+                strategy=run_strategy_config,
+            )
+            
+            mock_result = _MockScenarioResult(
+                success=locked,
+                hit_at_t=hit_at_t,
+                strategy_name=winning_strat_name,
+                schedule=mock_schedule,
+                config=run_config
+            )
+            
+            run_result = MonteCarloRunResult(
+                run_index=r,
+                s1_theta=s1_theta,
+                s1_phi=s1_phi,
+                s2_theta=s2_theta,
+                s2_phi=s2_phi,
+                result=mock_result,
+                computation_time_ms=gpu_time_ms / total_runs,
+            )
+            run_results.append(run_result)
 
-    return _build_monte_carlo_summary(mc, run_results, interrupted=False)
+        summary = _build_monte_carlo_summary(mc_cfg, run_results, interrupted=False)
+        summaries.append(summary)
+
+    return summaries
+

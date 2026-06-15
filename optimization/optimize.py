@@ -471,12 +471,7 @@ def run_optuna_search(
     max_workers: int,
     seed: int | None = None,
 ) -> tuple[dict, float]:
-    """Optuna study optimization. Intelligent Bayesian Search.
-
-    Unphysical candidates are pruned (so Optuna learns to avoid that region)
-    but do NOT count toward the requested trial budget — the loop continues
-    until exactly *trials* valid evaluations have completed.
-    """
+    """Optuna study optimization. Intelligent Bayesian Search."""
     try:
         import optuna
         optuna.logging.set_verbosity(optuna.logging.WARNING)
@@ -493,10 +488,29 @@ def run_optuna_search(
     max_speed = sim_cfg.satellite.max_beam_speed
     print(f"Starting Optuna Search ({trials} trials, max_beam_speed={max_speed:.4f} rad/s)...")
 
+    import os
     import concurrent.futures
     import threading
-
-    lock = threading.Lock()
+    from satellite.config import MonteCarloConfig, MonteCarloChainConfig, StrategyConfig
+    
+    # Check if GPU batching is supported
+    from satellite.cuda_monte_carlo import is_strategy_chain_supported_on_gpu, run_monte_carlo_cuda_batch, CUDA_AVAILABLE
+    
+    dummy_strategy = StrategyConfig(
+        k=mc_cfg.strategy.k,
+        chain=(strategy_name,),
+        params={strategy_name: {}},
+    )
+    dummy_mc = MonteCarloConfig(
+        simulation_path=mc_cfg.simulation_path,
+        seed=mc_cfg.seed,
+        chains=(MonteCarloChainConfig(runs=len(fixed_offsets), chain=(strategy_name,)),),
+        error=mc_cfg.error,
+        strategy=dummy_strategy,
+    )
+    
+    use_gpu_batch = (os.environ.get("SATELLITE_NO_GPU") != "1") and is_strategy_chain_supported_on_gpu(dummy_mc)
+    
     completed_trials = 0
     resampled = 0
 
@@ -506,47 +520,122 @@ def run_optuna_search(
     else:
         study = optuna.create_study(direction="minimize")
 
-    def worker():
-        nonlocal completed_trials, resampled
-        while True:
-            with lock:
-                if completed_trials >= trials:
-                    break
+    if use_gpu_batch:
+        BATCH_SIZE = max_workers if max_workers > 1 else 8
+        print(f"Using GPU batch execution (batch size {BATCH_SIZE})...")
+        while completed_trials < trials:
+            batch_trials = []
+            batch_configs = []
+            
+            while len(batch_trials) < BATCH_SIZE and completed_trials + len(batch_trials) < trials:
                 trial = study.ask()
-
-            candidate: dict = {}
-            for param, spec in space.items():
-                ptype, start, end = spec
-                if ptype == "float":
-                    candidate[param] = trial.suggest_float(param, start, end)
-                elif ptype == "int":
-                    candidate[param] = trial.suggest_int(param, start, end)
-
-            peak = peak_speed_for_strategy(strategy_name, candidate, sim_cfg, mc_cfg)
-            if peak > max_speed:
-                with lock:
+                candidate = {}
+                for param, spec in space.items():
+                    ptype, start, end = spec
+                    if ptype == "float":
+                        candidate[param] = trial.suggest_float(param, start, end)
+                    elif ptype == "int":
+                        candidate[param] = trial.suggest_int(param, start, end)
+                
+                cand_eval = dict(candidate)
+                if strategy_name == "lissajous_scan":
+                    cand_eval["s1_delta"] = 1.570796
+                    cand_eval["s2_delta"] = 1.570796
+                    
+                peak = peak_speed_for_strategy(strategy_name, cand_eval, sim_cfg, mc_cfg)
+                if peak > max_speed:
                     study.tell(trial, state=optuna.trial.TrialState.PRUNED)
                     resampled += 1
-                continue
-
-            try:
-                # Run the simulation outside the lock so other threads can prepare/run concurrently
-                cost, _, _ = evaluate_candidate(
-                    candidate, strategy_name, sim_cfg, mc_cfg, fixed_offsets, 1
+                    continue
+                    
+                batch_trials.append(trial)
+                
+                from satellite.strategy.base import CONFIG_PARSERS
+                parsed_params = cand_eval
+                if strategy_name in CONFIG_PARSERS:
+                    parsed_params = CONFIG_PARSERS[strategy_name](cand_eval)
+                    
+                run_strat = StrategyConfig(
+                    k=mc_cfg.strategy.k,
+                    chain=(strategy_name,),
+                    params={strategy_name: parsed_params},
                 )
-                with lock:
+                mc = MonteCarloConfig(
+                    simulation_path=mc_cfg.simulation_path,
+                    seed=mc_cfg.seed,
+                    chains=(MonteCarloChainConfig(runs=len(fixed_offsets), chain=(strategy_name,)),),
+                    error=mc_cfg.error,
+                    strategy=run_strat,
+                )
+                batch_configs.append(mc)
+                
+            if not batch_trials:
+                break
+                
+            try:
+                summaries = run_monte_carlo_cuda_batch(batch_configs)
+                for trial, summary, mc_c in zip(batch_trials, summaries, batch_configs):
+                    success_rate = summary.success_rate
+                    timeout = sim_cfg.simulation.timeout
+                    mean_t = summary.mean_t if summary.mean_t is not None else timeout
+                    penalty = timeout * 2.0
+                    cost = ((1.0 - success_rate) * penalty) + mean_t
+                    
                     study.tell(trial, cost)
                     completed_trials += 1
-                    print(f"Trial {completed_trials}/{trials}: params={candidate} -> Cost: {cost:.4f}")
+                    
+                    log_params = dict(mc_c.strategy.params[strategy_name])
+                    print(f"Trial {completed_trials}/{trials}: params={log_params} -> Cost: {cost:.4f}")
             except Exception as e:
-                with lock:
+                for trial in batch_trials:
                     study.tell(trial, state=optuna.trial.TrialState.FAIL)
                     completed_trials += 1
-                    print(f"Trial {completed_trials}/{trials}: FAILED — {e}")
+                print(f"Batch execution FAILED — {e}")
+                
+    else:
+        # Fallback to multi-threaded CPU parallel execution
+        lock = threading.Lock()
+        
+        def worker():
+            nonlocal completed_trials, resampled
+            while True:
+                with lock:
+                    if completed_trials >= trials:
+                        break
+                    trial = study.ask()
 
-    with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
-        futures = [executor.submit(worker) for _ in range(max_workers)]
-        concurrent.futures.wait(futures)
+                candidate: dict = {}
+                for param, spec in space.items():
+                    ptype, start, end = spec
+                    if ptype == "float":
+                        candidate[param] = trial.suggest_float(param, start, end)
+                    elif ptype == "int":
+                        candidate[param] = trial.suggest_int(param, start, end)
+
+                peak = peak_speed_for_strategy(strategy_name, candidate, sim_cfg, mc_cfg)
+                if peak > max_speed:
+                    with lock:
+                        study.tell(trial, state=optuna.trial.TrialState.PRUNED)
+                        resampled += 1
+                    continue
+
+                try:
+                    cost, _, _ = evaluate_candidate(
+                        candidate, strategy_name, sim_cfg, mc_cfg, fixed_offsets, 1
+                    )
+                    with lock:
+                        study.tell(trial, cost)
+                        completed_trials += 1
+                        print(f"Trial {completed_trials}/{trials}: params={candidate} -> Cost: {cost:.4f}")
+                except Exception as e:
+                    with lock:
+                        study.tell(trial, state=optuna.trial.TrialState.FAIL)
+                        completed_trials += 1
+                        print(f"Trial {completed_trials}/{trials}: FAILED — {e}")
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
+            futures = [executor.submit(worker) for _ in range(max_workers)]
+            concurrent.futures.wait(futures)
 
     if resampled:
         print(f"  ({resampled} unphysical candidate(s) resampled during search)")
