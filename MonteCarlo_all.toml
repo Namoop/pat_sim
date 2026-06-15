@@ -10,10 +10,9 @@ seed = 42
 #runs = 10
 #chain = ["dual_raster"]
 
-# so slow...
-#[[monte_carlo.chains]]
-#runs = 10
-#chain = ["lissajous_scan"]
+[[monte_carlo.chains]]
+runs = 5120
+chain = ["lissajous_scan"]
 
 #[[monte_carlo.chains]]
 #runs = 10
@@ -25,9 +24,9 @@ seed = 42
 #chain = ["center_rebias"]
 
 # pretty good
-[[monte_carlo.chains]]
-runs = 10
-chain = ["concentric_shells"]
+#[[monte_carlo.chains]]
+#runs = 10
+#chain = ["concentric_shells"]
 
 #[[monte_carlo.chains]]
 #runs = 10
@@ -49,7 +48,7 @@ phi_mean = 0.0
 phi_std = 2.0
 
 [strategy]
-
+chain=["lissajous_scan"]
 
 [strategy.dual_spiral]
 speed_a = 4.990651
@@ -62,12 +61,12 @@ steps_a = 77
 steps_b = 100
 
 [strategy.lissajous_scan]
-s1_wx = 9.289479
-s1_wy = 8.958262
-s1_delta = 0.562434
-s2_wx = 7.631062
-s2_wy = 5.565132
-s2_delta = 2.384296
+s1_wx = 15.526127
+s1_wy = 14.249881
+s1_delta = 2.957257
+s2_wx = 16.992454
+s2_wy = 3.821853
+s2_delta = 5.530637
 
 [strategy.rosette_scan]
 s1_w1 = 6.949170

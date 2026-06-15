@@ -33,12 +33,12 @@ MC_CONFIG="MonteCarlo_all.toml"
 LOG_DIR="optimization/logs"
 
 STRATEGIES=(
-    dual_spiral
-    dual_raster
+    # dual_spiral
+    # dual_raster
     lissajous_scan
     rosette_scan
-    concentric_shells
-    random_curve
+    # concentric_shells
+    # random_curve
     center_rebias
 )
 

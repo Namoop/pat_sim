@@ -78,10 +78,8 @@ PARAMETER_SPACES = {
     "lissajous_scan": {
         "s1_wx":    ("float", 0.1,  17.0),
         "s1_wy":    ("float", 0.1,  17.0),
-        "s1_delta": ("float", 0.0,  6.283185),
         "s2_wx":    ("float", 0.1,  17.0),
         "s2_wy":    ("float", 0.1,  17.0),
-        "s2_delta": ("float", 0.0,  6.283185),
     },
     # peak ≈ A * (w1 + w2), A = max_search_radius = 0.005
     # w1, w2 <= 8.6 gives peak <= 0.086 rad/s
@@ -231,6 +229,11 @@ def evaluate_candidate(
     max_workers: int,
 ) -> tuple[float, float, float]:
     from satellite.strategy.base import CONFIG_PARSERS
+
+    params = dict(params)
+    if strategy_name == "lissajous_scan":
+        params["s1_delta"] = 1.570796
+        params["s2_delta"] = 1.570796
 
     parsed_params = params
     if strategy_name in CONFIG_PARSERS:
@@ -466,6 +469,7 @@ def run_optuna_search(
     fixed_offsets: list,
     trials: int,
     max_workers: int,
+    seed: int | None = None,
 ) -> tuple[dict, float]:
     """Optuna study optimization. Intelligent Bayesian Search.
 
@@ -489,42 +493,60 @@ def run_optuna_search(
     max_speed = sim_cfg.satellite.max_beam_speed
     print(f"Starting Optuna Search ({trials} trials, max_beam_speed={max_speed:.4f} rad/s)...")
 
-    study = optuna.create_study(direction="minimize")
+    import concurrent.futures
+    import threading
+
+    lock = threading.Lock()
+    completed_trials = 0
     resampled = 0
-    t = 0  # number of valid (evaluated) trials
 
-    while t < trials:
-        trial = study.ask()
+    if seed is not None:
+        sampler = optuna.samplers.CmaEsSampler(seed=seed)
+        study = optuna.create_study(direction="minimize", sampler=sampler)
+    else:
+        study = optuna.create_study(direction="minimize")
 
-        # Build the candidate from Optuna's suggestion
-        candidate: dict = {}
-        for param, spec in space.items():
-            ptype, start, end = spec
-            if ptype == "float":
-                candidate[param] = trial.suggest_float(param, start, end)
-            elif ptype == "int":
-                candidate[param] = trial.suggest_int(param, start, end)
+    def worker():
+        nonlocal completed_trials, resampled
+        while True:
+            with lock:
+                if completed_trials >= trials:
+                    break
+                trial = study.ask()
 
-        peak = peak_speed_for_strategy(strategy_name, candidate, sim_cfg, mc_cfg)
-        if peak > max_speed:
-            # Tell Optuna this region is bad so it steers away, but do NOT
-            # count this as one of the requested trials.
-            study.tell(trial, state=optuna.trial.TrialState.PRUNED)
-            resampled += 1
-            continue  # does NOT advance t
+            candidate: dict = {}
+            for param, spec in space.items():
+                ptype, start, end = spec
+                if ptype == "float":
+                    candidate[param] = trial.suggest_float(param, start, end)
+                elif ptype == "int":
+                    candidate[param] = trial.suggest_int(param, start, end)
 
-        try:
-            cost, _, _ = evaluate_candidate(
-                candidate, strategy_name, sim_cfg, mc_cfg, fixed_offsets, max_workers
-            )
-            study.tell(trial, cost)
-            t += 1
-            print(f"Trial {t}/{trials}: params={candidate} → Cost: {cost:.4f}")
-        except Exception as e:
-            study.tell(trial, state=optuna.trial.TrialState.FAIL)
-            print(f"Trial {t+1}/{trials}: FAILED — {e}")
-            # A simulation failure does count as an attempted trial
-            t += 1
+            peak = peak_speed_for_strategy(strategy_name, candidate, sim_cfg, mc_cfg)
+            if peak > max_speed:
+                with lock:
+                    study.tell(trial, state=optuna.trial.TrialState.PRUNED)
+                    resampled += 1
+                continue
+
+            try:
+                # Run the simulation outside the lock so other threads can prepare/run concurrently
+                cost, _, _ = evaluate_candidate(
+                    candidate, strategy_name, sim_cfg, mc_cfg, fixed_offsets, 1
+                )
+                with lock:
+                    study.tell(trial, cost)
+                    completed_trials += 1
+                    print(f"Trial {completed_trials}/{trials}: params={candidate} -> Cost: {cost:.4f}")
+            except Exception as e:
+                with lock:
+                    study.tell(trial, state=optuna.trial.TrialState.FAIL)
+                    completed_trials += 1
+                    print(f"Trial {completed_trials}/{trials}: FAILED — {e}")
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
+        futures = [executor.submit(worker) for _ in range(max_workers)]
+        concurrent.futures.wait(futures)
 
     if resampled:
         print(f"  ({resampled} unphysical candidate(s) resampled during search)")
@@ -595,6 +617,12 @@ def main():
         help="Random seed for pre-sampling pointing offsets.",
     )
     parser.add_argument(
+        "--optuna-seed",
+        type=int,
+        default=None,
+        help="Random seed for Optuna search sampler (defaults to None / unseeded).",
+    )
+    parser.add_argument(
         "--workers",
         type=int,
         default=None,
@@ -648,7 +676,7 @@ def main():
         )
     elif args.method == "optuna":
         best_params, best_cost = run_optuna_search(
-            args.strategy, space, sim_cfg, mc_cfg, fixed_offsets, args.trials, max_workers
+            args.strategy, space, sim_cfg, mc_cfg, fixed_offsets, args.trials, max_workers, seed=args.optuna_seed
         )
     else:
         best_params, best_cost = run_random_search(
@@ -658,6 +686,11 @@ def main():
     elapsed = time.time() - start_time
     print(f"\n--- Optimization completed in {elapsed:.1f}s ---")
     print(f"Best objective cost score: {best_cost:.4f}")
+
+    if args.strategy == "lissajous_scan":
+        best_params["s1_delta"] = 1.570796
+        best_params["s2_delta"] = 1.570796
+
     print("Optimal Parameters:")
     for k, v in best_params.items():
         if isinstance(v, float):
