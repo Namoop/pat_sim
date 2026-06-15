@@ -598,12 +598,16 @@ def run_optuna_search(
                     study.tell(trial, cost)
                     completed_trials += 1
                     
-                    log_params = dict(mc_c.strategy.params[strategy_name])
+                    from dataclasses import asdict
+                    log_params = asdict(mc_c.strategy.params[strategy_name])
                     print(f"Trial {completed_trials}/{trials}: params={log_params} -> Cost: {cost:.4f}")
             except Exception as e:
                 for trial in batch_trials:
-                    study.tell(trial, state=optuna.trial.TrialState.FAIL)
-                    completed_trials += 1
+                    try:
+                        study.tell(trial, state=optuna.trial.TrialState.FAIL)
+                        completed_trials += 1
+                    except ValueError:
+                        pass
                 print(f"Batch execution FAILED — {e}")
                 
     else:
