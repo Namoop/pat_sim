@@ -1,5 +1,6 @@
 [scenario]
 name = "default"
+simulation = "Simulation.toml"
 chain = ["minor_offset", "single_miss"]
 
 [s1]

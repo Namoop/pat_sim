@@ -34,8 +34,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--simulation",
         type=Path,
-        default=Path("Simulation.toml"),
-        help="Simulation base TOML (physics, timing, visualization)",
+        default=None,
+        help="Simulation base TOML (physics, timing, visualization; default: Simulation.toml or scenario-defined)",
     )
 
     parser.add_argument(
@@ -111,13 +111,13 @@ def main(argv: list[str] | None = None) -> int:
             return 130
         return 0
 
-    for label, path in (
-        ("Scenario", args.scenario),
-        ("Simulation", args.simulation),
-    ):
-        if not path.exists():
-            print(f"{label} config not found: {path}", file=sys.stderr)
-            return 1
+    if not args.scenario.exists():
+        print(f"Scenario config not found: {args.scenario}", file=sys.stderr)
+        return 1
+
+    if args.simulation is not None and not args.simulation.exists():
+        print(f"Simulation config not found: {args.simulation}", file=sys.stderr)
+        return 1
 
     config = load_single_scenario(args.scenario, args.simulation)
     result = run_scenario(config)

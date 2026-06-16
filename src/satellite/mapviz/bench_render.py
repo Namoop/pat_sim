@@ -27,7 +27,7 @@ def _percentile(sorted_vals: list[float], p: float) -> float:
 
 def run_benchmark(
     scenario_path: str,
-    simulation_path: str,
+    simulation_path: str | None = None,
     *,
     samples: int = 1000,
     seed: int = 0,
@@ -109,7 +109,7 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument(
         "--simulation",
-        default="Simulation.toml",
+        default=None,
         help="Simulation base TOML",
     )
     parser.add_argument(

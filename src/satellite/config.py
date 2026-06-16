@@ -134,6 +134,7 @@ class ScenarioInstance:
     s2: BenchOffsetConfig
     overrides: dict[str, dict[str, Any]] = field(default_factory=dict)
     strategy: StrategyConfig | None = None
+    simulation_path: Path | None = None
 
 
 @dataclass(frozen=True)
@@ -300,10 +301,15 @@ def load_scenario_config(path: str | Path) -> ScenarioInstance:
     scenario_chain = scenario.get("chain")
     if scenario_chain is None:
         raise ValueError(f"scenario.chain is required in scenario config: {path}")
+        
+    simulation_rel = scenario.get("simulation")
+    simulation_path = None
+    if simulation_rel is not None and isinstance(simulation_rel, (str, Path)):
+        simulation_path = (config_path.parent / simulation_rel).resolve()
     
     overrides: dict[str, dict[str, Any]] = {}
     for key, value in scenario.items():
-        if key in ("name", "chain"):
+        if key in ("name", "chain", "simulation"):
             continue
         
         if "." in key:
@@ -332,6 +338,7 @@ def load_scenario_config(path: str | Path) -> ScenarioInstance:
         ),
         overrides=overrides,
         strategy=strategy,
+        simulation_path=simulation_path,
     )
 
 
@@ -436,11 +443,21 @@ def build_scenario_config(
 
 def load_single_scenario(
     scenario_path: str | Path,
-    simulation_path: str | Path,
+    simulation_path: str | Path | None = None,
 ) -> ScenarioConfig:
     """Merge scenario instance and simulation base, with strategy loaded from scenario."""
-    sim = load_simulation_config(simulation_path)
     instance = load_scenario_config(scenario_path)
+    
+    if simulation_path is None:
+        simulation_path = instance.simulation_path
+        
+    if simulation_path is None:
+        fallback_path = Path(scenario_path).parent / "Simulation.toml"
+        if not fallback_path.exists():
+            fallback_path = Path("Simulation.toml")
+        simulation_path = fallback_path
+
+    sim = load_simulation_config(simulation_path)
     
     strategy = instance.strategy
     if strategy is None or not strategy.chain:
