@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import tomllib
-from dataclasses import dataclass
+from dataclasses import dataclass, field, replace, is_dataclass
 from pathlib import Path
 
 from satellite.math3d import Vec3, as_vec3
@@ -130,9 +130,10 @@ class SimulationBundle:
 @dataclass(frozen=True)
 class ScenarioInstance:
     name: str
-    distance: float | None
     s1: BenchOffsetConfig
     s2: BenchOffsetConfig
+    distance: float | None = None
+    overrides: dict[str, dict[str, Any]] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -299,10 +300,27 @@ def load_scenario_config(path: str | Path) -> ScenarioInstance:
     scenario = data.get("scenario", {})
     s1 = data.get("s1", {})
     s2 = data.get("s2", {})
-    distance = scenario.get("distance")
+    
+    overrides: dict[str, dict[str, Any]] = {}
+    distance = None
+    for key, value in scenario.items():
+        if key == "name":
+            continue
+        if key == "distance":
+            distance = float(value)
+            overrides.setdefault("simulation", {})["distance"] = distance
+            continue
+        
+        if "." in key:
+            parts = key.split(".", 1)
+            section, prop = parts[0], parts[1]
+            overrides.setdefault(section, {})[prop] = value
+        elif isinstance(value, dict):
+            for prop, val in value.items():
+                overrides.setdefault(key, {})[prop] = val
+
     return ScenarioInstance(
         name=str(scenario.get("name", "unnamed")),
-        distance=float(distance) if distance is not None else None,
         s1=BenchOffsetConfig(
             bench_theta_offset=float(s1.get("bench_theta_offset", 0.0)) * 1e-3,
             bench_phi_offset=float(s1.get("bench_phi_offset", 0.0)) * 1e-3,
@@ -311,6 +329,8 @@ def load_scenario_config(path: str | Path) -> ScenarioInstance:
             bench_theta_offset=float(s2.get("bench_theta_offset", 0.0)) * 1e-3,
             bench_phi_offset=float(s2.get("bench_phi_offset", 0.0)) * 1e-3,
         ),
+        distance=distance,
+        overrides=overrides,
     )
 
 
@@ -356,18 +376,50 @@ def load_monte_carlo_config(path: str | Path) -> MonteCarloConfig:
     )
 
 
+SCALED_PROPERTIES = {
+    "dish_fov",
+    "max_beam_speed",
+    "max_fsm_speed",
+    "max_fsm_radius",
+    "max_search_radius",
+    "axis_limit",
+}
+
+
+def _apply_dict_overrides(obj, overrides: dict[str, Any]) -> Any:
+    if not overrides:
+        return obj
+    kwargs = {}
+    for key, val in overrides.items():
+        if hasattr(obj, key):
+            current_val = getattr(obj, key)
+            if is_dataclass(current_val) and isinstance(val, dict):
+                kwargs[key] = _apply_dict_overrides(current_val, val)
+            else:
+                if key in SCALED_PROPERTIES and isinstance(val, (int, float)):
+                    val = float(val) * 1e-3
+                kwargs[key] = val
+    return replace(obj, **kwargs)
+
+
 def build_scenario_config(
     sim: SimulationBundle,
     instance: ScenarioInstance,
     *,
     strategy: StrategyConfig,
 ) -> ScenarioConfig:
-    distance = (
-        instance.distance
-        if instance.distance is not None
-        else sim.simulation.distance
-    )
+    overrides = dict(instance.overrides)
+    if instance.distance is not None:
+        overrides.setdefault("simulation", {})["distance"] = instance.distance
+
+    satellite = _apply_dict_overrides(sim.satellite, overrides.get("satellite", {}))
+    simulation = _apply_dict_overrides(sim.simulation, overrides.get("simulation", {}))
+    visualization = _apply_dict_overrides(sim.visualization, overrides.get("visualization", {}))
+    map_visualization = _apply_dict_overrides(sim.map_visualization, overrides.get("map_visualization", {}))
+
+    distance = simulation.distance
     s1_pos, s2_pos = positions_for_distance(distance)
+
     return ScenarioConfig(
         name=instance.name,
         s1=SatelliteInstanceConfig(
@@ -380,10 +432,10 @@ def build_scenario_config(
             bench_theta_offset=instance.s2.bench_theta_offset,
             bench_phi_offset=instance.s2.bench_phi_offset,
         ),
-        satellite=sim.satellite,
-        simulation=sim.simulation,
-        visualization=sim.visualization,
-        map_visualization=sim.map_visualization,
+        satellite=satellite,
+        simulation=simulation,
+        visualization=visualization,
+        map_visualization=map_visualization,
         strategy=strategy,
     )
 

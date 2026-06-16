@@ -83,3 +83,23 @@ def test_scenario_distance_override():
     s1_pos, s2_pos = positions_for_distance(500.0)
     np.testing.assert_allclose(cfg.s1.position, s1_pos)
     np.testing.assert_allclose(cfg.s2.position, s2_pos)
+
+
+def test_scenario_generic_overrides():
+    sim = load_simulation_config("Simulation.toml")
+    instance = load_scenario_config("default.toml")
+    from dataclasses import replace
+
+    overridden = replace(
+        instance,
+        overrides={
+            "simulation": {"t_step": 0.005},
+            "satellite": {"max_fsm_radius": 0.5},
+        }
+    )
+    mc = load_monte_carlo_config("MonteCarlo.toml")
+    cfg = build_scenario_config(sim, overridden, strategy=mc.strategy)
+    
+    assert cfg.simulation.t_step == 0.005
+    assert cfg.satellite.max_fsm_radius == 0.0005
+
