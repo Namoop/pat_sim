@@ -32,6 +32,7 @@ class SharedSatelliteConfig:
     dish_fov: float
     max_beam_speed: float
     max_fsm_speed: float
+    max_fsm_radius: float
     beam_width_mrad: float
     k: float
 
@@ -39,6 +40,7 @@ class SharedSatelliteConfig:
     def alpha(self) -> float:
         """Transmitter cone half-angle in radians."""
         return self.beam_width_mrad * 1e-3
+
 
 
 @dataclass(frozen=True)
@@ -184,9 +186,11 @@ def _load_shared_satellite(data: dict) -> SharedSatelliteConfig:
         dish_fov=float(data.get("dish_fov", 0.002)) * 1e-3,
         max_beam_speed=float(data.get("max_beam_speed", 0.087)) * 1e-3,  # ~5 deg/s
         max_fsm_speed=float(data.get("max_fsm_speed", 1.0)) * 1e-3,
+        max_fsm_radius=float(data.get("max_fsm_radius", 1.0)) * 1e-3,
         beam_width_mrad=float(data["beam_width"]),
         k=float(data.get("k", 10.0)),
     )
+
 
 
 def _load_simulation_section(data: dict) -> SimulationConfig:
