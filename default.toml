@@ -1,7 +1,8 @@
 [scenario]
 name = "default"
-simulation = "Simulation.toml"
+simulation_file = "Simulation.toml"
 chain = ["minor_offset", "single_miss"]
+visualize = "3d"
 
 [s1]
 bench_theta_offset = 1.0

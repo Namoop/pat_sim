@@ -56,8 +56,7 @@ class SimulationConfig:
 
 
 @dataclass(frozen=True)
-class VisualizationConfig:
-    enabled: bool
+class ThreeDVizConfig:
     cone_u_steps: int
     cone_v_steps: int
     spiral_trail_steps: int
@@ -66,7 +65,7 @@ class VisualizationConfig:
 
 
 @dataclass(frozen=True)
-class MapVisualizationConfig:
+class MapVizConfig:
     axis_limit: float
     profile_frames: bool
     slider_debounce_ms: int
@@ -114,17 +113,18 @@ class ScenarioConfig:
     s2: SatelliteInstanceConfig
     satellite: SharedSatelliteConfig
     simulation: SimulationConfig
-    visualization: VisualizationConfig
-    map_visualization: MapVisualizationConfig
+    three_d_viz: ThreeDVizConfig
+    map_viz: MapVizConfig
     strategy: StrategyConfig
+    visualize: str | None = None
 
 
 @dataclass(frozen=True)
 class SimulationBundle:
     satellite: SharedSatelliteConfig
     simulation: SimulationConfig
-    visualization: VisualizationConfig
-    map_visualization: MapVisualizationConfig
+    three_d_viz: ThreeDVizConfig
+    map_viz: MapVizConfig
 
 
 @dataclass(frozen=True)
@@ -135,6 +135,7 @@ class ScenarioInstance:
     overrides: dict[str, dict[str, Any]] = field(default_factory=dict)
     strategy: StrategyConfig | None = None
     simulation_path: Path | None = None
+    visualize: str | None = None
 
 
 @dataclass(frozen=True)
@@ -202,9 +203,8 @@ def _load_simulation_section(data: dict) -> SimulationConfig:
     )
 
 
-def _load_visualization(data: dict) -> VisualizationConfig:
-    return VisualizationConfig(
-        enabled=bool(data.get("enabled", False)),
+def _load_three_d_viz(data: dict) -> ThreeDVizConfig:
+    return ThreeDVizConfig(
         cone_u_steps=int(data.get("cone_u_steps", 24)),
         cone_v_steps=int(data.get("cone_v_steps", 32)),
         spiral_trail_steps=int(data.get("spiral_trail_steps", 80)),
@@ -213,8 +213,8 @@ def _load_visualization(data: dict) -> VisualizationConfig:
     )
 
 
-def _load_map_visualization(data: dict) -> MapVisualizationConfig:
-    return MapVisualizationConfig(
+def _load_map_viz(data: dict) -> MapVizConfig:
+    return MapVizConfig(
         axis_limit=float(data.get("axis_limit", 0.1)) * 1e-3,
         profile_frames=bool(data.get("profile_frames", False)),
         slider_debounce_ms=int(data.get("slider_debounce_ms", 16)),
@@ -285,8 +285,8 @@ def load_simulation_config(path: str | Path) -> SimulationBundle:
     return SimulationBundle(
         satellite=_load_shared_satellite(data.get("satellite", {})),
         simulation=_load_simulation_section(data.get("simulation", {})),
-        visualization=_load_visualization(data.get("visualization", {})),
-        map_visualization=_load_map_visualization(data.get("map_visualization", {})),
+        three_d_viz=_load_three_d_viz(data.get("3d_viz", {})),
+        map_viz=_load_map_viz(data.get("map_viz", {})),
     )
 
 
@@ -311,10 +311,16 @@ def load_scenario_config(path: str | Path) -> ScenarioInstance:
     simulation_path = None
     if simulation_rel is not None and isinstance(simulation_rel, (str, Path)):
         simulation_path = (config_path.parent / simulation_rel).resolve()
+        
+    visualize = scenario.get("visualize")
+    if visualize is not None:
+        visualize = str(visualize).lower()
+        if visualize not in ("3d", "map"):
+            raise ValueError(f"scenario.visualize must be '3d' or 'map': {path}")
     
     overrides: dict[str, dict[str, Any]] = {}
     for key, value in scenario.items():
-        if key in ("name", "chain", "simulation_file"):
+        if key in ("name", "chain", "simulation_file", "visualize"):
             continue
         if key == "simulation" and isinstance(value, (str, Path)):
             continue
@@ -346,6 +352,7 @@ def load_scenario_config(path: str | Path) -> ScenarioInstance:
         overrides=overrides,
         strategy=strategy,
         simulation_path=simulation_path,
+        visualize=visualize,
     )
 
 
@@ -422,8 +429,12 @@ def build_scenario_config(
 
     satellite = _apply_dict_overrides(sim.satellite, overrides.get("satellite", {}))
     simulation = _apply_dict_overrides(sim.simulation, overrides.get("simulation", {}))
-    visualization = _apply_dict_overrides(sim.visualization, overrides.get("visualization", {}))
-    map_visualization = _apply_dict_overrides(sim.map_visualization, overrides.get("map_visualization", {}))
+    
+    three_d_viz_overrides = overrides.get("3d_viz", overrides.get("three_d_viz", {}))
+    three_d_viz = _apply_dict_overrides(sim.three_d_viz, three_d_viz_overrides)
+    
+    map_viz_overrides = overrides.get("map_viz", overrides.get("map_visualization", {}))
+    map_viz = _apply_dict_overrides(sim.map_viz, map_viz_overrides)
 
     distance = simulation.distance
     s1_pos, s2_pos = positions_for_distance(distance)
@@ -442,9 +453,10 @@ def build_scenario_config(
         ),
         satellite=satellite,
         simulation=simulation,
-        visualization=visualization,
-        map_visualization=map_visualization,
+        three_d_viz=three_d_viz,
+        map_viz=map_viz,
         strategy=strategy,
+        visualize=instance.visualize,
     )
 
 

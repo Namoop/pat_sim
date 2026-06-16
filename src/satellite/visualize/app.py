@@ -67,7 +67,7 @@ def run_visualizer(
     config = result.config
     playable_t = result.playable_t_end
     t_step = config.simulation.t_step
-    map_debounce_ms = config.map_visualization.slider_debounce_ms
+    map_debounce_ms = config.map_viz.slider_debounce_ms
 
     app = QApplication.instance() or QApplication([])
 

@@ -1193,8 +1193,8 @@ def run_monte_carlo_cuda_batch(configs: list[MonteCarloConfig]) -> list[MonteCar
                 ),
                 satellite=sim.satellite,
                 simulation=sim.simulation,
-                visualization=sim.visualization,
-                map_visualization=sim.map_visualization,
+                three_d_viz=sim.three_d_viz,
+                map_viz=sim.map_viz,
                 strategy=run_strategy_config,
             )
             

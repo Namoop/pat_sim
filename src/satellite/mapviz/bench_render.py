@@ -39,7 +39,7 @@ def run_benchmark(
     result = run_scenario(config)
     result.ensure_replay_timeline()
     total_t = result.playable_t_end
-    map_cfg = config.map_visualization
+    map_cfg = config.map_viz
 
     app = QApplication.instance() or QApplication([])
     panel_s1 = AngularMapPanel(axis_limit=map_cfg.axis_limit)

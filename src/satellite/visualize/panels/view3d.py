@@ -224,7 +224,7 @@ class View3DPanel:
     def set_result(self, result: ScenarioResult) -> None:
         self._result = result
         config = result.config
-        viz = config.visualization
+        viz = config.three_d_viz
         self._profiler = FrameProfiler.from_env(viz.profile_frames)
         self._sim_profile_enabled = config.simulation.profile_replay
         self._scene_built = False
@@ -441,7 +441,7 @@ class View3DPanel:
         result = self._result
         assert result is not None
         config = result.config
-        viz = config.visualization
+        viz = config.three_d_viz
         sat = result.s1 if satellite == "S1" else result.s2
         aim = result.bench_aim(satellite, t)
         beam_len = result.beam_length(satellite)
@@ -462,7 +462,7 @@ class View3DPanel:
         result = self._result
         assert result is not None
         config = result.config
-        viz = config.visualization
+        viz = config.three_d_viz
         dish_fov = config.satellite.dish_fov
         pv = self._pv
         sat = result.s1 if satellite == "S1" else result.s2
@@ -493,7 +493,7 @@ class View3DPanel:
     def _dish_mesh(self, satellite: str, t: float):
         result = self._result
         assert result is not None
-        viz = result.config.visualization
+        viz = result.config.three_d_viz
         rx = result.s1.receiver if satellite == "S1" else result.s2.receiver
         boresight = result.dish_boresight_for_display(satellite, t)
         verts, faces = rx.dish_mesh_at(viz.cone_v_steps, boresight=boresight)

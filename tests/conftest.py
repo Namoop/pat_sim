@@ -4,13 +4,13 @@
 from __future__ import annotations
 
 from satellite.config import (
-    MapVisualizationConfig,
+    MapVizConfig,
     SatelliteInstanceConfig,
     ScenarioConfig,
     SharedSatelliteConfig,
     SimulationConfig,
     StrategyConfig,
-    VisualizationConfig,
+    ThreeDVizConfig,
 )
 from satellite.math3d import as_vec3
 from satellite.strategy.strategies.asymmetric_swap import AsymmetricSwapConfig
@@ -58,15 +58,14 @@ def base_config(
             max_search_radius=0.07,
             profile_replay=False,
         ),
-        visualization=VisualizationConfig(
-            enabled=False,
+        three_d_viz=ThreeDVizConfig(
             cone_u_steps=8,
             cone_v_steps=8,
             spiral_trail_steps=20,
             ribbon_v_steps=4,
             profile_frames=False,
         ),
-        map_visualization=MapVisualizationConfig(
+        map_viz=MapVizConfig(
             axis_limit=0.1,
             profile_frames=False,
             slider_debounce_ms=16,

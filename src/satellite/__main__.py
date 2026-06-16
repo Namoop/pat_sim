@@ -83,11 +83,11 @@ def main(argv: list[str] | None = None) -> int:
         mc = load_monte_carlo_config(args.monte_carlo)
         sim = load_simulation_config(mc.simulation_path)
         viz_mode = args.visualize
-        if args.autoplay is not None and viz_mode is None and not sim.visualization.enabled:
+        if args.autoplay is not None and viz_mode is None:
             parser.error(
-                "--autoplay requires visualization (--visualize or visualization.enabled)"
+                "--autoplay requires visualization (--visualize)"
             )
-        if viz_mode is not None or sim.visualization.enabled:
+        if viz_mode is not None:
             from satellite.visualize import run_visualizer
             from satellite.visualize.session import MonteCarloVizSession
 
@@ -95,7 +95,7 @@ def main(argv: list[str] | None = None) -> int:
             try:
                 run_visualizer(
                     session,
-                    default_tab=viz_mode or "3d",
+                    default_tab=viz_mode,
                     start_t=args.t,
                     autoplay_speed=args.autoplay,
                 )
@@ -126,14 +126,17 @@ def main(argv: list[str] | None = None) -> int:
     exit_code = 0 if result.success else 1
 
     viz_mode = args.visualize
-    if viz_mode is not None or config.visualization.enabled:
+    if viz_mode is None:
+        viz_mode = config.visualize
+
+    if viz_mode is not None:
         from satellite.visualize import run_visualizer
         from satellite.visualize.session import SingleResultSession
 
         try:
             run_visualizer(
                 SingleResultSession(result),
-                default_tab=viz_mode or "3d",
+                default_tab=viz_mode,
                 start_t=args.t,
             )
         except KeyboardInterrupt:

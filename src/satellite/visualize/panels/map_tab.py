@@ -62,7 +62,7 @@ class MapTabPanel:
 
     def set_result(self, result: ScenarioResult) -> None:
         self._result = result
-        map_cfg = result.config.map_visualization
+        map_cfg = result.config.map_viz
         self._panel_s1.set_axis_limit(map_cfg.axis_limit)
         self._panel_s2.set_axis_limit(map_cfg.axis_limit)
         self._profiler = FrameProfiler.from_env(map_cfg.profile_frames)
