@@ -302,14 +302,21 @@ def load_scenario_config(path: str | Path) -> ScenarioInstance:
     if scenario_chain is None:
         raise ValueError(f"scenario.chain is required in scenario config: {path}")
         
-    simulation_rel = scenario.get("simulation")
+    simulation_rel = scenario.get("simulation_file")
+    if simulation_rel is None:
+        simulation_val = scenario.get("simulation")
+        if isinstance(simulation_val, (str, Path)):
+            simulation_rel = simulation_val
+            
     simulation_path = None
     if simulation_rel is not None and isinstance(simulation_rel, (str, Path)):
         simulation_path = (config_path.parent / simulation_rel).resolve()
     
     overrides: dict[str, dict[str, Any]] = {}
     for key, value in scenario.items():
-        if key in ("name", "chain", "simulation"):
+        if key in ("name", "chain", "simulation_file"):
+            continue
+        if key == "simulation" and isinstance(value, (str, Path)):
             continue
         
         if "." in key:

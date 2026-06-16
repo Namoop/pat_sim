@@ -103,3 +103,65 @@ def test_scenario_generic_overrides():
     assert cfg.simulation.t_step == 0.005
     assert cfg.satellite.max_fsm_radius == 0.0005
 
+
+def test_scenario_toml_simulation_path_and_override_parsing(tmp_path):
+    toml_content = """
+[scenario]
+name = "override_test"
+simulation_file = "Simulation.toml"
+simulation.t_step = 0.005
+chain = ["minor_offset"]
+
+[s1]
+bench_theta_offset = 1.0
+bench_phi_offset = 1.0
+
+[s2]
+bench_theta_offset = 2.0
+bench_phi_offset = 1.5
+"""
+    p = tmp_path / "scenario_test.toml"
+    p.write_text(toml_content)
+    
+    # We also need a Simulation.toml in the same dir for resolving
+    sim_content = """
+[satellite]
+body_radius = 0.5
+dish_fov = 2.0
+max_beam_speed = 87.0
+max_fsm_speed = 1000.0
+max_fsm_radius = 1.0
+beam_width = 0.5
+k = 10.0
+
+[simulation]
+distance = 1000.0
+t_step = 0.01
+boresight_extension = 5.0
+max_search_radius = 5.0
+profile_replay = false
+timeout = 100.0
+enforce_speed_limit = true
+
+[visualization]
+enabled = false
+cone_u_steps = 24
+cone_v_steps = 32
+spiral_trail_steps = 120
+ribbon_v_steps = 8
+profile_frames = false
+
+[map_visualization]
+axis_limit = 10.0
+slider_debounce_ms = 16
+"""
+    (tmp_path / "Simulation.toml").write_text(sim_content)
+    
+    # Load and build config
+    from satellite.config import load_single_scenario
+    cfg = load_single_scenario(p)
+    
+    # Check that simulation_path was resolved correctly and overrides were applied
+    assert cfg.simulation.t_step == 0.005
+
+
