@@ -405,6 +405,8 @@ if CUDA_AVAILABLE:
         max_fsm_speed = sim_params[trial_idx, 7]
         alpha = sim_params[trial_idx, 8]
         cos_alpha = sim_params[trial_idx, 9]
+        max_fsm_radius = sim_params[trial_idx, 10]
+
 
         # Scenario initial error offsets
         s1_theta_off = offsets[idx, 0]
@@ -598,10 +600,16 @@ if CUDA_AVAILABLE:
 
             # 3. Check link visibility
             # S1 to S2 pointing
-            s1_tx_aim = s1_bench_boresight  # TX has no FSM deflection
+            if s1_has_seen:
+                spherical_angles_from_direction_device(s1_bench_boresight, angles_temp)
+                transmitter_basis_device(angles_temp[0], angles_temp[1], ux_temp, uy_temp, uz_temp)
+                direction_with_tangent_offset_device(s1_bench_boresight, ux_temp, uy_temp, s1_fsm_theta, s1_fsm_phi, aim_temp)
+            else:
+                aim_temp[0] = s1_bench_boresight[0]
+                aim_temp[1] = s1_bench_boresight[1]
+                aim_temp[2] = s1_bench_boresight[2]
             
-            # S2 receiver effective boresight (apply FSM deflection if locked)
-            if s2_fsm_locked:
+            if s2_has_seen:
                 spherical_angles_from_direction_device(s2_bench_boresight, angles_temp)
                 transmitter_basis_device(angles_temp[0], angles_temp[1], ux_temp, uy_temp, uz_temp)
                 direction_with_tangent_offset_device(s2_bench_boresight, ux_temp, uy_temp, s2_fsm_theta, s2_fsm_phi, rx_aim_temp)
@@ -611,13 +619,20 @@ if CUDA_AVAILABLE:
                 rx_aim_temp[2] = s2_bench_boresight[2]
                 
             visible_12 = s1_beam_enabled and s2_rx_enabled and beam_hits_dish_device(
-                s1_pos, s2_pos, rx_aim_temp, cos_dish_fov, s1_tx_aim, cos_alpha, beam_length, body_radius
+                s1_pos, s2_pos, rx_aim_temp, cos_dish_fov, aim_temp, cos_alpha, beam_length, body_radius
             )
 
             # S2 to S1 pointing
-            s2_tx_aim = s2_bench_boresight
+            if s2_has_seen:
+                spherical_angles_from_direction_device(s2_bench_boresight, angles_temp)
+                transmitter_basis_device(angles_temp[0], angles_temp[1], ux_temp, uy_temp, uz_temp)
+                direction_with_tangent_offset_device(s2_bench_boresight, ux_temp, uy_temp, s2_fsm_theta, s2_fsm_phi, aim_temp)
+            else:
+                aim_temp[0] = s2_bench_boresight[0]
+                aim_temp[1] = s2_bench_boresight[1]
+                aim_temp[2] = s2_bench_boresight[2]
             
-            if s1_fsm_locked:
+            if s1_has_seen:
                 spherical_angles_from_direction_device(s1_bench_boresight, angles_temp)
                 transmitter_basis_device(angles_temp[0], angles_temp[1], ux_temp, uy_temp, uz_temp)
                 direction_with_tangent_offset_device(s1_bench_boresight, ux_temp, uy_temp, s1_fsm_theta, s1_fsm_phi, rx_aim_temp)
@@ -627,7 +642,7 @@ if CUDA_AVAILABLE:
                 rx_aim_temp[2] = s1_bench_boresight[2]
                 
             visible_21 = s2_beam_enabled and s1_rx_enabled and beam_hits_dish_device(
-                s2_pos, s1_pos, rx_aim_temp, cos_dish_fov, s2_tx_aim, cos_alpha, beam_length, body_radius
+                s2_pos, s1_pos, rx_aim_temp, cos_dish_fov, aim_temp, cos_alpha, beam_length, body_radius
             )
 
             # 4. Acquisition logic updates
@@ -655,8 +670,15 @@ if CUDA_AVAILABLE:
                 s1_bench_slew_rate = max_beam_speed
                 
                 offsets_to_target_device(s1_bench_boresight, toward_temp, fsm_targets_temp)
-                s1_fsm_theta = fsm_targets_temp[0]
-                s1_fsm_phi = fsm_targets_temp[1]
+                target_dist = (fsm_targets_temp[0]*fsm_targets_temp[0] + fsm_targets_temp[1]*fsm_targets_temp[1]) ** 0.5
+                if target_dist > max_fsm_radius:
+                    s1_fsm_theta = (fsm_targets_temp[0] / target_dist) * max_fsm_radius
+                    s1_fsm_phi = (fsm_targets_temp[1] / target_dist) * max_fsm_radius
+                    s1_fsm_locked = False
+                else:
+                    s1_fsm_theta = fsm_targets_temp[0]
+                    s1_fsm_phi = fsm_targets_temp[1]
+                    s1_fsm_locked = True
                 
                 if max_beam_speed == 0.0:
                     s1_bench_boresight[0] = toward_temp[0]
@@ -689,8 +711,15 @@ if CUDA_AVAILABLE:
                 s2_bench_slew_rate = max_beam_speed
                 
                 offsets_to_target_device(s2_bench_boresight, toward_temp, fsm_targets_temp)
-                s2_fsm_theta = fsm_targets_temp[0]
-                s2_fsm_phi = fsm_targets_temp[1]
+                target_dist = (fsm_targets_temp[0]*fsm_targets_temp[0] + fsm_targets_temp[1]*fsm_targets_temp[1]) ** 0.5
+                if target_dist > max_fsm_radius:
+                    s2_fsm_theta = (fsm_targets_temp[0] / target_dist) * max_fsm_radius
+                    s2_fsm_phi = (fsm_targets_temp[1] / target_dist) * max_fsm_radius
+                    s2_fsm_locked = False
+                else:
+                    s2_fsm_theta = fsm_targets_temp[0]
+                    s2_fsm_phi = fsm_targets_temp[1]
+                    s2_fsm_locked = True
                 
                 if max_beam_speed == 0.0:
                     s2_bench_boresight[0] = toward_temp[0]
@@ -703,20 +732,26 @@ if CUDA_AVAILABLE:
             # S1 Slews
             if s1_has_seen:
                 offsets_to_target_device(s1_bench_boresight, s1_track_target, fsm_targets_temp)
+                target_dist = (fsm_targets_temp[0]*fsm_targets_temp[0] + fsm_targets_temp[1]*fsm_targets_temp[1]) ** 0.5
+                clamped_target_theta = fsm_targets_temp[0]
+                clamped_target_phi = fsm_targets_temp[1]
+                if target_dist > max_fsm_radius:
+                    clamped_target_theta = (fsm_targets_temp[0] / target_dist) * max_fsm_radius
+                    clamped_target_phi = (fsm_targets_temp[1] / target_dist) * max_fsm_radius
                 
                 if max_fsm_speed <= 0.0:
-                    s1_fsm_theta = fsm_targets_temp[0]
-                    s1_fsm_phi = fsm_targets_temp[1]
-                    s1_fsm_locked = True
+                    s1_fsm_theta = clamped_target_theta
+                    s1_fsm_phi = clamped_target_phi
+                    s1_fsm_locked = (target_dist <= max_fsm_radius + 1e-12)
                 else:
-                    du = fsm_targets_temp[0] - s1_fsm_theta
-                    dv = fsm_targets_temp[1] - s1_fsm_phi
+                    du = clamped_target_theta - s1_fsm_theta
+                    dv = clamped_target_phi - s1_fsm_phi
                     dist = (du*du + dv*dv) ** 0.5
                     max_step = max_fsm_speed * t_step
                     if dist <= max_step + 1e-12:
-                        s1_fsm_theta = fsm_targets_temp[0]
-                        s1_fsm_phi = fsm_targets_temp[1]
-                        s1_fsm_locked = True
+                        s1_fsm_theta = clamped_target_theta
+                        s1_fsm_phi = clamped_target_phi
+                        s1_fsm_locked = (target_dist <= max_fsm_radius + 1e-12)
                     else:
                         s1_fsm_theta += (du / dist) * max_step
                         s1_fsm_phi += (dv / dist) * max_step
@@ -731,8 +766,15 @@ if CUDA_AVAILABLE:
                     s1_bench_boresight[2] = aim_temp[2]
                     
                     offsets_to_target_device(s1_bench_boresight, s1_track_target, fsm_targets_temp)
-                    s1_fsm_theta = fsm_targets_temp[0]
-                    s1_fsm_phi = fsm_targets_temp[1]
+                    target_dist = (fsm_targets_temp[0]*fsm_targets_temp[0] + fsm_targets_temp[1]*fsm_targets_temp[1]) ** 0.5
+                    if target_dist > max_fsm_radius:
+                        s1_fsm_theta = (fsm_targets_temp[0] / target_dist) * max_fsm_radius
+                        s1_fsm_phi = (fsm_targets_temp[1] / target_dist) * max_fsm_radius
+                        s1_fsm_locked = False
+                    else:
+                        s1_fsm_theta = fsm_targets_temp[0]
+                        s1_fsm_phi = fsm_targets_temp[1]
+                        s1_fsm_locked = True
                     
                     if remaining <= max_step + 1e-12:
                         s1_bench_boresight[0] = s1_track_target[0]
@@ -744,20 +786,26 @@ if CUDA_AVAILABLE:
             # S2 Slews
             if s2_has_seen:
                 offsets_to_target_device(s2_bench_boresight, s2_track_target, fsm_targets_temp)
+                target_dist = (fsm_targets_temp[0]*fsm_targets_temp[0] + fsm_targets_temp[1]*fsm_targets_temp[1]) ** 0.5
+                clamped_target_theta = fsm_targets_temp[0]
+                clamped_target_phi = fsm_targets_temp[1]
+                if target_dist > max_fsm_radius:
+                    clamped_target_theta = (fsm_targets_temp[0] / target_dist) * max_fsm_radius
+                    clamped_target_phi = (fsm_targets_temp[1] / target_dist) * max_fsm_radius
                 
                 if max_fsm_speed <= 0.0:
-                    s2_fsm_theta = fsm_targets_temp[0]
-                    s2_fsm_phi = fsm_targets_temp[1]
-                    s2_fsm_locked = True
+                    s2_fsm_theta = clamped_target_theta
+                    s2_fsm_phi = clamped_target_phi
+                    s2_fsm_locked = (target_dist <= max_fsm_radius + 1e-12)
                 else:
-                    du = fsm_targets_temp[0] - s2_fsm_theta
-                    dv = fsm_targets_temp[1] - s2_fsm_phi
+                    du = clamped_target_theta - s2_fsm_theta
+                    dv = clamped_target_phi - s2_fsm_phi
                     dist = (du*du + dv*dv) ** 0.5
                     max_step = max_fsm_speed * t_step
                     if dist <= max_step + 1e-12:
-                        s2_fsm_theta = fsm_targets_temp[0]
-                        s2_fsm_phi = fsm_targets_temp[1]
-                        s2_fsm_locked = True
+                        s2_fsm_theta = clamped_target_theta
+                        s2_fsm_phi = clamped_target_phi
+                        s2_fsm_locked = (target_dist <= max_fsm_radius + 1e-12)
                     else:
                         s2_fsm_theta += (du / dist) * max_step
                         s2_fsm_phi += (dv / dist) * max_step
@@ -772,8 +820,15 @@ if CUDA_AVAILABLE:
                     s2_bench_boresight[2] = aim_temp[2]
                     
                     offsets_to_target_device(s2_bench_boresight, s2_track_target, fsm_targets_temp)
-                    s2_fsm_theta = fsm_targets_temp[0]
-                    s2_fsm_phi = fsm_targets_temp[1]
+                    target_dist = (fsm_targets_temp[0]*fsm_targets_temp[0] + fsm_targets_temp[1]*fsm_targets_temp[1]) ** 0.5
+                    if target_dist > max_fsm_radius:
+                        s2_fsm_theta = (fsm_targets_temp[0] / target_dist) * max_fsm_radius
+                        s2_fsm_phi = (fsm_targets_temp[1] / target_dist) * max_fsm_radius
+                        s2_fsm_locked = False
+                    else:
+                        s2_fsm_theta = fsm_targets_temp[0]
+                        s2_fsm_phi = fsm_targets_temp[1]
+                        s2_fsm_locked = True
                     
                     if remaining <= max_step + 1e-12:
                         s2_bench_boresight[0] = s2_track_target[0]
@@ -1009,7 +1064,7 @@ def run_monte_carlo_cuda_batch(configs: list[MonteCarloConfig]) -> list[MonteCar
         hw_s1_arr[b] = hw_s1_arr[b, np.argsort(hw_s1_arr[b, :, 0])]
         hw_s2_arr[b] = hw_s2_arr[b, np.argsort(hw_s2_arr[b, :, 0])]
 
-    sim_params_arr = np.zeros((B, 10), dtype=FLOAT_DTYPE)
+    sim_params_arr = np.zeros((B, 11), dtype=FLOAT_DTYPE)
     positions_arr = np.zeros((B, 6), dtype=FLOAT_DTYPE)
     
     runs_per_config = configs[0].runs
@@ -1033,6 +1088,7 @@ def run_monte_carlo_cuda_batch(configs: list[MonteCarloConfig]) -> list[MonteCar
             mock_config.satellite.max_fsm_speed,
             mock_config.satellite.alpha,
             float(np.cos(mock_config.satellite.alpha)),
+            mock_config.satellite.max_fsm_radius,
         ]
         positions_arr[b] = [
             s1.position[0], s1.position[1], s1.position[2],
