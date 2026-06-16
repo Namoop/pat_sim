@@ -12,6 +12,7 @@ These parameters define a specific scenario run and are loaded by [load_scenario
 
 ### `[scenario]`
 * **`name`** (string): Unique identifier for the scenario instance.
+* **`chain`** (array of strings, required): Ordered list of search strategies to run (e.g., `["minor_offset", "single_miss"]`).
 * **Arbitrary Property Overrides**: Any simulation or satellite property can be overridden for the specific scenario using dotted keys or nested sub-tables under `[scenario]`.
   * **Dotted Keys**: `simulation.distance = 500`, `simulation.t_step = 0.001`, or `satellite.max_fsm_radius = 0.5`.
   * **Nested Tables**:
@@ -74,9 +75,7 @@ These parameters define jumble distributions, random seeds, and strategy paramet
 ### `[monte_carlo]`
 * **`simulation`** (string): Path to the associated `Simulation.toml` file.
 * **`seed`** (int): Base random seed for reproducing jumble errors.
-
-### `[[monte_carlo.chains]]`
-* **`runs`** (int): Number of batch runs to execute in this chain.
+* **`runs`** (int): Number of batch runs to execute.
 * **`chain`** (array of strings): Ordered list of search strategies to run (e.g., `["minor_offset", "single_miss"]`).
 
 ### `[error]` (Launch Jumble Distributions)

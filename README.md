@@ -29,13 +29,10 @@ Open unified visualization window after the run. Optional `3d` or `map` picks th
 Run Monte Carlo from `MonteCarlo.toml`. Without `--visualize` (and with `[visualization].enabled` false), runs the full batch headlessly and prints a summary. With visualization enabled, runs one scenario at a time in the visualizer; use **Next** to advance.
 
 `--scenario SCENARIO` (default: `default.toml`)  
-Scenario instance TOML: bench offsets and optional `[scenario].distance` override.
+Scenario instance TOML: bench offsets, strategy chain, and optional `[scenario].distance` override.
 
 `--simulation SIMULATION` (default: `Simulation.toml`)  
 Simulation base TOML: hardware, timing, distance, `t_step`, and visualization defaults.
-
-`--strategy STRATEGY` (default: `MonteCarlo.toml`)  
-Strategy chain TOML. The `[strategy]` section and per-strategy parameter tables are read from this file.
 
 `--t T` (default: `0`)  
 Starting time `t` when opening a visualizer.
@@ -64,9 +61,6 @@ Scenario instance TOML.
 `--simulation SIMULATION` (default: `Simulation.toml`)  
 Simulation base TOML.
 
-`--strategy STRATEGY` (default: `MonteCarlo.toml`)  
-Strategy chain TOML.
-
 `--samples N` (default: `1000`)  
 Number of random `t` samples.
 
@@ -84,11 +78,11 @@ QT_QPA_PLATFORM=xcb python -m satellite [...]
 ## Configuration
 
 
-| File                                 | Purpose                                                        |
-| ------------------------------------ | -------------------------------------------------------------- |
-| `[Simulation.toml](Simulation.toml)` | Hardware, `distance`, `t_step`, visualization                  |
-| `[default.toml](default.toml)`       | Per-run bench offsets; optional `[scenario].distance` override |
-| `[MonteCarlo.toml](MonteCarlo.toml)` | MC runs, error distribution, strategy chain                    |
+| File                                 | Purpose                                                                |
+| ------------------------------------ | ---------------------------------------------------------------------- |
+| `[Simulation.toml](Simulation.toml)` | Hardware, `distance`, `t_step`, visualization                          |
+| `[default.toml](default.toml)`       | Scenario definition: bench offsets, strategy chain, property overrides |
+| `[MonteCarlo.toml](MonteCarlo.toml)` | MC runs, error distribution, strategy chain                            |
 
 
 Satellites are placed on the **x axis**: S1 at origin, S2 at `[distance, 0, 0]`.
@@ -97,9 +91,9 @@ Strategy step durations are explicit in `[strategy.*]` tables (total sim time = 
 
 `beam_width` is the transmitter cone half-angle in **milliradians** (e.g. `5.0` → α = 0.005 rad).
 
-### Monte Carlo Multi-Chain Configuration
+### Monte Carlo Configuration
 
-You can run multiple independent strategy chains in a single Monte Carlo run. Each chain has its own sequence of strategies and number of runs. The pseudorandom seed generator resets for each chain to ensure that the error distribution of runs is exactly reproducible, independent of the order or number of other chains in the file.
+You can run a strategy chain in a Monte Carlo simulation by specifying the chain and the number of runs directly in `MonteCarlo.toml`.
 
 Example configuration in `MonteCarlo.toml`:
 
@@ -107,14 +101,8 @@ Example configuration in `MonteCarlo.toml`:
 [monte_carlo]
 simulation = "Simulation.toml"
 seed = 42
-
-[[monte_carlo.chains]]
 runs = 500
 chain = ["minor_offset", "single_miss"]
-
-[[monte_carlo.chains]]
-runs = 300
-chain = ["asymmetric_swap"]
 ```
 
 ### Built-in strategies
