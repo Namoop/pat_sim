@@ -46,12 +46,8 @@ This strategy assumes that the pointing errors for both satellites are less than
 
 ### Configuration Parameters
 
-
-| Parameter      | Description                                       |
-| -------------- | ------------------------------------------------- |
-| `spiral_speed` | Rate of angular expansion/rotation multiplier.    |
-| `w`            | Archimedean spiral radial coefficient.            |
-| `k`            | Archimedean spiral angular frequency coefficient. |
+* **`max_spiral_radius`** (float or `"fov"`, milliradians): Limit of the spiral search radius. `"fov"` dynamically matches `dish_fov`.
+* **`spiral_speed`** (float): Speed multiplier for the spiral track.
 
 
 ### Action Script (Pseudocode)
@@ -91,12 +87,9 @@ The **Single Miss** strategy handles larger offsets where a simple FOV search mi
 
 ### Configuration Parameters
 
-
-| Parameter       | Description                                                                |
-| --------------- | -------------------------------------------------------------------------- |
-| `spiral_radius` | Maximum radius for the search spiral (radians). Shared by both satellites. |
-| `spiral_speed`  | Expansion rate multiplier.                                                 |
-| `w`, `k`        | Spiral geometry coefficients.                                              |
+* **`a_spiral_radius`** (float or `"fov"`, milliradians): Spiral radius for S1.
+* **`b_spiral_radius`** (float or `"fov"`, milliradians): Spiral radius for S2.
+* **`spiral_speed`** (float): Speed multiplier for the spirals.                                             
 
 
 ### Action Script (Pseudocode)
@@ -145,13 +138,9 @@ The **Asymmetric Swap** strategy is an evolution of the asymmetric probe, design
 
 ### Configuration Parameters
 
-
-| Parameter       | Description                                                               |
-| --------------- | ------------------------------------------------------------------------- |
-| `spiral_radius` | Maximum radius for the probe spiral (radians). Shared by both satellites. |
-| `lock_duration` | Time spent attempting a simultaneous reciprocal lock at the end.          |
-| `spiral_speed`  | Expansion rate multiplier.                                                |
-| `w`, `k`        | Spiral geometry coefficients.                                             |
+* **`spiral_radius`** (float or `"fov"`, milliradians): Probe spiral radius.
+* **`lock_duration`** (float, seconds): Hold duration required to declare lock.
+* **`spiral_speed`** (float): Speed multiplier for the spirals.                                            
 
 
 ### Action Script (Pseudocode)
@@ -204,12 +193,8 @@ Both satellites spiral from the center $(0,0)$ out to the global `max_search_rad
 
 ### Configuration Parameters
 
-
-| Parameter     | Description                                                       |
-| ------------- | ----------------------------------------------------------------- |
-| `speed_a`     | Expansion speed for S1.                                           |
-| `speed_ratio` | Ratio of speeds (e.g., 1.414). `speed_b = speed_a * speed_ratio`. |
-| `w`, `k`      | Spiral geometry coefficients.                                     |
+* **`speed_a`** (float): Base spiral speed.
+* **`speed_ratio`** (float): Ratio of S2 to S1 spiral speed (`speed_b = speed_a * speed_ratio`).                                    
 
 
 ### Action Script (Pseudocode)
@@ -242,12 +227,10 @@ This strategy uses a **Boustrophedon (Serpentine)** motion: at the end of each l
 
 ### Configuration Parameters
 
-
-| Parameter | Description                        |
-| --------- | ---------------------------------- |
-| `steps_a` | Number of horizontal lines for S1. |
-| `steps_b` | Number of vertical lines for S2.   |
-| `speed`   | Base scan velocity multiplier.     |
+* **`steps_a`** (int): Raster grid lines for S1.
+* **`steps_b`** (int): Raster grid lines for S2.
+* **`speed_a`** (float): Base scan speed.
+* **`speed_ratio`** (float): Ratio of S2 to S1 scan speed (`speed_b = speed_a * speed_ratio`).
 
 
 ### Action Script (Pseudocode)
@@ -283,12 +266,10 @@ By selecting a frequency ratio $\omega_x / \omega_y$ that is near-irrational or 
 
 ### Configuration Parameters
 
-
-| Parameter  | Description                                   |
-| ---------- | --------------------------------------------- |
-| `wx`, `wy` | Angular frequencies for X and Y axes (rad/s). |
-| `delta`    | Phase shift (radians).                        |
-| `duration` | Total time to perform the scan.               |
+* **`s1_wx`** / **`s1_wy`** (float, rad/s): Sinusoidal frequencies for S1.
+* **`s1_delta`** (float, **radians**): Phase offset for S1 (**kept in radians**).
+* **`s2_wx`** / **`s2_wy`** (float, rad/s): Sinusoidal frequencies for S2.
+* **`s2_delta`** (float, **radians**): Phase offset for S2 (**kept in radians**).
 
 
 ### Action Script (Pseudocode)
@@ -316,12 +297,8 @@ If the ratio $\omega_1 / \omega_2$ is irrational, the pattern will eventually fi
 
 ### Configuration Parameters
 
-
-| Parameter        | Description                                                        |
-| ---------------- | ------------------------------------------------------------------ |
-| `s1_w1`, `s1_w2` | Angular frequencies for S1 (rad/s).                                |
-| `s2_w1`, `s2_w2` | Angular frequencies for S2 (rad/s). Set to 0 to remain stationary. |
-| `duration`       | Total time to perform the scan.                                    |
+* **`s1_w1`** / **`s1_w2`** (float, rad/s): counter-rotating frequencies for S1.
+* **`s2_w1`** / **`s2_w2`** (float, rad/s): counter-rotating frequencies for S2.
 
 
 ### Action Script (Pseudocode)
@@ -350,12 +327,12 @@ This is a **Center-Heavy** stochastic strategy. It performs a Random Walk, but w
 
 ### Configuration Parameters
 
-
-| Parameter        | Description                               |
-| ---------------- | ----------------------------------------- |
-| `step_duration`  | Time spent at each point (seconds).       |
-| `bias_strength`  | Pull strength toward center (0.0 to 1.0). |
-| `total_duration` | Total simulation time.                    |
+* **`velocity_a`** (float, milliradians/second): Base search velocity for S1.
+* **`velocity_ratio`** (float): Ratio of S2 velocity to S1 velocity (`velocity_b = velocity_a * velocity_ratio`).
+* **`drift_sigma`** (float, milliradians/second): Standard deviation of steering wheel drift.
+* **`max_turn_radius`** (float, milliradians): Steering angle clamp limit.
+* **`bias_strength`** (float): Attraction factor back to boresight center.
+* **`seed`** (int): Local RNG seed.
 
 
 ---
@@ -372,6 +349,12 @@ A **Center-Heavy** deterministic strategy that performs multiple complete spiral
 
 This ensures the "hot" center is cleared repeatedly while progressively searching deeper into the uncertainty volume.
 
+### Configuration Parameters
+
+* **`radii_factors`** (array of floats): Ratios of max search radius (e.g. `[0.2, 0.5, 1.0]`).
+* **`spiral_speed_a`** (float): Base spiral speed.
+* **`speed_ratio`** (float): Ratio of S2 to S1 spiral speed (`speed_b = spiral_speed_a * speed_ratio`).
+
 ---
 
 ## 10. Random Walk (`random_walk`)
@@ -382,11 +365,9 @@ The **Random Walk** strategy is a stochastic search method. At discrete time int
 
 ### Configuration Parameters
 
-
-| Parameter        | Description                                    |
-| ---------------- | ---------------------------------------------- |
-| `step_duration`  | Time spent at each stationary point (seconds). |
-| `total_duration` | Total simulation time for this strategy.       |
+* **`step_duration_a`** (float, seconds): Time spent at each stationary point for S1.
+* **`step_duration_ratio`** (float): Ratio of S2 step duration to S1 step duration (`step_duration_b = step_duration_a * step_duration_ratio`).
+* **`seed`** (int): Local RNG seed.
 
 
 ---
@@ -399,11 +380,11 @@ The **Random Curve** strategy is a continuous stochastic search. The boresight m
 
 ### Configuration Parameters
 
-
-| Parameter     | Description                                               |
-| ------------- | --------------------------------------------------------- |
-| `velocity`    | Angular velocity of the boresight (rad/s).                |
-| `drift_sigma` | Standard deviation of the random heading change per step. |
+* **`velocity_a`** (float, milliradians/second): Base search velocity for S1.
+* **`velocity_ratio`** (float): Ratio of S2 velocity to S1 velocity (`velocity_b = velocity_a * velocity_ratio`).
+* **`drift_sigma`** (float, milliradians/second): Standard deviation of steering drift.
+* **`max_turn_radius`** (float, milliradians): Steering angle clamp limit.
+* **`seed`** (int): Local RNG seed.
 
 
 ---
@@ -419,39 +400,11 @@ The **Nested Spiral** is a high-confidence, "brute-force" strategy for scenarios
 
 ### Configuration Parameters
 
-
-| Parameter      | Description                  |
-| -------------- | ---------------------------- |
-| `outer_radius` | Radius for S1's slow search. |
-| `inner_radius` | Radius for S2's fast search. |
-
+* *No configurable TOML parameters.* Both satellites always scan out to `max_search_radius` with S2 probing rapidly while S1 steps by one beam width and holds.
 
 ---
 
 ## 13. Metadata/Strategy Chain (Runner Logic)
 
 The simulation supports **Strategy Chaining**. If the first strategy fails to achieve a lock, the simulation automatically escalates to the next strategy in the chain.
-
----
-
-## TODOs
-
-- Update `src/satellite/config.py`:
-  - Remove `duration` and `reset_duration` fields from strategy TOML loading.
-  - Add `max_beam_speed` and `max_fsm_speed` to `SharedSatelliteConfig` ([satellite] section).
-  - Add `max_search_radius` to `SimulationConfig`.
-- Implement `StrategyConfig.spiral_duration()` helper for $T = R / (w \cdot \text{speed})$.
-- Implement `StrategyConfig.reset_duration()` helper for $T_{reset} = R / \text{maxbeamspeed}$.
-- Refactor `MinorOffsetStrategy`, `SingleMissStrategy`, and `AsymmetricProbeStrategy` to use strictly calculated timings.
-- Implement the actual `asymmetric_swap` logic in a new strategy class.
-- Implement new strategies:
-  - `dual_spiral`
-  - `dual_raster` (serpentine)
-  - `lissajous_scan`
-  - `rosette_scan`
-  - `center_rebias`
-  - `concentric_shells`
-  - `random_walk`
-  - `random_curve`
-  - `nested_spiral`
 
