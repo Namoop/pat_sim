@@ -32,6 +32,8 @@ class MapPanel:
     partner_in_beam: bool
     partner_in_fov: bool
     is_transmitting: bool
+    beam_director: tuple[float, float] | None = None
+
 
 
 @dataclass(frozen=True)
@@ -71,8 +73,10 @@ def build_panel(
     partner_dir = _partner_direction(sat, other)
     partner = direction_to_tangent_angles(origin, partner_dir)
 
-    aim_dir = sat.bench.bench_boresight
-    center_theta, center_phi = direction_to_tangent_angles(origin, aim_dir)
+    # Center circles around the FSM deflected direction
+    fsm = sat.receiver.fsm
+    effective_aim = fsm.effective_receive_boresight(sat.bench.bench_boresight)
+    center_theta, center_phi = direction_to_tangent_angles(origin, effective_aim)
     alpha = result.config.satellite.alpha
     dish_fov = result.config.satellite.dish_fov
 
@@ -94,6 +98,13 @@ def build_panel(
     timeline = scheduled.script.s1 if satellite == "S1" else scheduled.script.s2
     beam_enabled, receiver_enabled = timeline.hardware_state_at(local_t)
 
+    # Compute beam director (coarse pointer) coordinates if FSM is uncentered
+    if not fsm.is_neutral():
+        bd_theta, bd_phi = direction_to_tangent_angles(origin, sat.bench.bench_boresight)
+        beam_director = (bd_theta, bd_phi)
+    else:
+        beam_director = None
+
     return MapPanel(
         satellite=satellite,
         partner=partner,
@@ -102,6 +113,7 @@ def build_panel(
         partner_in_beam=partner_in_beam if beam_enabled else False,
         partner_in_fov=partner_in_fov if receiver_enabled else False,
         is_transmitting=beam_enabled,
+        beam_director=beam_director,
     )
 
 

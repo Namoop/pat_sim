@@ -151,6 +151,13 @@ class AngularMapPanel(QWidget):
             painter.setBrush(QBrush(fill))
             painter.drawEllipse(center, r, r)
 
+        # Draw the beam director (coarse pointer) if FSM is uncentered
+        if panel.beam_director is not None:
+            bd_pt = self._to_pixel(plot, panel.beam_director[0], panel.beam_director[1])
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.setBrush(QBrush(QColor(128, 128, 128, 200)))
+            painter.drawEllipse(bd_pt, 4.0, 4.0)
+
         partner_color = QColor(34, 170, 34) if partner_label == "S2" else QColor(204, 34, 34)
         pt = self._to_pixel(plot, panel.partner[0], panel.partner[1])
         painter.setPen(Qt.PenStyle.NoPen)
