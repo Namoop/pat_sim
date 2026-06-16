@@ -160,15 +160,19 @@ def link_established(
     config: ScenarioConfig,
 ) -> bool:
     # Optimization: Use pre-calculated cosines and bypass geometry snapshot
-    dish_boresight = rx_sat.bench.dish_boresight_inertial()
+    coarse_boresight = rx_sat.bench.dish_boresight_inertial()
     mount = rx_sat.bench.dish_mount_for_boresight(
-        dish_boresight, rx_sat.receiver.body_radius
+        coarse_boresight, rx_sat.receiver.body_radius
+    )
+    # Apply receive FSM offset to the receiver FOV boresight
+    effective_rx_boresight = rx_sat.receiver.fsm.effective_receive_boresight(
+        coarse_boresight
     )
 
     return beam_hits_dish_fast(
         tx_sat.position,
         mount,
-        dish_boresight,
+        effective_rx_boresight,
         rx_sat.receiver.cos_dish_fov,
         beam_axis,
         tx_sat.cos_alpha,

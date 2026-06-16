@@ -245,7 +245,9 @@ class FrameRunner:
                 and link_established(
                     self.ctx.s1,
                     self.ctx.s2,
-                    self.ctx.s1.bench.bench_boresight,
+                    self.ctx.s1.receiver.fsm.effective_receive_boresight(
+                        self.ctx.s1.bench.bench_boresight
+                    ),
                     self.ctx.config,
                 )
             )
@@ -259,7 +261,9 @@ class FrameRunner:
                 and link_established(
                     self.ctx.s2,
                     self.ctx.s1,
-                    self.ctx.s2.bench.bench_boresight,
+                    self.ctx.s2.receiver.fsm.effective_receive_boresight(
+                        self.ctx.s2.bench.bench_boresight
+                    ),
                     self.ctx.config,
                 )
             )
@@ -372,7 +376,7 @@ class FrameRunner:
             for event in acq_events:
                 if event == "Slew complete":
                     events.append(f"{sat.name} slew complete")
-            return sat.bench.bench_boresight
+            return sat.receiver.fsm.effective_receive_boresight(sat.bench.bench_boresight)
         return sat.bench.bench_boresight
 
     def _apply_satellite(
