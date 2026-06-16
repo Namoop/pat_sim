@@ -144,7 +144,6 @@ def run_monte_carlo_single(
         )
     instance = ScenarioInstance(
         name=f"mc_run_{run_index}",
-        distance=None,
         s1=s1_off,
         s2=s2_off,
     )

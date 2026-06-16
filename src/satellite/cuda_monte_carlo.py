@@ -893,7 +893,7 @@ def is_strategy_chain_supported_on_gpu(mc: MonteCarloConfig) -> bool:
     
     from satellite.config import BenchOffsetConfig
     dummy_offset = BenchOffsetConfig(0.0, 0.0)
-    mock_config = build_scenario_config(sim, ScenarioInstance("dummy_s", None, dummy_offset, dummy_offset), strategy=mc.strategy)
+    mock_config = build_scenario_config(sim, ScenarioInstance("dummy_s", dummy_offset, dummy_offset), strategy=mc.strategy)
     
     s1 = Satellite.build("S1", mock_config.s1, partner_pos, mock_config)
     s2 = Satellite.build("S2", mock_config.s2, dummy_pos, mock_config)
@@ -947,7 +947,7 @@ def run_monte_carlo_cuda_batch(configs: list[MonteCarloConfig]) -> list[MonteCar
     all_global_t_starts = []
     
     for mc_cfg in configs:
-        mock_config = build_scenario_config(sim, ScenarioInstance("dummy_s", None, dummy_offset, dummy_offset), strategy=mc_cfg.strategy)
+        mock_config = build_scenario_config(sim, ScenarioInstance("dummy_s", dummy_offset, dummy_offset), strategy=mc_cfg.strategy)
         s1 = Satellite.build("S1", mock_config.s1, partner_pos, mock_config)
         s2 = Satellite.build("S2", mock_config.s2, dummy_pos, mock_config)
         ctx = StrategyContext(s1=s1, s2=s2, config=mock_config)
@@ -1072,7 +1072,7 @@ def run_monte_carlo_cuda_batch(configs: list[MonteCarloConfig]) -> list[MonteCar
     offsets_arr = np.zeros((total_runs, 4), dtype=FLOAT_DTYPE)
     
     for b, mc_cfg in enumerate(configs):
-        mock_config = build_scenario_config(sim, ScenarioInstance("dummy_s", None, dummy_offset, dummy_offset), strategy=mc_cfg.strategy)
+        mock_config = build_scenario_config(sim, ScenarioInstance("dummy_s", dummy_offset, dummy_offset), strategy=mc_cfg.strategy)
         s1 = Satellite.build("S1", mock_config.s1, partner_pos, mock_config)
         s2 = Satellite.build("S2", mock_config.s2, dummy_pos, mock_config)
         
@@ -1137,7 +1137,7 @@ def run_monte_carlo_cuda_batch(configs: list[MonteCarloConfig]) -> list[MonteCar
     
     summaries = []
     for b, mc_cfg in enumerate(configs):
-        mock_config = build_scenario_config(sim, ScenarioInstance("dummy_s", None, dummy_offset, dummy_offset), strategy=mc_cfg.strategy)
+        mock_config = build_scenario_config(sim, ScenarioInstance("dummy_s", dummy_offset, dummy_offset), strategy=mc_cfg.strategy)
         s1 = Satellite.build("S1", mock_config.s1, partner_pos, mock_config)
         s2 = Satellite.build("S2", mock_config.s2, dummy_pos, mock_config)
         ctx = StrategyContext(s1=s1, s2=s2, config=mock_config)
