@@ -12,7 +12,18 @@ These parameters define a specific scenario run and are loaded by [load_scenario
 
 ### `[scenario]`
 * **`name`** (string): Unique identifier for the scenario instance.
-* **`distance`** (float or null, meters): Optional distance override. If specified, this takes precedence over the default `distance` defined in `Simulation.toml`.
+* **Arbitrary Property Overrides**: Any simulation or satellite property can be overridden for the specific scenario using dotted keys or nested sub-tables under `[scenario]`.
+  * **Dotted Keys**: `simulation.distance = 500`, `simulation.t_step = 0.001`, or `satellite.max_fsm_radius = 0.5`.
+  * **Nested Tables**:
+    ```toml
+    [scenario.simulation]
+    distance = 500
+    t_step = 0.001
+
+    [scenario.satellite]
+    max_fsm_radius = 0.5
+    ```
+  * *Note: Hardware and environment values that are defined in milliradians (such as `max_fsm_radius`, `dish_fov`, etc.) will automatically be scaled by $10^{-3}$ to radians when parsed as overrides.*
 
 ### `[s1]` and `[s2]` (Spacecraft Instances)
 * **`bench_theta_offset`** (float, milliradians): Local theta pointing offset for the spacecraft's optical bench.
