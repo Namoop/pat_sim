@@ -130,12 +130,6 @@ def run_visualizer(
             self._time_label.setFont(QFont("Monospace", 10))
             controls.addWidget(self._time_label)
 
-            self._capture_label = QLabel("")
-            self._capture_label.setStyleSheet(
-                "color: #008800; font-weight: bold;"
-            )
-            controls.addWidget(self._capture_label)
-
             self.play_btn = QPushButton("Play")
             self.play_btn.clicked.connect(self._toggle_play)
             controls.addWidget(self.play_btn)
@@ -220,9 +214,6 @@ def run_visualizer(
         def _update_frame(self, info) -> None:
             playable = self._result.playable_t_end
             self._time_label.setText(f"t {self.current_t:.3f} / {playable:.3f}")
-            self._capture_label.setText(
-                "CAPTURE" if info.capture_active else ""
-            )
             self.slider.blockSignals(True)
             self.slider.setValue(int(round(self.current_t / t_step)))
             self.slider.blockSignals(False)
