@@ -32,6 +32,9 @@ dev = [
 opt = [
     "optuna>=3.0",
 ]
+all = [
+    "satellite[viz,gpu,opt,dev]",
+]
 
 [project.scripts]
 satellite = "satellite.__main__:main"
