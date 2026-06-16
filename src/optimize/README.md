@@ -62,7 +62,7 @@ Both **Grid** and **Random** search require only standard libraries + `numpy` (a
 
 To use the **Optuna** Bayesian search:
 ```bash
-.venv/bin/pip install optuna
+pip install -e ".[opt]"
 ```
 
 ---

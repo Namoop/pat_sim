@@ -12,6 +12,7 @@ The spacecraft body is assumed correctly pointed. Launch mispoint is modeled as 
 pip install -e .
 pip install -e ".[gpu]"      # optional GPU-accelerated Numba detection
 pip install -e ".[viz]"      # interactive 3D + angular map (PyVista, PyQt6)
+pip install -e ".[opt]"      # optional Optuna strategy parameter optimizer
 ```
 
 ---

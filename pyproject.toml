@@ -29,6 +29,9 @@ gpu = [
 dev = [
     "pytest>=8.0",
 ]
+opt = [
+    "optuna>=3.0",
+]
 
 [project.scripts]
 satellite = "satellite.__main__:main"
