@@ -23,19 +23,19 @@ def main(argv: list[str] | None = None) -> int:
         "--monte-carlo",
         type=Path,
         default=None,
-        help="Run Monte Carlo batch from MonteCarlo.toml",
+        help="Run Monte Carlo batch from config/MonteCarlo.toml",
     )
     parser.add_argument(
         "--scenario",
         type=Path,
-        default=Path("default.toml"),
+        default=Path("config/default.toml"),
         help="Scenario instance TOML (bench offsets, optional distance override)",
     )
     parser.add_argument(
         "--simulation",
         type=Path,
         default=None,
-        help="Simulation base TOML (physics, timing, visualization; default: Simulation.toml or scenario-defined)",
+        help="Simulation base TOML (physics, timing, visualization; default: config/Simulation.toml or scenario-defined)",
     )
 
     parser.add_argument(

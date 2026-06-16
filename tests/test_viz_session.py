@@ -18,13 +18,13 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 
 def _mc_fixture():
     mc = load_monte_carlo_config(FIXTURES / "MonteCarlo_success.toml")
-    return replace(mc, simulation_path=(REPO_ROOT / "Simulation.toml").resolve())
+    return replace(mc, simulation_path=(REPO_ROOT / "config/Simulation.toml").resolve())
 
 
 def test_single_result_session_advance_closes():
     cfg = load_single_scenario(
-        REPO_ROOT / "default.toml",
-        REPO_ROOT / "Simulation.toml",
+        REPO_ROOT / "config/default.toml",
+        REPO_ROOT / "config/Simulation.toml",
     )
     result = run_scenario(cfg)
     session = SingleResultSession(result)

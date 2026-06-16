@@ -16,12 +16,12 @@ Runs a satellite SDA communication scenario.
   Opens the unified visualization window after the run. The optional choice `3d` or `map` picks the **initial tab** (3D PyVista view or angular θ/φ map). `--visualize` alone is equivalent to `--visualize 3d`. If omitted, the window opens when `[scenario].visualize` is specified as `"3d"` or `"map"` in the scenario config. With `--monte-carlo`, opens an interactive step-through mode: **Next** runs the next sampled scenario (or closes on the last run / single scenario). On successful runs the timeline ends at mutual lock — replay cache, slider, and playback cannot scrub past that point. Playback controls sit above the view; the **event log** (system, S1, S2) is in a three-column strip at the bottom.
 
 * **`--monte-carlo MONTE_CARLO`**  
-  Runs a Monte Carlo batch from the specified TOML file (e.g. `MC_basic.toml`). Without `--visualize`, runs the full batch headlessly and prints a summary. With visualization enabled (via `--visualize`), runs one scenario at a time in the visualizer; use **Next** to advance.
+  Runs a Monte Carlo batch from the specified TOML file (e.g. `config/MonteCarlo.toml` or `config/MC_basic.toml`). Without `--visualize`, runs the full batch headlessly and prints a summary. With visualization enabled (via `--visualize`), runs one scenario at a time in the visualizer; use **Next** to advance.
 
-* **`--scenario SCENARIO`** (default: `default.toml`)  
+* **`--scenario SCENARIO`** (default: `config/default.toml`)  
   Path to the Scenario instance TOML containing bench offsets, strategy chain, and optional overrides.
 
-* **`--simulation SIMULATION`** (default: `Simulation.toml`)  
+* **`--simulation SIMULATION`** (default: `config/Simulation.toml`)  
   Path to the Simulation base TOML containing hardware, timing, distance, `t_step`, and visualization defaults.
 
 * **`--t T`** (default: `0`)  
@@ -34,7 +34,7 @@ Runs a satellite SDA communication scenario.
 python -m satellite
 
 # Run Monte Carlo simulation batch
-python -m satellite --monte-carlo MC_basic.toml
+python -m satellite --monte-carlo config/MonteCarlo.toml
 
 # Visualize with specific starting time and map tab initially active
 python -m satellite --visualize map --t 2.5
@@ -52,10 +52,10 @@ Benchmark the mapviz QPainter render path (headless Qt). Requires the `[viz]` ex
 
 ### Benchmark Options
 
-* **`--scenario SCENARIO`** (default: `default.toml`)  
+* **`--scenario SCENARIO`** (default: `config/default.toml`)  
   Scenario instance TOML.
 
-* **`--simulation SIMULATION`** (default: `Simulation.toml`)  
+* **`--simulation SIMULATION`** (default: `config/Simulation.toml`)  
   Simulation base TOML.
 
 * **`--samples N`** (default: `1000`)  

@@ -28,8 +28,8 @@ METHOD="${2:-random}"
 EVAL_RUNS="${3:-30}"
 
 OPTIMIZER="src/optimize/__main__.py"
-SIM_CONFIG="Simulation.toml"
-MC_CONFIG="MC_scans.toml"
+SIM_CONFIG="config/Simulation.toml"
+MC_CONFIG="config/MonteCarlo.toml"
 LOG_DIR="src/optimize/logs"
 
 STRATEGIES=(

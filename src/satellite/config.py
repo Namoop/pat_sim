@@ -367,6 +367,7 @@ def load_monte_carlo_config(path: str | Path) -> MonteCarloConfig:
     if not simulation_path.exists():
         for candidate in [
             config_path.parent.parent / simulation_rel,
+            Path.cwd() / "config" / simulation_rel,
             Path.cwd() / simulation_rel,
         ]:
             candidate = candidate.resolve()
@@ -473,7 +474,7 @@ def load_single_scenario(
     if simulation_path is None:
         fallback_path = Path(scenario_path).parent / "Simulation.toml"
         if not fallback_path.exists():
-            fallback_path = Path("Simulation.toml")
+            fallback_path = Path("config/Simulation.toml")
         simulation_path = fallback_path
 
     sim = load_simulation_config(simulation_path)

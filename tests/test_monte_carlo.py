@@ -52,10 +52,10 @@ def test_seeded_sampling_is_reproducible():
 
 
 def test_build_scenario_config_x_axis_positions():
-    sim_path = REPO_ROOT / "Simulation.toml"
+    sim_path = REPO_ROOT / "config/Simulation.toml"
     sim = load_simulation_config(sim_path)
-    instance = load_scenario_config(REPO_ROOT / "default.toml")
-    mc = load_monte_carlo_config(REPO_ROOT / "MC_basic.toml")
+    instance = load_scenario_config(REPO_ROOT / "config/default.toml")
+    mc = load_monte_carlo_config(REPO_ROOT / "config/MC_basic.toml")
     cfg = build_scenario_config(sim, instance, strategy=mc.strategy)
     s1_pos, s2_pos = positions_for_distance(sim.simulation.distance)
     np.testing.assert_allclose(cfg.s1.position, s1_pos)
@@ -64,7 +64,7 @@ def test_build_scenario_config_x_axis_positions():
 
 def test_monte_carlo_success_biased_fixture():
     mc = load_monte_carlo_config(FIXTURES / "MonteCarlo_success.toml")
-    mc = replace(mc, simulation_path=(REPO_ROOT / "Simulation.toml").resolve())
+    mc = replace(mc, simulation_path=(REPO_ROOT / "config/Simulation.toml").resolve())
     summary = run_monte_carlo(mc, max_workers=1)
     assert summary.runs == 15
     assert summary.success_rate >= 0.8
@@ -72,7 +72,7 @@ def test_monte_carlo_success_biased_fixture():
 
 def test_monte_carlo_failure_biased_fixture():
     mc = load_monte_carlo_config(FIXTURES / "MonteCarlo_fail.toml")
-    mc = replace(mc, simulation_path=(REPO_ROOT / "Simulation.toml").resolve())
+    mc = replace(mc, simulation_path=(REPO_ROOT / "config/Simulation.toml").resolve())
     summary = run_monte_carlo(mc, max_workers=1)
     assert summary.runs == 8
     assert summary.successes == 0
@@ -137,7 +137,7 @@ def test_monte_carlo_graceful_interrupt(monkeypatch):
     mc = load_monte_carlo_config(FIXTURES / "MonteCarlo_success.toml")
     mc = replace(
         mc,
-        simulation_path=(REPO_ROOT / "Simulation.toml").resolve(),
+        simulation_path=(REPO_ROOT / "config/Simulation.toml").resolve(),
         runs=5,
         chain=mc.strategy.chain,
     )

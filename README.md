@@ -23,7 +23,7 @@ pip install -e ".[viz]"      # interactive 3D + angular map (PyVista, PyQt6)
 python -m satellite
 
 # Run Monte Carlo simulation batch
-python -m satellite --monte-carlo MC_basic.toml
+python -m satellite --monte-carlo config/MonteCarlo.toml
 
 # Visualize with specific starting time and map tab initially active
 python -m satellite --visualize map --t 2.5

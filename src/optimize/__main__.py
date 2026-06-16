@@ -707,13 +707,13 @@ def main():
     parser.add_argument(
         "--sim-config",
         type=str,
-        default="Simulation.toml",
+        default="config/Simulation.toml",
         help="Path to Simulation.toml config.",
     )
     parser.add_argument(
         "--mc-config",
         type=str,
-        default="MC_scans.toml",
+        default="config/MonteCarlo.toml",
         help="Path to MonteCarlo.toml config.",
     )
     parser.add_argument(
