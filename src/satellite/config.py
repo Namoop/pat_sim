@@ -132,7 +132,6 @@ class ScenarioInstance:
     name: str
     s1: BenchOffsetConfig
     s2: BenchOffsetConfig
-    distance: float | None = None
     overrides: dict[str, dict[str, Any]] = field(default_factory=dict)
 
 
@@ -302,13 +301,8 @@ def load_scenario_config(path: str | Path) -> ScenarioInstance:
     s2 = data.get("s2", {})
     
     overrides: dict[str, dict[str, Any]] = {}
-    distance = None
     for key, value in scenario.items():
         if key == "name":
-            continue
-        if key == "distance":
-            distance = float(value)
-            overrides.setdefault("simulation", {})["distance"] = distance
             continue
         
         if "." in key:
@@ -329,7 +323,6 @@ def load_scenario_config(path: str | Path) -> ScenarioInstance:
             bench_theta_offset=float(s2.get("bench_theta_offset", 0.0)) * 1e-3,
             bench_phi_offset=float(s2.get("bench_phi_offset", 0.0)) * 1e-3,
         ),
-        distance=distance,
         overrides=overrides,
     )
 
@@ -409,8 +402,6 @@ def build_scenario_config(
     strategy: StrategyConfig,
 ) -> ScenarioConfig:
     overrides = dict(instance.overrides)
-    if instance.distance is not None:
-        overrides.setdefault("simulation", {})["distance"] = instance.distance
 
     satellite = _apply_dict_overrides(sim.satellite, overrides.get("satellite", {}))
     simulation = _apply_dict_overrides(sim.simulation, overrides.get("simulation", {}))

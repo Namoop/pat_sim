@@ -77,7 +77,7 @@ def test_scenario_distance_override():
     instance = load_scenario_config("default.toml")
     from dataclasses import replace
 
-    overridden = replace(instance, distance=500.0)
+    overridden = replace(instance, overrides={"simulation": {"distance": 500.0}})
     mc = load_monte_carlo_config("MonteCarlo.toml")
     cfg = build_scenario_config(sim, overridden, strategy=mc.strategy)
     s1_pos, s2_pos = positions_for_distance(500.0)
