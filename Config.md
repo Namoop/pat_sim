@@ -14,6 +14,7 @@ These parameters define a specific scenario run and are loaded by [load_scenario
 * **`name`** (string): Unique identifier for the scenario instance.
 * **`chain`** (array of strings, required): Ordered list of search strategies to run (e.g., `["minor_offset", "single_miss"]`).
 * **`simulation_file`** or **`simulation`** (string, optional): Path to the associated `Simulation.toml` file (resolved relative to the scenario file). Note that if you also specify overrides under `simulation` (such as `simulation.t_step`), you must use `simulation_file = "..."` to avoid TOML table redefinition errors.
+* **`visualize`** (string, optional): Automatically opens visualizer after a single run if set to `"3d"` or `"map"`.
 * **Arbitrary Property Overrides**: Any simulation or satellite property can be overridden for the specific scenario using dotted keys or nested sub-tables under `[scenario]`.
   * **Dotted Keys**: `simulation.distance = 500`, `simulation.t_step = 0.001`, or `satellite.max_fsm_radius = 0.5`.
   * **Nested Tables**:
@@ -55,15 +56,14 @@ These parameters define spacecraft hardware limits, simulation steps, and visual
 * **`timeout`** (float, seconds): Maximum simulation duration.
 * **`enforce_speed_limit`** (bool): If true, validates strategy timelines to ensure they respect `max_beam_speed`.
 
-### `[visualization]` (3D Renderer Settings)
-* **`enabled`** (bool): Enables the 3D rendering visualizer.
+### `[3d_viz]` (3D Renderer Settings)
 * **`cone_u_steps`** (int): Number of longitudinal steps in the beam cone mesh.
 * **`cone_v_steps`** (int): Number of angular steps in the beam cone mesh.
 * **`spiral_trail_steps`** (int): Number of steps in the visual path trail.
 * **`ribbon_v_steps`** (int): Number of steps across the swept ribbon width.
 * **`profile_frames`** (bool): Enables profiling of visualization updates.
 
-### `[map_visualization]` (2D Map Settings)
+### `[map_viz]` (2D Map Settings)
 * **`axis_limit`** (float, milliradians): Limit of the visualizer's 2D angular map plots.
 * **`slider_debounce_ms`** (int): Debounce time in milliseconds for visualizer UI slider inputs.
 
