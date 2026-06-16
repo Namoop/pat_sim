@@ -51,9 +51,7 @@ class FastSteeringMirror:
         self._target_phi = 0.0
 
     def effective_receive_boresight(self, bench_boresight: Vec3) -> Vec3:
-        """Receive aim with FSM steering applied on top of bench boresight."""
-        if not self.locked:
-            return normalize(bench_boresight)
+        """Receive/transmit aim with FSM steering applied on top of bench boresight."""
         u_x, u_y, _ = transmitter_basis(
             *spherical_angles_from_direction(bench_boresight)
         )
@@ -74,8 +72,8 @@ class FastSteeringMirror:
         self.track_target = toward_source.copy()
         # Mirror will reach target in update()
 
-    def update(self, bench_boresight: Vec3, dq: float, max_fsm_speed: float) -> None:
-        """Slew mirror toward target at max_fsm_speed."""
+    def update(self, bench_boresight: Vec3, dq: float, max_fsm_speed: float, max_fsm_radius: float) -> None:
+        """Slew mirror toward target at max_fsm_speed, clamped to max_fsm_radius."""
         if self.track_target is None:
             return
 
@@ -85,27 +83,37 @@ class FastSteeringMirror:
             self.track_target,
         )
 
+        # Clamp target offsets to the physical range of the FSM
+        target_dist = np.hypot(self._target_theta, self._target_phi)
+        clamped_target_theta = self._target_theta
+        clamped_target_phi = self._target_phi
+        if target_dist > max_fsm_radius:
+            clamped_target_theta = (self._target_theta / target_dist) * max_fsm_radius
+            clamped_target_phi = (self._target_phi / target_dist) * max_fsm_radius
+
         if max_fsm_speed <= 0:
             # Infinite speed fallback
-            self.theta_offset = self._target_theta
-            self.phi_offset = self._target_phi
-            self.locked = True
+            self.theta_offset = clamped_target_theta
+            self.phi_offset = clamped_target_phi
+            self.locked = (target_dist <= max_fsm_radius + 1e-12)
             return
 
         # Simple 2D slew in tangent plane (approximation of mirror DOF)
-        du = self._target_theta - self.theta_offset
-        dv = self._target_phi - self.phi_offset
+        du = clamped_target_theta - self.theta_offset
+        dv = clamped_target_phi - self.phi_offset
         dist = np.hypot(du, dv)
         max_step = max_fsm_speed * dq
 
         if dist <= max_step + 1e-12:
-            self.theta_offset = self._target_theta
-            self.phi_offset = self._target_phi
-            self.locked = True
+            self.theta_offset = clamped_target_theta
+            self.phi_offset = clamped_target_phi
+            # Locked means we are pointing exactly at the actual target
+            self.locked = (target_dist <= max_fsm_radius + 1e-12)
         else:
             self.theta_offset += (du / dist) * max_step
             self.phi_offset += (dv / dist) * max_step
             self.locked = False
+
 
     def update_with_bench(self, bench_boresight: Vec3) -> None:
         """Recompute FSM target after bench slew; mirror remains on track."""

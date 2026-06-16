@@ -32,6 +32,7 @@ class OpticalBench:
         bench_phi_offset: float,
         max_beam_speed: float,
         max_fsm_speed: float,
+        max_fsm_radius: float,
     ) -> None:
         self.position = position
         self.partner_position = partner_position
@@ -39,6 +40,8 @@ class OpticalBench:
         self.bench_phi_offset = bench_phi_offset
         self.max_beam_speed = max_beam_speed
         self.max_fsm_speed = max_fsm_speed
+        self.max_fsm_radius = max_fsm_radius
+
 
         self.toward_partner = normalize(partner_position - position)
         self._initial_bench_boresight = direction_with_local_offset(
@@ -160,8 +163,9 @@ class OpticalBench:
 
         if acq.has_seen_beam and acq.track_target is not None:
             # Update FSM slew every step
-            fsm.update(self.bench_boresight, dq, self.max_fsm_speed)
+            fsm.update(self.bench_boresight, dq, self.max_fsm_speed, self.max_fsm_radius)
             acq.fsm_locked = fsm.locked
+
 
             if not just_detected and not acq.slew_complete:
                 max_step = (acq.bench_slew_rate or 0.0) * dq

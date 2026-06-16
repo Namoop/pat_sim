@@ -45,6 +45,7 @@ class Satellite:
             bench_phi_offset=instance.bench_phi_offset,
             max_beam_speed=hw.max_beam_speed,
             max_fsm_speed=hw.max_fsm_speed,
+            max_fsm_radius=hw.max_fsm_radius,
         )
         fsm = FastSteeringMirror()
         beam_length = default_beam_length(position, partner_actual, config.simulation)
