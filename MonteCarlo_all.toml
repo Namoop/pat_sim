@@ -11,9 +11,6 @@ theta_std = 2.0
 phi_mean = 0.0
 phi_std = 2.0
 
-[strategy]
-chain=["lissajous_scan"]
-
 [strategy.dual_spiral]
 speed_a = 4.990651
 speed_ratio = 1.883651

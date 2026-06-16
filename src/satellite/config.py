@@ -229,7 +229,13 @@ def _require_float(section: dict, key: str, context: str) -> float:
 def _load_strategy(data: dict, chain_list: list[str] | None = None, default_k: float = 10.0) -> StrategyConfig:
     from satellite.strategy.base import CONFIG_PARSERS
 
-    global_chain = data.get("chain", ["minor_offset", "single_miss"])
+    global_chain = data.get("chain")
+    if global_chain is None:
+        if chain_list is not None:
+            global_chain = chain_list
+        else:
+            raise ValueError("strategy.chain is required")
+
     all_strategy_names = set(global_chain)
     if chain_list:
         all_strategy_names.update(chain_list)
@@ -291,9 +297,13 @@ def load_scenario_config(path: str | Path) -> ScenarioInstance:
     s1 = data.get("s1", {})
     s2 = data.get("s2", {})
     
+    scenario_chain = scenario.get("chain")
+    if scenario_chain is None:
+        raise ValueError(f"scenario.chain is required in scenario config: {path}")
+    
     overrides: dict[str, dict[str, Any]] = {}
     for key, value in scenario.items():
-        if key == "name":
+        if key in ("name", "chain"):
             continue
         
         if "." in key:
@@ -304,9 +314,11 @@ def load_scenario_config(path: str | Path) -> ScenarioInstance:
             for prop, val in value.items():
                 overrides.setdefault(key, {})[prop] = val
 
-    strategy = None
-    if "strategy" in data:
-        strategy = _load_strategy(data["strategy"])
+    strategy_data = data.get("strategy", {})
+    if "chain" not in strategy_data:
+        strategy_data = dict(strategy_data)
+        strategy_data["chain"] = scenario_chain
+    strategy = _load_strategy(strategy_data)
 
     return ScenarioInstance(
         name=str(scenario.get("name", "unnamed")),
@@ -425,23 +437,14 @@ def build_scenario_config(
 def load_single_scenario(
     scenario_path: str | Path,
     simulation_path: str | Path,
-    strategy_path: str | Path | None = None,
 ) -> ScenarioConfig:
-    """Merge scenario instance and simulation base, with strategy loaded from scenario or default."""
+    """Merge scenario instance and simulation base, with strategy loaded from scenario."""
     sim = load_simulation_config(simulation_path)
     instance = load_scenario_config(scenario_path)
     
     strategy = instance.strategy
-    if strategy is None:
-        # Fallback: load strategy from strategy_path or MonteCarlo.toml
-        if strategy_path is not None:
-            fallback_path = Path(strategy_path)
-        else:
-            fallback_path = Path(scenario_path).parent / "MonteCarlo.toml"
-            if not fallback_path.exists():
-                fallback_path = Path("MonteCarlo.toml")
-        mc = load_monte_carlo_config(fallback_path)
-        strategy = mc.strategy
+    if strategy is None or not strategy.chain:
+        raise ValueError(f"Strategy chain must be specified in the scenario config: {scenario_path}")
 
     return build_scenario_config(sim, instance, strategy=strategy)
 

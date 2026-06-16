@@ -11,9 +11,6 @@ theta_max = 20.0
 phi_min = -20.0
 phi_max = 20.0
 
-[strategy]
-
-
 [strategy.minor_offset]
 max_spiral_radius = "fov"
 spiral_speed = 0.4
