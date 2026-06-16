@@ -882,7 +882,7 @@ def is_strategy_chain_supported_on_gpu(mc: MonteCarloConfig) -> bool:
     if not CUDA_AVAILABLE:
         return False
         
-    cache_key = tuple(name for chain_cfg in mc.chains for name in chain_cfg.chain)
+    cache_key = mc.chain
     if cache_key in _gpu_compat_cache:
         return _gpu_compat_cache[cache_key]
 
@@ -1095,20 +1095,17 @@ def run_monte_carlo_cuda_batch(configs: list[MonteCarloConfig]) -> list[MonteCar
             s2.position[0], s2.position[1], s2.position[2]
         ]
         
-        global_run_idx = 0
-        for chain_cfg in mc_cfg.chains:
-            chain_rng = np.random.default_rng(mc_cfg.seed)
-            seeds = chain_rng.integers(0, 2**32 - 1, size=chain_cfg.runs).tolist()
-            for run_in_chain_idx in range(chain_cfg.runs):
-                rng = np.random.default_rng(seeds[run_in_chain_idx])
-                s1_off, s2_off = sample_offsets(mc_cfg.error, rng)
-                offsets_arr[b * runs_per_config + global_run_idx] = [
-                    s1_off.bench_theta_offset,
-                    s1_off.bench_phi_offset,
-                    s2_off.bench_theta_offset,
-                    s2_off.bench_phi_offset
-                ]
-                global_run_idx += 1
+        chain_rng = np.random.default_rng(mc_cfg.seed)
+        seeds = chain_rng.integers(0, 2**32 - 1, size=runs_per_config).tolist()
+        for r in range(runs_per_config):
+            rng = np.random.default_rng(seeds[r])
+            s1_off, s2_off = sample_offsets(mc_cfg.error, rng)
+            offsets_arr[b * runs_per_config + r] = [
+                s1_off.bench_theta_offset,
+                s1_off.bench_phi_offset,
+                s2_off.bench_theta_offset,
+                s2_off.bench_phi_offset
+            ]
 
     d_offsets = cuda.to_device(offsets_arr)
     d_legs_s1 = cuda.to_device(legs_s1_arr)
@@ -1152,14 +1149,13 @@ def run_monte_carlo_cuda_batch(configs: list[MonteCarloConfig]) -> list[MonteCar
         
         # Precompute run strategy configs
         run_strategy_configs = []
-        for chain_cfg in mc_cfg.chains:
-            run_strat = StrategyConfig(
-                k=mc_cfg.strategy.k,
-                chain=chain_cfg.chain,
-                params=mc_cfg.strategy.params,
-            )
-            for _ in range(chain_cfg.runs):
-                run_strategy_configs.append(run_strat)
+        run_strat = StrategyConfig(
+            k=mc_cfg.strategy.k,
+            chain=mc_cfg.chain,
+            params=mc_cfg.strategy.params,
+        )
+        for _ in range(runs_per_config):
+            run_strategy_configs.append(run_strat)
                 
         run_results = []
         for r in range(runs_per_config):

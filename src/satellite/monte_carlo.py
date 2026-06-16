@@ -15,7 +15,6 @@ from satellite.config import (
     BenchOffsetConfig,
     ErrorDistributionConfig,
     GaussianErrorConfig,
-    MonteCarloChainConfig,
     MonteCarloConfig,
     ScenarioInstance,
     StrategyConfig,
@@ -250,20 +249,18 @@ def run_monte_carlo(
     sim = load_simulation_config(mc.simulation_path)
 
     tasks = []
-    global_run_idx = 0
-    for chain_cfg in mc.chains:
-        chain_rng = np.random.default_rng(mc.seed)
-        seeds = chain_rng.integers(0, 2**32 - 1, size=chain_cfg.runs).tolist()
-        
-        chain_strategy = StrategyConfig(
-            k=mc.strategy.k,
-            chain=chain_cfg.chain,
-            params=mc.strategy.params,
-        )
-        
-        for run_in_chain_idx in range(chain_cfg.runs):
-            tasks.append((seeds[run_in_chain_idx], global_run_idx, chain_strategy))
-            global_run_idx += 1
+    chain_rng = np.random.default_rng(mc.seed)
+    seeds = chain_rng.integers(0, 2**32 - 1, size=mc.runs).tolist()
+    
+    chain_strategy = StrategyConfig(
+        k=mc.strategy.k,
+        chain=mc.chain,
+        params=mc.strategy.params,
+    )
+    
+    for run_idx in range(mc.runs):
+        tasks.append((seeds[run_idx], run_idx, chain_strategy))
+
 
     total_runs = len(tasks)
     run_results: list[MonteCarloRunResult] = []

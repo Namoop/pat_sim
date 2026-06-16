@@ -28,7 +28,6 @@ def _percentile(sorted_vals: list[float], p: float) -> float:
 def run_benchmark(
     scenario_path: str,
     simulation_path: str,
-    strategy_path: str,
     *,
     samples: int = 1000,
     seed: int = 0,
@@ -36,7 +35,7 @@ def run_benchmark(
     from PyQt6.QtCore import Qt
     from PyQt6.QtWidgets import QApplication
 
-    config = load_single_scenario(scenario_path, simulation_path, strategy_path)
+    config = load_single_scenario(scenario_path, simulation_path)
     result = run_scenario(config)
     result.ensure_replay_timeline()
     total_t = result.playable_t_end
@@ -114,11 +113,6 @@ def main(argv: list[str] | None = None) -> int:
         help="Simulation base TOML",
     )
     parser.add_argument(
-        "--strategy",
-        default="MonteCarlo.toml",
-        help="Strategy chain TOML",
-    )
-    parser.add_argument(
         "--samples",
         type=int,
         default=1000,
@@ -129,7 +123,6 @@ def main(argv: list[str] | None = None) -> int:
     return run_benchmark(
         args.scenario,
         args.simulation,
-        args.strategy,
         samples=args.samples,
         seed=args.seed,
     )

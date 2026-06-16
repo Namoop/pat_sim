@@ -135,11 +135,11 @@ def test_monte_carlo_summary_statistics_formatting():
 
 def test_monte_carlo_graceful_interrupt(monkeypatch):
     mc = load_monte_carlo_config(FIXTURES / "MonteCarlo_success.toml")
-    from satellite.config import MonteCarloChainConfig
     mc = replace(
         mc,
         simulation_path=(REPO_ROOT / "Simulation.toml").resolve(),
-        chains=(MonteCarloChainConfig(runs=5, chain=mc.strategy.chain),),
+        runs=5,
+        chain=mc.strategy.chain,
     )
     calls = {"n": 0}
     real_single = run_monte_carlo_single
@@ -164,19 +164,13 @@ def test_monte_carlo_graceful_interrupt(monkeypatch):
     assert "Monte Carlo: " in text
 
 
-def test_multiple_chains_toml_parsing(tmp_path):
+def test_monte_carlo_toml_parsing(tmp_path):
     toml_content = """
 [monte_carlo]
 simulation = "Simulation.toml"
 seed = 42
-
-[[monte_carlo.chains]]
-runs = 5
+runs = 8
 chain = ["minor_offset", "single_miss"]
-
-[[monte_carlo.chains]]
-runs = 3
-chain = ["asymmetric_swap"]
 
 [error]
 distribution = "uniform"
@@ -195,126 +189,7 @@ chain = ["minor_offset"]
     mc = load_monte_carlo_config(p)
     assert mc.runs == 8
     assert mc.seed == 42
-    assert len(mc.chains) == 2
-    assert mc.chains[0].runs == 5
-    assert mc.chains[0].chain == ("minor_offset", "single_miss")
-    assert mc.chains[1].runs == 3
-    assert mc.chains[1].chain == ("asymmetric_swap",)
+    assert mc.chain == ("minor_offset", "single_miss")
     assert "single_miss" in mc.strategy.params
-    assert "asymmetric_swap" in mc.strategy.params
 
-
-def test_multiple_chains_prg_reproducibility(tmp_path):
-    toml_a_content = """
-[monte_carlo]
-simulation = "Simulation.toml"
-seed = 42
-
-[[monte_carlo.chains]]
-runs = 5
-chain = ["minor_offset", "single_miss"]
-
-[[monte_carlo.chains]]
-runs = 3
-chain = ["asymmetric_swap"]
-
-[error]
-distribution = "uniform"
-theta_min = -0.02
-theta_max = 0.02
-phi_min = -0.02
-phi_max = 0.02
-
-[strategy]
-k = 10.0
-chain = ["minor_offset"]
-
-[strategy.minor_offset]
-max_spiral_radius = "fov"
-spiral_speed = 0.4
-
-[strategy.single_miss]
-a_spiral_radius = 0.05
-b_spiral_radius = 0.05
-spiral_speed = 0.16
-
-[strategy.asymmetric_swap]
-spiral_radius = 0.05
-lock_duration = 1.0
-spiral_speed = 0.16
-"""
-    toml_b_content = """
-[monte_carlo]
-simulation = "Simulation.toml"
-seed = 42
-
-[[monte_carlo.chains]]
-runs = 3
-chain = ["asymmetric_swap"]
-
-[[monte_carlo.chains]]
-runs = 5
-chain = ["minor_offset", "single_miss"]
-
-[error]
-distribution = "uniform"
-theta_min = -0.02
-theta_max = 0.02
-phi_min = -0.02
-phi_max = 0.02
-
-[strategy]
-k = 10.0
-chain = ["minor_offset"]
-
-[strategy.minor_offset]
-max_spiral_radius = "fov"
-spiral_speed = 0.4
-
-[strategy.single_miss]
-a_spiral_radius = 0.05
-b_spiral_radius = 0.05
-spiral_speed = 0.16
-
-[strategy.asymmetric_swap]
-spiral_radius = 0.05
-lock_duration = 1.0
-spiral_speed = 0.16
-"""
-    pa = tmp_path / "mc_a.toml"
-    pa.write_text(toml_a_content)
-    pb = tmp_path / "mc_b.toml"
-    pb.write_text(toml_b_content)
-    
-    mc_a = load_monte_carlo_config(pa)
-    mc_b = load_monte_carlo_config(pb)
-    
-    mc_a = replace(mc_a, simulation_path=(REPO_ROOT / "Simulation.toml").resolve())
-    mc_b = replace(mc_b, simulation_path=(REPO_ROOT / "Simulation.toml").resolve())
-    
-    summary_a = run_monte_carlo(mc_a, max_workers=1)
-    summary_b = run_monte_carlo(mc_b, max_workers=1)
-    
-    runs_a_swap = [r for r in summary_a.run_results if r.result.config.strategy.chain == ("asymmetric_swap",)]
-    runs_a_spiral = [r for r in summary_a.run_results if r.result.config.strategy.chain == ("minor_offset", "single_miss")]
-    
-    runs_b_swap = [r for r in summary_b.run_results if r.result.config.strategy.chain == ("asymmetric_swap",)]
-    runs_b_spiral = [r for r in summary_b.run_results if r.result.config.strategy.chain == ("minor_offset", "single_miss")]
-    
-    assert len(runs_a_swap) == 3
-    assert len(runs_b_swap) == 3
-    assert len(runs_a_spiral) == 5
-    assert len(runs_b_spiral) == 5
-    
-    for r_a, r_b in zip(runs_a_swap, runs_b_swap):
-        assert r_a.s1_theta == r_b.s1_theta
-        assert r_a.s1_phi == r_b.s1_phi
-        assert r_a.s2_theta == r_b.s2_theta
-        assert r_a.s2_phi == r_b.s2_phi
-        
-    for r_a, r_b in zip(runs_a_spiral, runs_b_spiral):
-        assert r_a.s1_theta == r_b.s1_theta
-        assert r_a.s1_phi == r_b.s1_phi
-        assert r_a.s2_theta == r_b.s2_theta
-        assert r_a.s2_phi == r_b.s2_phi
 

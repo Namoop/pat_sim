@@ -133,6 +133,7 @@ class ScenarioInstance:
     s1: BenchOffsetConfig
     s2: BenchOffsetConfig
     overrides: dict[str, dict[str, Any]] = field(default_factory=dict)
+    strategy: StrategyConfig | None = None
 
 
 @dataclass(frozen=True)
@@ -157,22 +158,13 @@ ErrorDistributionConfig = UniformErrorConfig | GaussianErrorConfig
 
 
 @dataclass(frozen=True)
-class MonteCarloChainConfig:
-    runs: int
-    chain: tuple[str, ...]
-
-
-@dataclass(frozen=True)
 class MonteCarloConfig:
     simulation_path: Path
     seed: int
     error: ErrorDistributionConfig
     strategy: StrategyConfig
-    chains: tuple[MonteCarloChainConfig, ...]
-
-    @property
-    def runs(self) -> int:
-        return sum(c.runs for c in self.chains)
+    runs: int
+    chain: tuple[str, ...]
 
 
 def positions_for_distance(distance: float) -> tuple[Vec3, Vec3]:
@@ -234,14 +226,13 @@ def _require_float(section: dict, key: str, context: str) -> float:
     return float(section[key])
 
 
-def _load_strategy(data: dict, chains_data: list | None = None, default_k: float = 10.0) -> StrategyConfig:
+def _load_strategy(data: dict, chain_list: list[str] | None = None, default_k: float = 10.0) -> StrategyConfig:
     from satellite.strategy.base import CONFIG_PARSERS
 
     global_chain = data.get("chain", ["minor_offset", "single_miss"])
     all_strategy_names = set(global_chain)
-    if chains_data:
-        for c in chains_data:
-            all_strategy_names.update(c.get("chain", []))
+    if chain_list:
+        all_strategy_names.update(chain_list)
 
     params = {}
     for name in all_strategy_names:
@@ -313,6 +304,10 @@ def load_scenario_config(path: str | Path) -> ScenarioInstance:
             for prop, val in value.items():
                 overrides.setdefault(key, {})[prop] = val
 
+    strategy = None
+    if "strategy" in data:
+        strategy = _load_strategy(data["strategy"])
+
     return ScenarioInstance(
         name=str(scenario.get("name", "unnamed")),
         s1=BenchOffsetConfig(
@@ -324,6 +319,7 @@ def load_scenario_config(path: str | Path) -> ScenarioInstance:
             bench_phi_offset=float(s2.get("bench_phi_offset", 0.0)) * 1e-3,
         ),
         overrides=overrides,
+        strategy=strategy,
     )
 
 
@@ -347,25 +343,20 @@ def load_monte_carlo_config(path: str | Path) -> MonteCarloConfig:
 
     sim_bundle = load_simulation_config(simulation_path)
     
-    chains_data = mc.get("chains") or data.get("chains")
-    if not chains_data:
-        raise ValueError("monte_carlo.chains is required")
-    strategy = _load_strategy(data.get("strategy", {}), chains_data=chains_data, default_k=sim_bundle.satellite.k)
-    
-    chains = []
-    for c in chains_data:
-        chain_list = list(c.get("chain", []))
-        if not chain_list:
-            raise ValueError("each chain in monte_carlo.chains must specify a non-empty 'chain' list of strategy names")
-        r = int(c.get("runs", 1))
-        chains.append(MonteCarloChainConfig(runs=r, chain=tuple(chain_list)))
+    runs = int(mc.get("runs", 1))
+    chain_list = list(mc.get("chain", []))
+    if not chain_list:
+        raise ValueError("monte_carlo.chain is required")
+
+    strategy = _load_strategy(data.get("strategy", {}), chain_list=chain_list, default_k=sim_bundle.satellite.k)
 
     return MonteCarloConfig(
         simulation_path=simulation_path,
         seed=int(mc.get("seed", 0)),
         error=_load_error(data.get("error", {})),
         strategy=strategy,
-        chains=tuple(chains),
+        runs=runs,
+        chain=tuple(chain_list),
     )
 
 
@@ -434,13 +425,25 @@ def build_scenario_config(
 def load_single_scenario(
     scenario_path: str | Path,
     simulation_path: str | Path,
-    strategy_path: str | Path,
+    strategy_path: str | Path | None = None,
 ) -> ScenarioConfig:
-    """Merge scenario instance, simulation base, and strategy for a single run."""
+    """Merge scenario instance and simulation base, with strategy loaded from scenario or default."""
     sim = load_simulation_config(simulation_path)
     instance = load_scenario_config(scenario_path)
-    mc = load_monte_carlo_config(strategy_path)
-    return build_scenario_config(sim, instance, strategy=mc.strategy)
+    
+    strategy = instance.strategy
+    if strategy is None:
+        # Fallback: load strategy from strategy_path or MonteCarlo.toml
+        if strategy_path is not None:
+            fallback_path = Path(strategy_path)
+        else:
+            fallback_path = Path(scenario_path).parent / "MonteCarlo.toml"
+            if not fallback_path.exists():
+                fallback_path = Path("MonteCarlo.toml")
+        mc = load_monte_carlo_config(fallback_path)
+        strategy = mc.strategy
+
+    return build_scenario_config(sim, instance, strategy=strategy)
 
 
 def default_beam_length(

@@ -37,12 +37,7 @@ def main(argv: list[str] | None = None) -> int:
         default=Path("Simulation.toml"),
         help="Simulation base TOML (physics, timing, visualization)",
     )
-    parser.add_argument(
-        "--strategy",
-        type=Path,
-        default=Path("MonteCarlo.toml"),
-        help="Strategy chain TOML (strategy section; default: MonteCarlo.toml)",
-    )
+
     parser.add_argument(
         "--visualize",
         nargs="?",
@@ -119,13 +114,12 @@ def main(argv: list[str] | None = None) -> int:
     for label, path in (
         ("Scenario", args.scenario),
         ("Simulation", args.simulation),
-        ("Strategy", args.strategy),
     ):
         if not path.exists():
             print(f"{label} config not found: {path}", file=sys.stderr)
             return 1
 
-    config = load_single_scenario(args.scenario, args.simulation, args.strategy)
+    config = load_single_scenario(args.scenario, args.simulation)
     result = run_scenario(config)
     print(format_summary(result))
 

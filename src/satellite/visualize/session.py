@@ -48,16 +48,15 @@ class MonteCarloVizSession:
         self._sim = load_simulation_config(mc.simulation_path)
         
         self._runs_metadata = []
-        for chain_cfg in mc.chains:
-            chain_rng = np.random.default_rng(mc.seed)
-            seeds = chain_rng.integers(0, 2**32 - 1, size=chain_cfg.runs).tolist()
-            chain_strategy = StrategyConfig(
-                k=mc.strategy.k,
-                chain=chain_cfg.chain,
-                params=mc.strategy.params,
-            )
-            for s in seeds:
-                self._runs_metadata.append((s, chain_strategy))
+        chain_rng = np.random.default_rng(mc.seed)
+        seeds = chain_rng.integers(0, 2**32 - 1, size=mc.runs).tolist()
+        chain_strategy = StrategyConfig(
+            k=mc.strategy.k,
+            chain=mc.chain,
+            params=mc.strategy.params,
+        )
+        for s in seeds:
+            self._runs_metadata.append((s, chain_strategy))
 
         self._run_index = 0
         self._current: ScenarioResult | None = None

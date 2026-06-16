@@ -46,6 +46,7 @@ def base_config(
             dish_fov=0.02,
             max_beam_speed=0.087,
             max_fsm_speed=1.0,
+            max_fsm_radius=0.001,
             beam_width_mrad=5.0,
             k=10.0,
         ),

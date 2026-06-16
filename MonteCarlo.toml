@@ -1,8 +1,6 @@
 [monte_carlo]
 simulation = "Simulation.toml"
 seed = 42
-
-[[monte_carlo.chains]]
 runs = 1000
 chain = ["minor_offset", "single_miss"]
 
