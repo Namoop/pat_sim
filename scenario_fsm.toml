@@ -1,0 +1,22 @@
+[scenario]
+name = "fsm test"
+simulation_file = "Simulation.toml"
+simulation.t_step = 0.0001
+chain = ["lissajous_scan"]
+visualize = "map"
+
+[s1]
+bench_theta_offset = 0.952
+bench_phi_offset = -1.87
+
+[s2]
+bench_theta_offset = -0.948
+bench_phi_offset = 0.205
+
+[strategy.lissajous_scan]
+s1_wx = 15.526127
+s1_wy = 14.249881
+s1_delta = 2.957257
+s2_wx = 16.992454
+s2_wy = 3.821853
+s2_delta = 5.530637
