@@ -213,11 +213,7 @@ def is_physically_valid(
 # Simulation helpers
 # ---------------------------------------------------------------------------
 
-def evaluate_single_instance(sim_cfg, instance, strategy) -> tuple[bool, float | None]:
-    """Runs a single scenario simulation. Runs in a process pool."""
-    config = build_scenario_config(sim_cfg, instance, strategy=strategy)
-    res = run_scenario(config)
-    return res.success, res.hit_at_t
+from optimize import evaluate_single_instance
 
 
 def evaluate_candidate(
@@ -248,12 +244,13 @@ def evaluate_candidate(
     # If the strategy is GPU-compatible, perform evaluation in a single batch on the GPU
     import os
     from satellite.cuda_monte_carlo import is_strategy_chain_supported_on_gpu, run_monte_carlo_cuda
-    from satellite.config import MonteCarloConfig, MonteCarloChainConfig
+    from satellite.config import MonteCarloConfig
 
     mc = MonteCarloConfig(
         simulation_path=mc_cfg.simulation_path,
         seed=mc_cfg.seed,
-        chains=(MonteCarloChainConfig(runs=len(fixed_offsets), chain=(strategy_name,)),),
+        runs=len(fixed_offsets),
+        chain=(strategy_name,),
         error=mc_cfg.error,
         strategy=strategy,
     )
@@ -269,7 +266,7 @@ def evaluate_candidate(
 
     # Fallback to CPU parallel execution
     tasks = [
-        (sim_cfg, ScenarioInstance(name=f"eval_{idx}", distance=None, s1=s1_off, s2=s2_off), strategy)
+        (sim_cfg, ScenarioInstance(name=f"eval_{idx}", s1=s1_off, s2=s2_off), strategy)
         for idx, (s1_off, s2_off) in enumerate(fixed_offsets)
     ]
 
@@ -491,7 +488,7 @@ def run_optuna_search(
     import os
     import concurrent.futures
     import threading
-    from satellite.config import MonteCarloConfig, MonteCarloChainConfig, StrategyConfig
+    from satellite.config import MonteCarloConfig, StrategyConfig
     
     # Check if GPU batching is supported
     from satellite.cuda_monte_carlo import is_strategy_chain_supported_on_gpu, run_monte_carlo_cuda_batch, CUDA_AVAILABLE
@@ -518,7 +515,8 @@ def run_optuna_search(
     dummy_mc = MonteCarloConfig(
         simulation_path=mc_cfg.simulation_path,
         seed=mc_cfg.seed,
-        chains=(MonteCarloChainConfig(runs=len(fixed_offsets), chain=(strategy_name,)),),
+        runs=len(fixed_offsets),
+        chain=(strategy_name,),
         error=mc_cfg.error,
         strategy=dummy_strategy,
     )
@@ -577,7 +575,8 @@ def run_optuna_search(
                 mc = MonteCarloConfig(
                     simulation_path=mc_cfg.simulation_path,
                     seed=mc_cfg.seed,
-                    chains=(MonteCarloChainConfig(runs=len(fixed_offsets), chain=(strategy_name,)),),
+                    runs=len(fixed_offsets),
+                    chain=(strategy_name,),
                     error=mc_cfg.error,
                     strategy=run_strat,
                 )
@@ -714,8 +713,8 @@ def main():
     parser.add_argument(
         "--mc-config",
         type=str,
-        default="MonteCarlo_all.toml",
-        help="Path to MonteCarlo.toml config.",
+        default="MC_scans.toml",
+        help="Path to MC_scans.toml config.",
     )
     parser.add_argument(
         "--seed",
@@ -771,7 +770,7 @@ def main():
     if lo_peak > max_speed:
         print(
             "ERROR: Even the minimum-speed parameters exceed the hardware speed limit.\n"
-            "Adjust the PARAMETER_SPACES bounds in optimize.py before proceeding."
+            "Adjust the PARAMETER_SPACES bounds in __main__.py before proceeding."
         )
         sys.exit(1)
 

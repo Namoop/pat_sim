@@ -5,5 +5,5 @@ __pycache__/
 dist/
 build/
 .pytest_cache/
-optimization/logs/
+src/optimize/logs/
 *.log

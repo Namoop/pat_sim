@@ -40,7 +40,7 @@ def test_off_axis_beam_rejected_when_source_outside_fov():
         s1=BenchOffsetConfig(0.02, 0.01),
         s2=BenchOffsetConfig(0.02, 0.015),
     )
-    mc_strategy = load_monte_carlo_config("MonteCarlo.toml")
+    mc_strategy = load_monte_carlo_config("MC_basic.toml")
     cfg = build_scenario_config(sim, instance, strategy=mc_strategy.strategy)
     result = run_scenario(cfg)
 
@@ -78,7 +78,7 @@ def test_scenario_distance_override():
     from dataclasses import replace
 
     overridden = replace(instance, overrides={"simulation": {"distance": 500.0}})
-    mc = load_monte_carlo_config("MonteCarlo.toml")
+    mc = load_monte_carlo_config("MC_basic.toml")
     cfg = build_scenario_config(sim, overridden, strategy=mc.strategy)
     s1_pos, s2_pos = positions_for_distance(500.0)
     np.testing.assert_allclose(cfg.s1.position, s1_pos)
@@ -97,7 +97,7 @@ def test_scenario_generic_overrides():
             "satellite": {"max_fsm_radius": 0.5},
         }
     )
-    mc = load_monte_carlo_config("MonteCarlo.toml")
+    mc = load_monte_carlo_config("MC_basic.toml")
     cfg = build_scenario_config(sim, overridden, strategy=mc.strategy)
     
     assert cfg.simulation.t_step == 0.005

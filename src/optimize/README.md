@@ -73,13 +73,13 @@ Run the optimization script from the root repository directory:
 
 ```bash
 # Basic Random Search optimization for random_curve (20 trials)
-python optimization/optimize.py --strategy random_curve --method random --trials 20
+PYTHONPATH=src python -m optimize --strategy random_curve --method random --trials 20
 
 # Optuna Bayesian optimization for center_rebias (50 trials)
-python optimization/optimize.py --strategy center_rebias --method optuna --trials 50
+PYTHONPATH=src python -m optimize --strategy center_rebias --method optuna --trials 50
 
 # Grid Search optimization for random_walk (10 grid points)
-python optimization/optimize.py --strategy random_walk --method grid --grid-points 10
+PYTHONPATH=src python -m optimize --strategy random_walk --method grid --grid-points 10
 ```
 
 ### Command-Line Options
@@ -92,6 +92,6 @@ python optimization/optimize.py --strategy random_walk --method grid --grid-poin
 | `--grid-points` | `int` | `5` | Points per parameter axis for `grid` search. |
 | `--eval-runs` | `int` | `30` | Number of pre-sampled scenarios used to evaluate each candidate configuration. Higher is more accurate but slower. |
 | `--sim-config` | `str` | `Simulation.toml` | Path to the simulation configuration file. |
-| `--mc-config` | `str` | `MonteCarlo_all.toml` | Path to the Monte Carlo configuration file. |
+| `--mc-config` | `str` | `MC_scans.toml` | Path to the Monte Carlo configuration file. |
 | `--workers` | `int` | `CPU-1` | Maximum parallel worker processes to use. |
 | `--seed` | `int` | `42` | Random seed used to pre-sample pointing offsets. |

@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
-# optimization/run_all.sh
+# src/optimize/run_all.sh
 #
 # Runs the parameter optimizer for every supported strategy.
 # Must be executed from the repository root directory.
 #
 # Usage:
-#   bash optimization/run_all.sh [TRIALS] [METHOD] [EVAL_RUNS]
+#   bash src/optimize/run_all.sh [TRIALS] [METHOD] [EVAL_RUNS]
 #
 # Arguments (all optional):
 #   TRIALS    Number of valid simulation trials per strategy  (default: 50)
@@ -13,9 +13,9 @@
 #   EVAL_RUNS Pointing-offset scenarios evaluated per trial   (default: 30)
 #
 # Examples:
-#   bash optimization/run_all.sh
-#   bash optimization/run_all.sh 100 optuna 50
-#   bash optimization/run_all.sh 20 grid
+#   bash src/optimize/run_all.sh
+#   bash src/optimize/run_all.sh 100 optuna 50
+#   bash src/optimize/run_all.sh 20 grid
 
 set -euo pipefail
 
@@ -27,10 +27,10 @@ TRIALS="${1:-50}"
 METHOD="${2:-random}"
 EVAL_RUNS="${3:-30}"
 
-OPTIMIZER="optimization/optimize.py"
+OPTIMIZER="src/optimize/__main__.py"
 SIM_CONFIG="Simulation.toml"
-MC_CONFIG="MonteCarlo_all.toml"
-LOG_DIR="optimization/logs"
+MC_CONFIG="MC_scans.toml"
+LOG_DIR="src/optimize/logs"
 
 STRATEGIES=(
     # dual_spiral
@@ -110,7 +110,7 @@ for i in "${!STRATEGIES[@]}"; do
 
     STRATEGY_START=$(date +%s)
 
-    if python "$OPTIMIZER" \
+    if PYTHONPATH=src python -m optimize \
             --strategy   "$STRATEGY" \
             --method     "$METHOD" \
             --trials     "$TRIALS" \

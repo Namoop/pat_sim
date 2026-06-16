@@ -55,7 +55,7 @@ def test_build_scenario_config_x_axis_positions():
     sim_path = REPO_ROOT / "Simulation.toml"
     sim = load_simulation_config(sim_path)
     instance = load_scenario_config(REPO_ROOT / "default.toml")
-    mc = load_monte_carlo_config(REPO_ROOT / "MonteCarlo.toml")
+    mc = load_monte_carlo_config(REPO_ROOT / "MC_basic.toml")
     cfg = build_scenario_config(sim, instance, strategy=mc.strategy)
     s1_pos, s2_pos = positions_for_distance(sim.simulation.distance)
     np.testing.assert_allclose(cfg.s1.position, s1_pos)
