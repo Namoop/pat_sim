@@ -69,7 +69,7 @@ These parameters define spacecraft hardware limits, simulation steps, and visual
 
 ---
 
-## 3. Monte Carlo and Error Config (`MonteCarlo.toml` / `MonteCarlo_all.toml`)
+## 3. Monte Carlo and Error Config (`MC_basic.toml` / `MC_scans.toml`)
 
 These parameters define jumble distributions, random seeds, and strategy parameter groups. Loaded by [load_monte_carlo_config](file:///home/theodore/Documents/satellite/src/satellite/config.py).
 

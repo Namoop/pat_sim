@@ -1,6 +1,24 @@
 # Comprehensive Satellite Search Strategies
 
 This document provides a detailed overview of the search strategies available in the `satellite` simulation suite. Each strategy is designed to establish a mutual optical communication link between two satellites (S1 and S2) under varying levels of initial pointing uncertainty.
+## Built-in Strategies Overview
+
+| Name                | Behavior                                                                  |
+| ------------------- | ------------------------------------------------------------------------- |
+| `minor_offset`      | Both TX/RX on; S1 FOV spiral, S2 holds                                    |
+| `single_miss`       | Alternating wide spirals with bench reset between phases                  |
+| `asymmetric_swap`   | S1 probes with RX off and resets, swap roles to establish reciprocal lock |
+| `dual_spiral`       | Both satellites execute spirals simultaneously                            |
+| `dual_raster`       | Satellites perform orthogonal raster scans (one horizontal, one vertical) |
+| `lissajous_scan`    | Continuous Lissajous figure scan                                          |
+| `rosette_scan`      | Rosette-pattern scan from center boresight                                |
+| `center_rebias`     | Stochastic search with periodic center resets                             |
+| `concentric_shells` | Progressive depth concentric circle scans                                 |
+| `random_walk`       | Stochastic step-by-step random walk                                       |
+| `random_curve`      | Smooth random walk in angle space                                         |
+| `nested_spiral`     | Concentric Archimedean spirals |
+
+Custom strategies are implemented using the Python DSL in `src/satellite/strategy/actions.py`; TOML files configure built-in chain parameters.
 
 ---
 

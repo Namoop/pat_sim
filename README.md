@@ -4,7 +4,9 @@ Monte Carlo satellite link-establishment simulation. Two satellites search using
 
 The spacecraft body is assumed correctly pointed. Launch mispoint is modeled as **optical-bench rotation**; dish and TX beam share the bench boresight.
 
-## Install
+---
+
+## Installation
 
 ```bash
 pip install -e .
@@ -12,154 +14,28 @@ pip install -e ".[perf]"    # optional Numba-accelerated detection
 pip install -e ".[viz]"      # interactive 3D + angular map (PyVista, PyQt6)
 ```
 
-## Run
+---
+
+## Quickstart
 
 ```bash
-python -m satellite [options]
-```
-
-Run a satellite SDA communication scenario. Pass `--help` for the same option list in the terminal.
-
-**Options**
-
-`--visualize [{3d,map}]`  
-Open unified visualization window after the run. Optional `3d` or `map` picks the **initial tab** (3D PyVista view or angular θ/φ map). `--visualize` alone is equivalent to `--visualize 3d`. If omitted, the window opens when `[scenario].visualize` is specified as `"3d"` or `"map"` in the scenario config. With `--monte-carlo`, opens an interactive step-through mode: **Next** runs the next sampled scenario (or closes on the last run / single scenario). On successful runs the timeline ends at mutual lock — replay cache, slider, and playback cannot scrub past that point. Playback controls sit above the view; the **event log** (system, S1, S2) is in a three-column strip at the bottom.
-
-`--monte-carlo MONTE_CARLO`  
-Run Monte Carlo from `MonteCarlo.toml`. Without `--visualize`, runs the full batch headlessly and prints a summary. With visualization enabled (via `--visualize`), runs one scenario at a time in the visualizer; use **Next** to advance.
-
-`--scenario SCENARIO` (default: `default.toml`)  
-Scenario instance TOML: bench offsets, strategy chain, and optional `[scenario].distance` override.
-
-`--simulation SIMULATION` (default: `Simulation.toml`)  
-Simulation base TOML: hardware, timing, distance, `t_step`, and visualization defaults.
-
-`--t T` (default: `0`)  
-Starting time `t` when opening a visualizer.
-
-**Examples**
-
-```bash
+# Run the default scenario
 python -m satellite
-python -m satellite --monte-carlo MonteCarlo.toml
+
+# Run Monte Carlo simulation batch
+python -m satellite --monte-carlo MC_basic.toml
+
+# Visualize with specific starting time and map tab initially active
 python -m satellite --visualize map --t 2.5
 ```
 
-### Map render benchmark
+---
 
-```bash
-python -m satellite.mapviz.bench_render [options]
-```
+## Documentation Directory
 
-Benchmark mapviz QPainter render path (headless Qt). Requires `[viz]` (PyQt6). Pass `--help` for options.
+For details on configuration, strategy details, CLI reference, and architecture/modelling:
 
-**Options**
-
-`--scenario SCENARIO` (default: `default.toml`)  
-Scenario instance TOML.
-
-`--simulation SIMULATION` (default: `Simulation.toml`)  
-Simulation base TOML.
-
-`--samples N` (default: `1000`)  
-Number of random `t` samples.
-
-`--seed N` (default: `0`)  
-RNG seed for sample times.
-
-### Linux+Wayland visualization
-
-On Linux with Wayland, Qt windows (map visualizer) may fail to open or render incorrectly. Force the X11 backend via `QT_QPA_PLATFORM=xcb`:
-
-```bash
-QT_QPA_PLATFORM=xcb python -m satellite [...]
-```
-
-## Configuration
-
-
-| File                                 | Purpose                                                                |
-| ------------------------------------ | ---------------------------------------------------------------------- |
-| `[Simulation.toml](Simulation.toml)` | Hardware, `distance`, `t_step`, visualization                          |
-| `[default.toml](default.toml)`       | Scenario definition: bench offsets, strategy chain, property overrides |
-| `[MonteCarlo.toml](MonteCarlo.toml)` | MC runs, error distribution, strategy chain                            |
-
-
-Satellites are placed on the **x axis**: S1 at origin, S2 at `[distance, 0, 0]`.
-
-Strategy step durations are explicit in `[strategy.*]` tables (total sim time = sum of attempt script durations in the chain). Movement `duration=0` is only valid for a no-op bench reset when already at the initial boresight; future work will auto-compute durations from beam-director max slew rate.
-
-`beam_width` is the transmitter cone half-angle in **milliradians** (e.g. `5.0` → α = 0.005 rad).
-
-### Monte Carlo Configuration
-
-You can run a strategy chain in a Monte Carlo simulation by specifying the chain and the number of runs directly in `MonteCarlo.toml`.
-
-Example configuration in `MonteCarlo.toml`:
-
-```toml
-[monte_carlo]
-simulation = "Simulation.toml"
-seed = 42
-runs = 500
-chain = ["minor_offset", "single_miss"]
-```
-
-### Built-in strategies
-
-
-| Name                | Behavior                                                                  |
-| ------------------- | ------------------------------------------------------------------------- |
-| `minor_offset`      | Both TX/RX on; S1 FOV spiral, S2 holds                                    |
-| `single_miss`       | Alternating wide spirals with bench reset between phases                  |
-| `asymmetric_swap`   | S1 probes with RX off and resets, swap roles to establish reciprocal lock |
-| `dual_spiral`       | Both satellites execute spirals simultaneously                            |
-| `dual_raster`       | Satellites perform orthogonal raster scans (one horizontal, one vertical) |
-| `lissajous_scan`    | Continuous Lissajous figure scan                                          |
-| `rosette_scan`      | Rosette-pattern scan from center boresight                                |
-| `center_rebias`     | Stochastic search with periodic center resets                             |
-| `concentric_shells` | Progressive depth concentric circle scans                                 |
-| `random_walk`       | Stochastic step-by-step random walk                                       |
-| `random_curve`      | Smooth random walk in angle space                                         |
-| `nested_spiral`     | Concentric Archimedean spirals                                            |
-
-
-Custom strategies use the Python DSL in `strategy/actions.py`; TOML configures built-in chain parameters only.
-
-## Project layout
-
-```
-src/satellite/
-  config.py       — Simulation / scenario / MC loaders
-  monte_carlo.py  — error sampling and batch runner
-  strategy/
-    actions.py    — timeline DSL and StrategyScript
-    runner.py     — frame runner
-    schedule.py   — compiled timeline for replay
-    meta.py       — strategy chain orchestrator
-    strategies/   — built-in strategy implementations
-  sda/            — bench, transmitter, receiver
-  scenario.py     — orchestration and replay
-  visualize/      — unified 3D + map visualizer
-  mapviz/         — QPainter angular map panels
-```
-
-## Model summary
-
-- **Detection:** transmit cone hits dish mount; incoming direction from transmitter body must fall within `dish_fov`.
-- **Search:** independent per-satellite timelines (hold, spiral, reset, …) with optional beam/receiver enable states; FSM snaps on acquisition.
-- **Lock:** both satellites transmitting and receiving, both slews complete, simultaneous `visible_12 ∧ visible_21`.
-- **Partial acquisition:** if one satellite acquires the other before a strategy times out, the acquirer keeps tracking and ignores later scripted search; the non-acquired satellite continues the strategy chain normally.
-- **Replay:** headless and visualizer share one coupled replay timeline, capped at lock time on successful runs.
-
-## Running Tests
-
-To run the test suite, notably in automated environments:
-
-1. **Install Test Dependencies**: If `pytest` is not already installed in your virtual environment:
-  ```bash
-   .venv/bin/pip install pytest
-  ```
-2. **Run Pytest with Environment Variables**: The project uses an auto-bootstrap mechanism in `[src/satellite/__init__.py](file:///home/theodore/Documents/satellite/src/satellite/__init__.py)` that can cause issues or unexpected argument stripping if re-executed.
-  To bypass this auto-bootstrap and run the tests correctly, set `SATELLITE_NO_GPU=1` and ensure the project path is in your `PYTHONPATH`:
-
+- **[docs/config.md](docs/config.md)**: Configuration reference for Simulation, Scenarios, and Monte Carlo.
+- **[docs/strategies.md](docs/strategies.md)**: Descriptions of built-in pointing search strategies.
+- **[docs/cli.md](docs/cli.md)**: Detailed command-line reference, benchmarking, and troubleshooting.
+- **[docs/model.md](docs/model.md)**: Physics model description, FSM acquisition logic, and package layout.
