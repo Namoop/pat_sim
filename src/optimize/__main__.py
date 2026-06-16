@@ -714,7 +714,7 @@ def main():
         "--mc-config",
         type=str,
         default="MC_scans.toml",
-        help="Path to MC_scans.toml config.",
+        help="Path to MonteCarlo.toml config.",
     )
     parser.add_argument(
         "--seed",
