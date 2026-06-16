@@ -13,6 +13,7 @@ These parameters define a specific scenario run and are loaded by [load_scenario
 ### `[scenario]`
 * **`name`** (string): Unique identifier for the scenario instance.
 * **`chain`** (array of strings, required): Ordered list of search strategies to run (e.g., `["minor_offset", "single_miss"]`).
+* **`simulation`** (string, optional): Path to the associated `Simulation.toml` file (resolved relative to the scenario file).
 * **Arbitrary Property Overrides**: Any simulation or satellite property can be overridden for the specific scenario using dotted keys or nested sub-tables under `[scenario]`.
   * **Dotted Keys**: `simulation.distance = 500`, `simulation.t_step = 0.001`, or `satellite.max_fsm_radius = 0.5`.
   * **Nested Tables**:
