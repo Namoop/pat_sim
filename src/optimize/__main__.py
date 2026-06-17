@@ -54,61 +54,92 @@ from satellite.scenario import run_scenario
 # Search spaces
 # ---------------------------------------------------------------------------
 
-# Bounds are derived from the hardware max_beam_speed (0.087 rad/s) and max_search_radius (0.005 rad):
-# We allow parameters to range up to the physical speed limit to ensure the optimizer
-# can find fast-scanning solutions that achieve 100% success rate without timing out.
-# Bounds are slightly tightened from the exact limit to avoid floating point/discretization rejections.
-PARAMETER_SPACES = {
-    # velocity_a * velocity_ratio <= 0.087 -> velocity_a <= 0.028 (with ratio up to 3.0)
-    "random_curve": {
-        "velocity_a":     ("float", 0.001,  0.028),
-        "velocity_ratio": ("float", 1.0,    3.0),
-        "drift_sigma":    ("float", 0.001,  0.5),
-        "max_turn_radius":("float", 0.1,    2.0),
-    },
-    "center_rebias": {
-        "velocity_a":     ("float", 0.001,  0.028),
-        "velocity_ratio": ("float", 1.0,    3.0),
-        "drift_sigma":    ("float", 0.001,  0.5),
-        "max_turn_radius":("float", 0.1,    2.0),
-        "bias_strength":  ("float", 0.0,    1.0),
-    },
-    # peak ≈ A * sqrt(wx² + wy²), A = max_search_radius / sqrt(2) ≈ 0.00354
-    # wx, wy <= 17.0 gives peak <= 0.085 rad/s
-    "lissajous_scan": {
-        "s1_wx":    ("float", 0.1,  17.0),
-        "s1_wy":    ("float", 0.1,  17.0),
-        "s2_wx":    ("float", 0.1,  17.0),
-        "s2_wy":    ("float", 0.1,  17.0),
-    },
-    # peak ≈ A * (w1 + w2), A = max_search_radius = 0.005
-    # w1, w2 <= 8.6 gives peak <= 0.086 rad/s
-    "rosette_scan": {
-        "s1_w1": ("float", 0.1,  8.6),
-        "s1_w2": ("float", 0.1,  8.6),
-        "s2_w1": ("float", 0.1,  8.6),
-        "s2_w2": ("float", 0.1,  8.6),
-    },
-    # peak ≈ speed * sqrt(w² + (k*sin(R))²), factor ≈ 0.050 at R=0.005
-    # speed_a * ratio <= 1.74; with ratio <= 1.5, speed_a <= 1.15
-    "dual_spiral": {
-        "speed_a":     ("float", 0.01,  1.15),
-        "speed_ratio": ("float", 1.0,   1.5),
-    },
-    # peak = 2 * R * steps * speed / 10; R=0.005, steps<=100, ratio<=1.5
-    # speed_a * 1.5 * 100 * 2 * 0.005 / 10 <= 0.087 -> speed_a <= 0.57
-    "dual_raster": {
-        "steps_a":     ("int",   5,    100),
-        "steps_b":     ("int",   5,    100),
-        "speed_a":     ("float", 0.01,  0.57),
-        "speed_ratio": ("float", 1.0,   1.5),
-    },
-    # same spiral formula as dual_spiral
-    "concentric_shells": {
-        "spiral_speed_a": ("float", 0.01,  1.15),
-        "speed_ratio":    ("float", 1.0,   1.5),
-    },
-}
+def build_parameter_spaces(sim_cfg, mc_cfg) -> dict:
+    """Derive per-strategy parameter bounds from the loaded simulation config.
+
+    Upper bounds on speed-related parameters are set to 95% of the hardware
+    max_beam_speed so the optimizer always has room to find valid candidates.
+    All other (non-speed) parameters use generous fixed ranges.
+    """
+    R = sim_cfg.simulation.max_search_radius   # rad
+    v_max = sim_cfg.satellite.max_beam_speed   # rad/s
+    v_hi = v_max * 0.95                        # leave 5% headroom
+
+    # --- random_curve / center_rebias ---
+    # peak = velocity_a * velocity_ratio  (velocity_a already in rad/s)
+    # With ratio_max = 3.0: velocity_a_max = v_hi / 3.0
+    ratio_rc_max = 3.0
+    vel_a_max = max(1e-4, v_hi / ratio_rc_max)
+
+    # --- lissajous ---
+    # peak ≈ A * sqrt(wx² + wy²),  A = R / sqrt(2)
+    # worst case both axes equal: peak = A * wx * sqrt(2) => wx_max = v_hi / A
+    A_lis = R / math.sqrt(2.0)
+    wx_max = max(0.2, v_hi / max(A_lis, 1e-9))
+
+    # --- rosette ---
+    # peak ≈ A * (w1 + w2),  A = R
+    # equal split: w_max = v_hi / (2 * R)
+    w_ros_max = max(0.2, v_hi / max(2.0 * R, 1e-9))
+
+    # --- dual_spiral / concentric_shells ---
+    # peak ≈ speed * sqrt(w² + (k*sin(R))²)
+    # Use the strategy's spiral_w and k from mc_cfg
+    strat = mc_cfg.strategy
+    spiral_w = strat.spiral_w(sim_cfg.satellite)
+    k = strat.k
+    spiral_factor = math.sqrt(spiral_w ** 2 + (k * math.sin(R)) ** 2)
+    ratio_sp_max = 1.5
+    speed_sp_max = max(0.01, v_hi / max(spiral_factor * ratio_sp_max, 1e-9))
+
+    # --- dual_raster ---
+    # peak = 2 * R * steps * speed / 10
+    # With steps_max=100, ratio_max=1.5: speed_max = v_hi * 10 / (2*R*100*1.5)
+    steps_max = 100
+    ratio_raster_max = 1.5
+    speed_raster_max = max(0.01, v_hi * 10.0 / max(2.0 * R * steps_max * ratio_raster_max, 1e-9))
+
+    return {
+        "random_curve": {
+            "velocity_a":     ("float", 1e-4,       vel_a_max),
+            "velocity_ratio": ("float", 1.0,        ratio_rc_max),
+            "drift_sigma":    ("float", 0.001,      0.5),
+            "max_turn_radius":("float", 0.1,        2.0),
+        },
+        "center_rebias": {
+            "velocity_a":     ("float", 1e-4,       vel_a_max),
+            "velocity_ratio": ("float", 1.0,        ratio_rc_max),
+            "drift_sigma":    ("float", 0.001,      0.5),
+            "max_turn_radius":("float", 0.1,        2.0),
+            "bias_strength":  ("float", 0.0,        1.0),
+        },
+        "lissajous_scan": {
+            "s1_wx": ("float", 0.1, wx_max),
+            "s1_wy": ("float", 0.1, wx_max),
+            "s2_wx": ("float", 0.1, wx_max),
+            "s2_wy": ("float", 0.1, wx_max),
+        },
+        "rosette_scan": {
+            "s1_w1": ("float", 0.1, w_ros_max),
+            "s1_w2": ("float", 0.1, w_ros_max),
+            "s2_w1": ("float", 0.1, w_ros_max),
+            "s2_w2": ("float", 0.1, w_ros_max),
+        },
+        "dual_spiral": {
+            "speed_a":     ("float", 0.001, speed_sp_max),
+            "speed_ratio": ("float", 1.0,   ratio_sp_max),
+        },
+        "dual_raster": {
+            "steps_a":     ("int",   5,     steps_max),
+            "steps_b":     ("int",   5,     steps_max),
+            "speed_a":     ("float", 0.001, speed_raster_max),
+            "speed_ratio": ("float", 1.0,   ratio_raster_max),
+        },
+        "concentric_shells": {
+            "spiral_speed_a": ("float", 0.001, speed_sp_max),
+            "speed_ratio":    ("float", 1.0,   ratio_sp_max),
+        },
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -534,12 +565,22 @@ def run_optuna_search(
 
     if use_gpu_batch:
         BATCH_SIZE = max_workers if max_workers > 1 else 8
+        MAX_PRUNE_ATTEMPTS = BATCH_SIZE * 200  # give up filling a batch after this many consecutive pruned candidates
         print(f"Using GPU batch execution (batch size {BATCH_SIZE})...")
         while completed_trials < trials:
             batch_trials = []
             batch_configs = []
-            
+            consecutive_prunes = 0
+
             while len(batch_trials) < BATCH_SIZE and completed_trials + len(batch_trials) < trials:
+                if consecutive_prunes >= MAX_PRUNE_ATTEMPTS:
+                    print(
+                        f"ERROR: {MAX_PRUNE_ATTEMPTS} consecutive candidates rejected by speed check. "
+                        "The entire search space may exceed max_beam_speed. Aborting."
+                    )
+                    batch_trials = []  # trigger the break below
+                    break
+
                 trial = study.ask()
                 candidate = {}
                 for param, spec in space.items():
@@ -548,25 +589,27 @@ def run_optuna_search(
                         candidate[param] = trial.suggest_float(param, start, end)
                     elif ptype == "int":
                         candidate[param] = trial.suggest_int(param, start, end)
-                
+
                 cand_eval = dict(candidate)
                 if strategy_name == "lissajous_scan":
                     cand_eval["s1_delta"] = 1.570796
                     cand_eval["s2_delta"] = 1.570796
-                    
+
                 peak = peak_speed_for_strategy(strategy_name, cand_eval, sim_cfg, mc_cfg)
                 if peak > max_speed:
                     study.tell(trial, state=optuna.trial.TrialState.PRUNED)
                     resampled += 1
+                    consecutive_prunes += 1
                     continue
-                    
+
+                consecutive_prunes = 0
                 batch_trials.append(trial)
-                
+
                 from satellite.strategy.base import CONFIG_PARSERS
                 parsed_params = cand_eval
                 if strategy_name in CONFIG_PARSERS:
                     parsed_params = CONFIG_PARSERS[strategy_name](cand_eval)
-                    
+
                 run_strat = StrategyConfig(
                     k=mc_cfg.strategy.k,
                     chain=(strategy_name,),
@@ -581,7 +624,7 @@ def run_optuna_search(
                     strategy=run_strat,
                 )
                 batch_configs.append(mc)
-                
+
             if not batch_trials:
                 break
                 
@@ -676,7 +719,8 @@ def main():
         "--strategy",
         type=str,
         required=True,
-        choices=list(PARAMETER_SPACES.keys()),
+        choices=["random_curve", "center_rebias", "lissajous_scan", "rosette_scan",
+                 "dual_spiral", "dual_raster", "concentric_shells"],
         help="Strategy name to optimize.",
     )
     parser.add_argument(
@@ -752,7 +796,7 @@ def main():
         max_workers = max(1, multiprocessing.cpu_count() - 1)
     print(f"Using up to {max_workers} processes in parallel.")
 
-    space = PARAMETER_SPACES[args.strategy]
+    space = build_parameter_spaces(sim_cfg, mc_cfg)[args.strategy]
     print(f"\nOptimizing strategy: '{args.strategy}' with search space:")
     for param, spec in space.items():
         print(f"  {param}: {spec[0]} in [{spec[1]}, {spec[2]}]")
@@ -770,7 +814,7 @@ def main():
     if lo_peak > max_speed:
         print(
             "ERROR: Even the minimum-speed parameters exceed the hardware speed limit.\n"
-            "Adjust the PARAMETER_SPACES bounds in __main__.py before proceeding."
+            "Adjust the bounds in build_parameter_spaces() in __main__.py before proceeding."
         )
         sys.exit(1)
 
