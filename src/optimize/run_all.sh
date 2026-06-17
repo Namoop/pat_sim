@@ -29,7 +29,7 @@ EVAL_RUNS="${3:-30}"
 
 OPTIMIZER="src/optimize/__main__.py"
 ENV_CONFIG="config/Environment.toml"
-MC_CONFIG="config/MonteCarlo.toml"
+CONFIG_FILE="config/Optimize.toml"
 LOG_DIR="src/optimize/logs"
 
 STRATEGIES=(
@@ -56,8 +56,8 @@ if [[ ! -f "$ENV_CONFIG" ]]; then
     exit 1
 fi
 
-if [[ ! -f "$MC_CONFIG" ]]; then
-    echo "ERROR: $MC_CONFIG not found. Run this script from the repository root." >&2
+if [[ ! -f "$CONFIG_FILE" ]]; then
+    echo "ERROR: $CONFIG_FILE not found. Run this script from the repository root." >&2
     exit 1
 fi
 
@@ -86,7 +86,7 @@ echo " Method     : ${METHOD}"
 echo " Trials     : ${TRIALS}"
 echo " Eval runs  : ${EVAL_RUNS}"
 echo " Env config : ${ENV_CONFIG}"
-echo " MC config  : ${MC_CONFIG}"
+echo " Config file: ${CONFIG_FILE}"
 echo " Log dir    : ${LOG_DIR}"
 echo " Started    : $(date '+%Y-%m-%d %H:%M:%S')"
 echo "========================================================"
@@ -111,12 +111,12 @@ for i in "${!STRATEGIES[@]}"; do
     STRATEGY_START=$(date +%s)
 
     if PYTHONPATH=src python -m optimize \
+            --config     "$CONFIG_FILE" \
             --strategy   "$STRATEGY" \
             --method     "$METHOD" \
             --trials     "$TRIALS" \
             --eval-runs  "$EVAL_RUNS" \
             --env-config "$ENV_CONFIG" \
-            --mc-config  "$MC_CONFIG" \
         2>&1 | tee "$LOG_FILE"; then
 
         STRATEGY_END=$(date +%s)

@@ -82,15 +82,6 @@ def build_parameter_spaces(sim_cfg, mc_cfg) -> dict:
     # equal split: w_max = v_hi / (2 * R)
     w_ros_max = max(0.2, v_hi / max(2.0 * R, 1e-9))
 
-    # --- dual_spiral / concentric_shells ---
-    # peak ≈ speed * sqrt(w² + (k*sin(R))²)
-    # Use the strategy's spiral_w and k from mc_cfg
-    strat = mc_cfg.strategy
-    spiral_w = strat.spiral_w(sim_cfg.satellite)
-    k = strat.k
-    spiral_factor = math.sqrt(spiral_w ** 2 + (k * math.sin(R)) ** 2)
-    ratio_sp_max = 1.5
-    speed_sp_max = max(0.01, v_hi / max(spiral_factor * ratio_sp_max, 1e-9))
 
     # --- dual_raster ---
     # peak = 2 * R * steps * speed / 10
@@ -125,20 +116,14 @@ def build_parameter_spaces(sim_cfg, mc_cfg) -> dict:
             "s2_w1": ("float", 0.1, w_ros_max),
             "s2_w2": ("float", 0.1, w_ros_max),
         },
-        "dual_spiral": {
-            "speed_a":     ("float", 0.001, speed_sp_max),
-            "speed_ratio": ("float", 1.0,   ratio_sp_max),
-        },
+        "dual_spiral": {},
         "dual_raster": {
             "steps_a":     ("int",   5,     steps_max),
             "steps_b":     ("int",   5,     steps_max),
             "speed_a":     ("float", 0.001, speed_raster_max),
             "speed_ratio": ("float", 1.0,   ratio_raster_max),
         },
-        "concentric_shells": {
-            "spiral_speed_a": ("float", 0.001, speed_sp_max),
-            "speed_ratio":    ("float", 1.0,   ratio_sp_max),
-        },
+        "concentric_shells": {},
     }
 
 
@@ -147,15 +132,18 @@ def build_parameter_spaces(sim_cfg, mc_cfg) -> dict:
 # ---------------------------------------------------------------------------
 
 def _spiral_peak_speed(speed: float, w: float, k: float, max_radius: float) -> float:
-    """Archimedean spiral: worst-case angular speed at the outermost point.
-
-    The velocity vector has:
-      radial component  = w·speed  (rad/s)
-      azimuthal component = k·speed·sin(θ)  (rad/s)  at θ = max_radius
-
-    Returns the Euclidean magnitude.
+    """Archimedean spiral: worst-case angular speed.
+    
+    Since the spiral is parameterized to move at a constant linear speed, the peak
+    angular speed is exactly equal to the constant physical speed: speed * c.
     """
-    return speed * math.sqrt(w ** 2 + (k * math.sin(max_radius)) ** 2)
+    if w <= 0.0 or k <= 0.0 or max_radius <= 0.0:
+        return speed
+    x = (k * max_radius) / w
+    sqrt_term = math.sqrt(1.0 + x * x)
+    h_x = 0.5 * (x * sqrt_term + math.log(x + sqrt_term))
+    c = h_x / x
+    return speed * c
 
 
 def peak_speed_for_strategy(
@@ -177,13 +165,8 @@ def peak_speed_for_strategy(
     w = strat.spiral_w(sat)
 
     if strategy_name in ("dual_spiral", "concentric_shells"):
-        # Both satellites spiral; check the faster one (speed_b = speed_a * ratio)
-        speed_a = params.get("speed_a", params.get("spiral_speed_a", 1.0))
-        ratio = params.get("speed_ratio", 1.41421356)
-        speed_b = speed_a * ratio
-        peak_a = _spiral_peak_speed(speed_a, w, k, max_radius)
-        peak_b = _spiral_peak_speed(speed_b, w, k, max_radius)
-        return max(peak_a, peak_b)
+        # Both satellites spiral at max_beam_speed
+        return sat.max_beam_speed
 
     if strategy_name == "dual_raster":
         # SerpentineRaster: max scan speed at the widest chord (centre row)
@@ -371,6 +354,7 @@ def run_random_search(
     fixed_offsets: list,
     trials: int,
     max_workers: int,
+    seed: int | None = None,
 ) -> tuple[dict, float]:
     """Basic Random Search optimization.
 
@@ -379,7 +363,7 @@ def run_random_search(
     """
     best_params: dict = {}
     best_cost = float("inf")
-    rng = np.random.default_rng()
+    rng = np.random.default_rng(seed)
 
     max_speed = sim_cfg.satellite.max_beam_speed
     print(f"Starting Random Search ({trials} trials, max_beam_speed={max_speed:.4f} rad/s)...")
@@ -510,7 +494,7 @@ def run_optuna_search(
             "Falling back to Random Search instead..."
         )
         return run_random_search(
-            strategy_name, space, sim_cfg, mc_cfg, fixed_offsets, trials, max_workers
+            strategy_name, space, sim_cfg, mc_cfg, fixed_offsets, trials, max_workers, seed=seed
         )
 
     max_speed = sim_cfg.satellite.max_beam_speed
@@ -558,7 +542,7 @@ def run_optuna_search(
     resampled = 0
 
     if seed is not None:
-        sampler = optuna.samplers.CmaEsSampler(seed=seed)
+        sampler = optuna.samplers.TPESampler(seed=seed)
         study = optuna.create_study(direction="minimize", sampler=sampler)
     else:
         study = optuna.create_study(direction="minimize")
@@ -712,29 +696,36 @@ def run_optuna_search(
 # ---------------------------------------------------------------------------
 
 def main():
+    import tomllib
+    from dataclasses import replace
+    from pathlib import Path
+
     parser = argparse.ArgumentParser(
         description="Optimize parameters for pointing acquisition strategies."
     )
     parser.add_argument(
+        "--config",
+        type=str,
+        default="config/Optimize.toml",
+        help="Path to the TOML configuration file.",
+    )
+    parser.add_argument(
         "--strategy",
         type=str,
-        required=True,
         choices=["random_curve", "center_rebias", "lissajous_scan", "rosette_scan",
                  "dual_spiral", "dual_raster", "concentric_shells"],
-        help="Strategy name to optimize.",
+        help="Strategy name to optimize. Overrides config value.",
     )
     parser.add_argument(
         "--method",
         type=str,
         choices=["grid", "random", "optuna"],
-        default="random",
-        help="Optimization method to employ.",
+        help="Optimization method to employ. Overrides config value.",
     )
     parser.add_argument(
         "--trials",
         type=int,
-        default=20,
-        help="Number of trials for random/optuna search.",
+        help="Number of trials for random/optuna search. Overrides config value.",
     )
     parser.add_argument(
         "--grid-points",
@@ -745,32 +736,22 @@ def main():
     parser.add_argument(
         "--eval-runs",
         type=int,
-        default=30,
-        help="Number of pre-sampled initial offset scenarios for evaluation.",
+        help="Number of pre-sampled initial offset scenarios for evaluation. Overrides config value.",
     )
     parser.add_argument(
         "--env-config",
         type=str,
-        default="config/Environment.toml",
-        help="Path to Environment.toml config.",
-    )
-    parser.add_argument(
-        "--mc-config",
-        type=str,
-        default="config/MonteCarlo.toml",
-        help="Path to MonteCarlo.toml config.",
+        help="Path to Environment.toml config. Overrides config value.",
     )
     parser.add_argument(
         "--seed",
         type=int,
-        default=42,
-        help="Random seed for pre-sampling pointing offsets.",
+        help="Random seed for pre-sampling pointing offsets. Overrides config value.",
     )
     parser.add_argument(
-        "--optuna-seed",
+        "--trial-seed",
         type=int,
-        default=None,
-        help="Random seed for Optuna search sampler (defaults to None / unseeded).",
+        help="Random seed for random/optuna search. Overrides config value.",
     )
     parser.add_argument(
         "--workers",
@@ -781,32 +762,129 @@ def main():
 
     args = parser.parse_args()
 
-    sim_cfg = load_simulation_config(args.env_config)
-    mc_cfg = load_monte_carlo_config(args.mc_config)
+    # Locate and resolve the config file path
+    config_path = Path(args.config)
+    if not config_path.exists():
+        # Fallback to look in config folder or current folder
+        for candidate in [Path("config") / config_path.name, Path(config_path.name)]:
+            if candidate.exists():
+                config_path = candidate
+                break
+
+    toml_data = {}
+    if config_path.exists():
+        print(f"Loading configuration from {config_path}")
+        with config_path.open("rb") as f:
+            toml_data = tomllib.load(f)
+    else:
+        # If user explicitly passed a custom config that doesn't exist, raise error
+        if args.config != "config/Optimize.toml":
+            print(f"ERROR: Configuration file not found at {args.config}", file=sys.stderr)
+            sys.exit(1)
+        else:
+            print(f"Warning: Default configuration file '{args.config}' not found. Using defaults.")
+
+    opt_sec = toml_data.get("optimize", {})
+    mc_sec = toml_data.get("monte_carlo", {})
+
+    # Resolve strategy
+    strategy = args.strategy or opt_sec.get("strategy")
+    if not strategy:
+        print("ERROR: Strategy must be specified either in the config file or via --strategy", file=sys.stderr)
+        sys.exit(1)
+
+    # Resolve optimization parameters
+    method = args.method or opt_sec.get("method") or "random"
+    trials = args.trials if args.trials is not None else opt_sec.get("trials", 20)
+    grid_points = args.grid_points
+    trial_seed = args.trial_seed if args.trial_seed is not None else opt_sec.get("trial_seed")
+
+    # Load / resolve Monte Carlo configuration
+    if config_path.exists() and "monte_carlo" in toml_data:
+        mc_cfg = load_monte_carlo_config(config_path)
+    else:
+        # Construct a default MonteCarloConfig
+        from satellite.config import StrategyConfig, GaussianErrorConfig, MonteCarloConfig
+        
+        env_path = args.env_config or mc_sec.get("environment") or "config/Environment.toml"
+        env_path_obj = Path(env_path)
+        if not env_path_obj.exists():
+            for candidate in [Path("config") / env_path_obj.name, Path(env_path_obj.name)]:
+                if candidate.exists():
+                    env_path_obj = candidate
+                    break
+                    
+        sim_bundle = load_simulation_config(env_path_obj)
+        error_dist = GaussianErrorConfig(distribution="gaussian", mean=0.0, std=2.0 * 1e-3)
+        
+        mc_cfg = MonteCarloConfig(
+            simulation_path=env_path_obj.resolve(),
+            seed=42,
+            error=error_dist,
+            strategy=StrategyConfig(k=sim_bundle.satellite.k, chain=(strategy,), params={}),
+            runs=30,
+            chain=(strategy,),
+        )
+
+    # Apply command-line and config-level overrides to mc_cfg
+    if args.env_config is not None:
+        env_path = Path(args.env_config)
+        if not env_path.exists():
+            for candidate in [Path("config") / env_path.name, Path(env_path.name)]:
+                if candidate.exists():
+                    env_path = candidate
+                    break
+        mc_cfg = replace(mc_cfg, simulation_path=env_path.resolve())
+
+    if args.seed is not None:
+        mc_cfg = replace(mc_cfg, seed=args.seed)
+    elif mc_cfg.seed == 0 and not ("seed" in mc_sec):
+        mc_cfg = replace(mc_cfg, seed=42)
+
+    if args.eval_runs is not None:
+        mc_cfg = replace(mc_cfg, runs=args.eval_runs)
+    elif mc_cfg.runs == 1 and not ("runs" in mc_sec):
+        # load_monte_carlo_config sets runs=1 as default if not in TOML.
+        # If it wasn't in TOML and not in CLI, set it to the default of 30.
+        mc_cfg = replace(mc_cfg, runs=30)
+
+    sim_cfg = load_simulation_config(mc_cfg.simulation_path)
+
+    # Update mc_cfg's strategy to match the resolved strategy
+    from satellite.config import StrategyConfig
+    mc_cfg = replace(
+        mc_cfg,
+        chain=(strategy,),
+        strategy=StrategyConfig(
+            k=mc_cfg.strategy.k if (hasattr(mc_cfg, "strategy") and mc_cfg.strategy) else sim_cfg.satellite.k,
+            chain=(strategy,),
+            params={strategy: {}},
+        ),
+    )
 
     print(
-        f"Pre-sampling {args.eval_runs} pointing offsets "
+        f"Pre-sampling {mc_cfg.runs} pointing offsets "
         f"from the configuration error distribution..."
     )
-    rng = np.random.default_rng(args.seed)
-    fixed_offsets = [sample_offsets(mc_cfg.error, rng) for _ in range(args.eval_runs)]
+    rng = np.random.default_rng(mc_cfg.seed)
+    fixed_offsets = [sample_offsets(mc_cfg.error, rng) for _ in range(mc_cfg.runs)]
 
     max_workers = args.workers
     if max_workers is None:
         max_workers = max(1, multiprocessing.cpu_count() - 1)
     print(f"Using up to {max_workers} processes in parallel.")
 
-    space = build_parameter_spaces(sim_cfg, mc_cfg)[args.strategy]
-    print(f"\nOptimizing strategy: '{args.strategy}' with search space:")
+    space = build_parameter_spaces(sim_cfg, mc_cfg)[strategy]
+    print(f"\nOptimizing strategy: '{strategy}' with search space:")
     for param, spec in space.items():
         print(f"  {param}: {spec[0]} in [{spec[1]}, {spec[2]}]")
 
     # Warn early if the entire search space is physically infeasible
     max_speed = sim_cfg.satellite.max_beam_speed
     hi_params = {p: spec[2] for p, spec in space.items()}  # all parameters at upper bound
-    hi_peak = peak_speed_for_strategy(args.strategy, hi_params, sim_cfg, mc_cfg)
+    hi_peak = peak_speed_for_strategy(strategy, hi_params, sim_cfg, mc_cfg)
     lo_params = {p: spec[1] for p, spec in space.items()}  # all parameters at lower bound
-    lo_peak = peak_speed_for_strategy(args.strategy, lo_params, sim_cfg, mc_cfg)
+    lo_peak = peak_speed_for_strategy(strategy, lo_params, sim_cfg, mc_cfg)
     print(
         f"\nSpeed range across search space: {lo_peak:.4f} – {hi_peak:.4f} rad/s "
         f"(limit: {max_speed:.4f} rad/s)"
@@ -820,24 +898,24 @@ def main():
 
     start_time = time.time()
 
-    if args.method == "grid":
+    if method == "grid":
         best_params, best_cost = run_grid_search(
-            args.strategy, space, sim_cfg, mc_cfg, fixed_offsets, args.grid_points, max_workers
+            strategy, space, sim_cfg, mc_cfg, fixed_offsets, grid_points, max_workers
         )
-    elif args.method == "optuna":
+    elif method == "optuna":
         best_params, best_cost = run_optuna_search(
-            args.strategy, space, sim_cfg, mc_cfg, fixed_offsets, args.trials, max_workers, seed=args.optuna_seed
+            strategy, space, sim_cfg, mc_cfg, fixed_offsets, trials, max_workers, seed=trial_seed
         )
     else:
         best_params, best_cost = run_random_search(
-            args.strategy, space, sim_cfg, mc_cfg, fixed_offsets, args.trials, max_workers
+            strategy, space, sim_cfg, mc_cfg, fixed_offsets, trials, max_workers, seed=trial_seed
         )
 
     elapsed = time.time() - start_time
     print(f"\n--- Optimization completed in {elapsed:.1f}s ---")
     print(f"Best objective cost score: {best_cost:.4f}")
 
-    if args.strategy == "lissajous_scan":
+    if strategy == "lissajous_scan":
         best_params["s1_delta"] = 1.570796
         best_params["s2_delta"] = 1.570796
 

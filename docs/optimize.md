@@ -94,17 +94,18 @@ python -m optimize --strategy random_walk --method grid --grid-points 10
 ### Command-Line Options
 
 
-| Flag            | Type  | Default            | Description                                                                                                                                                                   |
-| --------------- | ----- | ------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `--strategy`    | `str` | *Required*         | Name of the strategy to optimize (e.g., `random_curve`, `lissajous_scan`, `rosette_scan`, `center_rebias`, `random_walk`, `dual_spiral`, `dual_raster`, `concentric_shells`). |
-| `--method`      | `str` | `random`           | Optimization algorithm: `random`, `grid`, or `optuna`.                                                                                                                        |
-| `--trials`      | `int` | `20`               | Number of iterations for `random` or `optuna` search.                                                                                                                         |
-| `--grid-points` | `int` | `5`                | Points per parameter axis for `grid` search.                                                                                                                                  |
-| `--eval-runs`   | `int` | `30`               | Number of pre-sampled scenarios used to evaluate each candidate configuration. Higher is more accurate but slower.                                                            |
-| `--env-config`  | `str` | `Environment.toml` | Path to the environment configuration file.                                                                                                                                   |
-| `--mc-config`   | `str` | `MonteCarlo.toml`  | Path to the Monte Carlo configuration file.                                                                                                                                   |
-| `--workers`     | `int` | `CPU-1`            | Maximum parallel worker processes to use.                                                                                                                                     |
-| `--seed`        | `int` | `42`               | Random seed used to pre-sample pointing offsets.                                                                                                                              |
+| Flag            | Type  | Default                | Description                                                                                                                                                                   |
+| --------------- | ----- | ---------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `--config`      | `str` | `config/Optimize.toml` | Path to the TOML configuration file.                                                                                                                                          |
+| `--strategy`    | `str` | Loaded from config     | Name of the strategy to optimize (e.g., `random_curve`, `lissajous_scan`, `rosette_scan`, `center_rebias`, `random_walk`, `dual_spiral`, `dual_raster`, `concentric_shells`). |
+| `--method`      | `str` | Loaded from config     | Optimization algorithm: `random`, `grid`, or `optuna`.                                                                                                                        |
+| `--trials`      | `int` | Loaded from config     | Number of iterations for `random` or `optuna` search.                                                                                                                         |
+| `--grid-points` | `int` | `5`                    | Points per parameter axis for `grid` search.                                                                                                                                  |
+| `--eval-runs`   | `int` | Loaded from config     | Number of pre-sampled scenarios used to evaluate each candidate configuration. Higher is more accurate but slower.                                                            |
+| `--env-config`  | `str` | Loaded from config     | Path to the environment configuration file.                                                                                                                                   |
+| `--workers`     | `int` | `CPU-1`                | Maximum parallel worker processes to use.                                                                                                                                     |
+| `--seed`        | `int` | Loaded from config     | Random seed used to pre-sample pointing offsets.                                                                                                                              |
+| `--trial-seed`  | `int` | Loaded from config     | Random seed for random/optuna search.                                                                                                                                         |
 
 
 ---
