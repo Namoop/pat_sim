@@ -7,8 +7,9 @@ from typing import Literal
 import numpy as np
 
 from satellite.scenario import format_summary
+from satellite.visualize.panels.mag_panel import MagPanel
 from satellite.visualize.panels.event_log_panel import EventLogPanel
-from satellite.visualize.panels.map_tab import MapTabPanel
+from satellite.visualize.panels.eye_panel import EyePanel
 from satellite.visualize.panels.view3d import View3DPanel
 from satellite.visualize.qt_util import configure_qt_platform, install_sigint_handler
 from satellite.visualize.session import MonteCarloVizSession, SingleResultSession, VizSession
@@ -39,11 +40,11 @@ def play_reaches_end(next_t: float, playable_end: float) -> bool:
 def run_visualizer(
     session: VizSession,
     *,
-    default_tab: Literal["3d", "map"] = "3d",
+    default_tab: Literal["3d", "eye", "mag"] = "3d",
     start_t: float = 0.0,
     autoplay_speed: float | None = None,
 ) -> int:
-    """Open unified 3D + map visualizer. Returns process exit code."""
+    """Open unified 3D + eye + mag visualizer. Returns process exit code."""
     configure_qt_platform()
 
     from PyQt6.QtCore import Qt, QTimer
@@ -67,7 +68,7 @@ def run_visualizer(
     config = result.config
     playable_t = result.playable_t_end
     t_step = config.simulation.t_step
-    map_debounce_ms = config.map_viz.slider_debounce_ms
+    eye_debounce_ms = config.eye_viz.slider_debounce_ms
 
     app = QApplication.instance() or QApplication([])
 
@@ -78,9 +79,10 @@ def run_visualizer(
             self._result = result
             self._start_t = float(start_t)
             self.current_t = clamp_playable_t(start_t, playable_t)
-            self._active_tab: Literal["3d", "map"] = default_tab
+            self._active_tab: Literal["3d", "eye", "mag"] = default_tab
             self._3d_dirty = True
-            self._map_dirty = True
+            self._eye_dirty = True
+            self._mag_dirty = True
             self._playing = False
             self._autoplay_speed = autoplay_speed
             self._autoplay_active = False
@@ -111,14 +113,19 @@ def run_visualizer(
             self._tab_group = QButtonGroup(self)
             self._tab_3d_btn = QPushButton("3D")
             self._tab_3d_btn.setCheckable(True)
-            self._tab_map_btn = QPushButton("Map")
-            self._tab_map_btn.setCheckable(True)
+            self._tab_eye_btn = QPushButton("Eye")
+            self._tab_eye_btn.setCheckable(True)
+            self._tab_mag_btn = QPushButton("Mag")
+            self._tab_mag_btn.setCheckable(True)
             self._tab_group.addButton(self._tab_3d_btn, 0)
-            self._tab_group.addButton(self._tab_map_btn, 1)
+            self._tab_group.addButton(self._tab_eye_btn, 1)
+            self._tab_group.addButton(self._tab_mag_btn, 2)
             self._tab_3d_btn.clicked.connect(lambda: self._switch_tab("3d"))
-            self._tab_map_btn.clicked.connect(lambda: self._switch_tab("map"))
+            self._tab_eye_btn.clicked.connect(lambda: self._switch_tab("eye"))
+            self._tab_mag_btn.clicked.connect(lambda: self._switch_tab("mag"))
             controls.addWidget(self._tab_3d_btn)
-            controls.addWidget(self._tab_map_btn)
+            controls.addWidget(self._tab_eye_btn)
+            controls.addWidget(self._tab_mag_btn)
 
             self.slider = QSlider(Qt.Orientation.Horizontal)
             self.slider.setMinimum(0)
@@ -145,9 +152,11 @@ def run_visualizer(
 
             self._stack = QStackedWidget()
             self._panel_3d = View3DPanel(self._stack)
-            self._panel_map = MapTabPanel(self._stack)
+            self._panel_eye = EyePanel(self._stack)
+            self._panel_mag = MagPanel(self._stack)
             self._stack.addWidget(self._panel_3d.widget)
-            self._stack.addWidget(self._panel_map.widget)
+            self._stack.addWidget(self._panel_eye.widget)
+            self._stack.addWidget(self._panel_mag.widget)
             root_layout.addWidget(self._stack, stretch=1)
 
             self._profile_label = QLabel()
@@ -161,18 +170,25 @@ def run_visualizer(
             root_layout.addWidget(self._event_log.widget)
 
             self._panel_3d.set_profile_callback(self._set_profile_text)
-            self._panel_map.set_profile_callback(self._set_profile_text)
+            self._panel_eye.set_profile_callback(self._set_profile_text)
+            self._panel_mag.set_profile_callback(self._set_profile_text)
 
             self._load_result(result)
             self._set_tab_ui(default_tab)
 
-        def _set_tab_ui(self, tab: Literal["3d", "map"]) -> None:
+        def _set_tab_ui(self, tab: Literal["3d", "eye", "mag"]) -> None:
             self._active_tab = tab
             self._tab_3d_btn.setChecked(tab == "3d")
-            self._tab_map_btn.setChecked(tab == "map")
-            self._stack.setCurrentIndex(0 if tab == "3d" else 1)
+            self._tab_eye_btn.setChecked(tab == "eye")
+            self._tab_mag_btn.setChecked(tab == "mag")
+            if tab == "3d":
+                self._stack.setCurrentIndex(0)
+            elif tab == "eye":
+                self._stack.setCurrentIndex(1)
+            else:
+                self._stack.setCurrentIndex(2)
 
-        def _switch_tab(self, tab: Literal["3d", "map"]) -> None:
+        def _switch_tab(self, tab: Literal["3d", "eye", "mag"]) -> None:
             if tab == self._active_tab:
                 return
             self._set_tab_ui(tab)
@@ -181,9 +197,13 @@ def run_visualizer(
                 info = self._panel_3d.apply_t(self.current_t)
                 self._3d_dirty = False
                 self._update_frame(info)
-            elif tab == "map" and self._map_dirty:
-                info = self._panel_map.apply_t(self.current_t)
-                self._map_dirty = False
+            elif tab == "eye" and self._eye_dirty:
+                info = self._panel_eye.apply_t(self.current_t)
+                self._eye_dirty = False
+                self._update_frame(info)
+            elif tab == "mag" and self._mag_dirty:
+                info = self._panel_mag.apply_t(self.current_t)
+                self._mag_dirty = False
                 self._update_frame(info)
             elif tab == "3d":
                 self._panel_3d.on_tab_shown()
@@ -193,7 +213,12 @@ def run_visualizer(
             self._profile_label.setText(text)
 
         def _sync_profile_label_visibility(self) -> None:
-            panel = self._panel_3d if self._active_tab == "3d" else self._panel_map
+            if self._active_tab == "3d":
+                panel = self._panel_3d
+            elif self._active_tab == "eye":
+                panel = self._panel_eye
+            else:
+                panel = self._panel_mag
             active = panel.profiling_active
             self._profile_label.setVisible(active)
             if not active:
@@ -202,9 +227,11 @@ def run_visualizer(
         def _load_result(self, new_result) -> None:
             self._result = new_result
             self._panel_3d.set_result(new_result)
-            self._panel_map.set_result(new_result)
+            self._panel_eye.set_result(new_result)
+            self._panel_mag.set_result(new_result)
             self._3d_dirty = True
-            self._map_dirty = True
+            self._eye_dirty = True
+            self._mag_dirty = True
             playable = new_result.playable_t_end
             self.current_t = clamp_playable_t(self._start_t, playable)
             self.slider.setMaximum(max(0, int(playable / t_step)))
@@ -226,23 +253,31 @@ def run_visualizer(
                 self._panel_3d.ensure_initialized()
                 info = self._panel_3d.apply_t(self.current_t)
                 self._3d_dirty = False
-                self._map_dirty = True
+                self._eye_dirty = True
+                self._mag_dirty = True
+                self._update_frame(info)
+            elif self._active_tab == "eye":
+                info = self._panel_eye.apply_t(self.current_t)
+                self._eye_dirty = False
+                self._3d_dirty = True
+                self._mag_dirty = True
                 self._update_frame(info)
             else:
-                info = self._panel_map.apply_t(self.current_t)
-                self._map_dirty = False
+                info = self._panel_mag.apply_t(self.current_t)
+                self._mag_dirty = False
                 self._3d_dirty = True
+                self._eye_dirty = True
                 self._update_frame(info)
 
         def _on_slider_changed(self, value: int) -> None:
             self._pause()
             t = value * t_step
             if (
-                self._active_tab == "map"
-                and map_debounce_ms > 0
+                self._active_tab == "eye"
+                and eye_debounce_ms > 0
             ):
                 self._pending_t = t
-                self._debounce_timer.start(map_debounce_ms)
+                self._debounce_timer.start(eye_debounce_ms)
             else:
                 self._apply_t_active(t)
 
@@ -299,7 +334,8 @@ def run_visualizer(
             self.play_btn.setEnabled(enabled)
             self.next_btn.setEnabled(enabled)
             self._tab_3d_btn.setEnabled(enabled)
-            self._tab_map_btn.setEnabled(enabled)
+            self._tab_eye_btn.setEnabled(enabled)
+            self._tab_mag_btn.setEnabled(enabled)
 
         def _advance_to_next(self, *, autoplay_resume: bool = False) -> None:
             self._play_timer.stop()
@@ -330,7 +366,8 @@ def run_visualizer(
         def closeEvent(self, event) -> None:  # noqa: N802
             self._play_timer.stop()
             self._panel_3d.close_panel()
-            self._panel_map.close_panel()
+            self._panel_eye.close_panel()
+            self._panel_mag.close_panel()
             super().closeEvent(event)
 
         def showEvent(self, event) -> None:  # noqa: N802

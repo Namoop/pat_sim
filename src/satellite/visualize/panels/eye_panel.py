@@ -1,4 +1,4 @@
-"""Angular map view panel (no playback controls)."""
+"""Angular eye view panel (no playback controls)."""
 
 from __future__ import annotations
 
@@ -14,13 +14,13 @@ from satellite.visualize.diagnostics import FrameProfiler
 
 
 @dataclass(frozen=True)
-class MapTabFrameInfo:
+class EyeFrameInfo:
     capture_active: bool
     event_log: tuple[str, ...]
 
 
-class MapTabPanel:
-    """Embedded angular map view; caller owns timeline scrubbing."""
+class EyePanel:
+    """Embedded angular eye view; caller owns timeline scrubbing."""
 
     def __init__(self, parent) -> None:
         from PyQt6.QtWidgets import QHBoxLayout, QVBoxLayout, QWidget
@@ -62,10 +62,10 @@ class MapTabPanel:
 
     def set_result(self, result: ScenarioResult) -> None:
         self._result = result
-        map_cfg = result.config.map_viz
-        self._panel_s1.set_axis_limit(map_cfg.axis_limit)
-        self._panel_s2.set_axis_limit(map_cfg.axis_limit)
-        self._profiler = FrameProfiler.from_env(map_cfg.profile_frames)
+        eye_cfg = result.config.eye_viz
+        self._panel_s1.set_axis_limit(eye_cfg.axis_limit)
+        self._panel_s2.set_axis_limit(eye_cfg.axis_limit)
+        self._profiler = FrameProfiler.from_env(eye_cfg.profile_frames)
         self._sim_profile_enabled = result.config.simulation.profile_replay
         self._profiling_active = (
             self._profiler.enabled or self._sim_profile_enabled
@@ -78,10 +78,10 @@ class MapTabPanel:
         self._initialized = True
         self._result.ensure_replay_timeline()
 
-    def apply_t(self, t: float) -> MapTabFrameInfo:
+    def apply_t(self, t: float) -> EyeFrameInfo:
         result = self._result
         if result is None:
-            raise RuntimeError("MapTabPanel.set_result must be called first")
+            raise RuntimeError("EyePanel.set_result must be called first")
         self.ensure_initialized()
 
         total_t = result.playable_t_end
@@ -114,7 +114,7 @@ class MapTabPanel:
         else:
             self._update_panels(scene)
 
-        return MapTabFrameInfo(
+        return EyeFrameInfo(
             capture_active=scene.capture_active,
             event_log=tuple(event_log),
         )
