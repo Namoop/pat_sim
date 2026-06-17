@@ -23,6 +23,11 @@ spiral_trail_steps = 120
 ribbon_v_steps = 8
 profile_frames = false
 
-[map_viz]
+[eye_viz]
 axis_limit = 10.0
 slider_debounce_ms = 1
+
+[mag_viz]
+visual_limit_deg = 25.0
+fov_cone_length = 0.15
+beam_cone_length = 0.86

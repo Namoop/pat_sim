@@ -46,10 +46,10 @@ def main(argv: list[str] | None = None) -> int:
         "--visualize",
         nargs="?",
         const="3d",
-        choices=("3d", "map"),
+        choices=("3d", "eye", "mag", "map", "dist"),
         default=None,
         help=(
-            "Open unified visualization window; optional 3d or map picks the initial tab. "
+            "Open unified visualization window; optional 3d, eye, or mag picks the initial tab. "
             "Use --visualize or --visualize 3d for the 3D tab first."
         ),
     )
@@ -87,6 +87,10 @@ def main(argv: list[str] | None = None) -> int:
         mc = load_monte_carlo_config(args.monte_carlo)
         sim = load_simulation_config(mc.simulation_path)
         viz_mode = args.visualize
+        if viz_mode == "map":
+            viz_mode = "eye"
+        elif viz_mode == "dist":
+            viz_mode = "mag"
         if args.autoplay is not None and viz_mode is None:
             parser.error(
                 "--autoplay requires visualization (--visualize)"
@@ -132,6 +136,10 @@ def main(argv: list[str] | None = None) -> int:
     viz_mode = args.visualize
     if viz_mode is None:
         viz_mode = config.visualize
+    if viz_mode == "map":
+        viz_mode = "eye"
+    elif viz_mode == "dist":
+        viz_mode = "mag"
 
     if viz_mode is not None:
         from satellite.visualize import run_visualizer

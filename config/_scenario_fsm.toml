@@ -3,7 +3,7 @@ name = "fsm test"
 environment = "Environment.toml"
 simulation.t_step = 0.0001
 chain = ["lissajous_scan"]
-visualize = "map"
+visualize = "eye"
 
 [s1]
 bench_theta_offset = 0.952

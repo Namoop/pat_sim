@@ -65,10 +65,21 @@ class ThreeDVizConfig:
 
 
 @dataclass(frozen=True)
-class MapVizConfig:
+class EyeVizConfig:
     axis_limit: float
     profile_frames: bool
     slider_debounce_ms: int
+
+
+@dataclass(frozen=True)
+class MagVizConfig:
+    visual_limit_deg: float
+    fov_cone_length: float = 1.0
+    beam_cone_length: float = 1.0
+
+
+MapVizConfig = EyeVizConfig
+DistVizConfig = MagVizConfig
 
 
 from typing import Any, Mapping
@@ -121,7 +132,8 @@ class ScenarioConfig:
     satellite: SharedSatelliteConfig
     simulation: SimulationConfig
     three_d_viz: ThreeDVizConfig
-    map_viz: MapVizConfig
+    eye_viz: EyeVizConfig
+    mag_viz: MagVizConfig
     strategy: StrategyConfig
     visualize: str | None = None
 
@@ -131,7 +143,8 @@ class SimulationBundle:
     satellite: SharedSatelliteConfig
     simulation: SimulationConfig
     three_d_viz: ThreeDVizConfig
-    map_viz: MapVizConfig
+    eye_viz: EyeVizConfig
+    mag_viz: MagVizConfig
 
 
 @dataclass(frozen=True)
@@ -217,11 +230,22 @@ def _load_three_d_viz(data: dict) -> ThreeDVizConfig:
     )
 
 
-def _load_map_viz(data: dict) -> MapVizConfig:
-    return MapVizConfig(
+def _load_eye_viz(data: dict) -> EyeVizConfig:
+    return EyeVizConfig(
         axis_limit=float(data.get("axis_limit", 0.1)) * 1e-3,
         profile_frames=bool(data.get("profile_frames", False)),
         slider_debounce_ms=int(data.get("slider_debounce_ms", 16)),
+    )
+
+
+def _load_mag_viz(data: dict) -> MagVizConfig:
+    visual_limit_deg = float(data.get("visual_limit_deg", 25.0))
+    fov_cone_length = float(data.get("fov_cone_length", 1.0))
+    beam_cone_length = float(data.get("beam_cone_length", 1.0))
+    return MagVizConfig(
+        visual_limit_deg=visual_limit_deg,
+        fov_cone_length=fov_cone_length,
+        beam_cone_length=beam_cone_length,
     )
 
 
@@ -288,7 +312,8 @@ def load_simulation_config(path: str | Path) -> SimulationBundle:
         satellite=_load_shared_satellite(data.get("satellite", {})),
         simulation=_load_simulation_section(data.get("simulation", {})),
         three_d_viz=_load_three_d_viz(data.get("3d_viz", {})),
-        map_viz=_load_map_viz(data.get("map_viz", {})),
+        eye_viz=_load_eye_viz(data.get("eye_viz", data.get("map_viz", {}))),
+        mag_viz=_load_mag_viz(data.get("mag_viz", data.get("dist_viz", {}))),
     )
 
 
@@ -319,8 +344,12 @@ def load_scenario_config(path: str | Path) -> ScenarioInstance:
     visualize = scenario.get("visualize")
     if visualize is not None:
         visualize = str(visualize).lower()
-        if visualize not in ("3d", "map"):
-            raise ValueError(f"scenario.visualize must be '3d' or 'map': {path}")
+        if visualize == "map":
+            visualize = "eye"
+        elif visualize == "dist":
+            visualize = "mag"
+        if visualize not in ("3d", "eye", "mag"):
+            raise ValueError(f"scenario.visualize must be '3d', 'eye', or 'mag': {path}")
     
     overrides: dict[str, dict[str, Any]] = {}
     for key, value in scenario.items():
@@ -456,8 +485,11 @@ def build_scenario_config(
     three_d_viz_overrides = overrides.get("3d_viz", overrides.get("three_d_viz", {}))
     three_d_viz = _apply_dict_overrides(sim.three_d_viz, three_d_viz_overrides)
     
-    map_viz_overrides = overrides.get("map_viz", overrides.get("map_visualization", {}))
-    map_viz = _apply_dict_overrides(sim.map_viz, map_viz_overrides)
+    eye_viz_overrides = overrides.get("eye_viz", overrides.get("map_viz", overrides.get("map_visualization", {})))
+    eye_viz = _apply_dict_overrides(sim.eye_viz, eye_viz_overrides)
+
+    mag_viz_overrides = overrides.get("mag_viz", overrides.get("dist_viz", overrides.get("dist_visualization", {})))
+    mag_viz = _apply_dict_overrides(sim.mag_viz, mag_viz_overrides)
 
     distance = simulation.distance
     s1_pos, s2_pos = positions_for_distance(distance)
@@ -477,7 +509,8 @@ def build_scenario_config(
         satellite=satellite,
         simulation=simulation,
         three_d_viz=three_d_viz,
-        map_viz=map_viz,
+        eye_viz=eye_viz,
+        mag_viz=mag_viz,
         strategy=strategy,
         visualize=instance.visualize,
     )
