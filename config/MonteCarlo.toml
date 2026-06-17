@@ -1,5 +1,5 @@
 [monte_carlo]
-simulation = "Simulation.toml"
+environment = "Environment.toml"
 seed = 42
 runs = 500
 chain = ["lissajous_scan"]

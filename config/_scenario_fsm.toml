@@ -1,6 +1,6 @@
 [scenario]
 name = "fsm test"
-simulation_file = "Simulation.toml"
+environment = "Environment.toml"
 simulation.t_step = 0.0001
 chain = ["lissajous_scan"]
 visualize = "map"

@@ -1,6 +1,6 @@
 [scenario]
 name = "default"
-simulation_file = "Simulation.toml"
+environment = "Environment.toml"
 chain = ["minor_offset", "single_miss"]
 visualize = "3d"
 
