@@ -3,10 +3,8 @@ simulation = "Simulation.toml"
 seed = 42
 runs = 500
 chain = ["lissajous_scan"]
-
-[monte_carlo.error]
-distribution = "gaussian"
-gaussian.std = 2.0
+error.distribution = "gaussian"
+error.gaussian.std = 2.0
 
 [strategy.dual_spiral]
 speed_a = 4.990651
