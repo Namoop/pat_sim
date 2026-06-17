@@ -312,6 +312,7 @@ if CUDA_AVAILABLE:
             k = leg_params[1]
             max_radius = leg_params[2]
             speed = leg_params[3]
+            phase_offset = leg_params[4]
             if w <= 0.0:
                 out_aim[0] = u_z[0]
                 out_aim[1] = u_z[1]
@@ -346,7 +347,7 @@ if CUDA_AVAILABLE:
                         u = x / k
                 theta_l = w * u
                 u_start = R_start / w
-                phi_l = k * u_start * 2.0 - k * u
+                phi_l = k * u_start * 2.0 - k * u + phase_offset
             else:
                 effective_speed = speed
                 
@@ -366,7 +367,7 @@ if CUDA_AVAILABLE:
                         u = x / k
                 if w * u > max_radius:
                     u = max_radius / w
-                theta_l, phi_l = w * u, k * u
+                theta_l, phi_l = w * u, k * u + phase_offset
             sin_theta = math.sin(theta_l)
             cos_theta = math.cos(theta_l)
             sin_phi = math.sin(phi_l)
@@ -436,8 +437,8 @@ if CUDA_AVAILABLE:
     @cuda.jit
     def simulate_batch_kernel(
         offsets,        # (B * N, 4) -> s1_theta, s1_phi, s2_theta, s2_phi
-        legs_s1,        # (B, M, 7) -> start, end, type, p1, p2, p3, p4
-        legs_s2,        # (B, M, 7)
+        legs_s1,        # (B, M, 8) -> start, end, type, p1, p2, p3, p4, p5
+        legs_s2,        # (B, M, 8)
         hw_steps_s1,    # (B, H, 3) -> time, target_type (0=beam, 1=rx), enabled (0 or 1)
         hw_steps_s2,    # (B, H, 3)
         sim_params,     # (B, 10) -> [t_step, timeout, beam_length, body_radius, dish_fov, cos_dish_fov, max_beam_speed, max_fsm_speed, alpha, cos_alpha]
@@ -624,7 +625,7 @@ if CUDA_AVAILABLE:
                 leg_start = legs_s1[trial_idx, leg_idx, 0]
                 leg_duration = legs_s1[trial_idx, leg_idx, 1] - leg_start
                 leg_type = int(legs_s1[trial_idx, leg_idx, 2])
-                leg_params = (legs_s1[trial_idx, leg_idx, 3], legs_s1[trial_idx, leg_idx, 4], legs_s1[trial_idx, leg_idx, 5], legs_s1[trial_idx, leg_idx, 6])
+                leg_params = (legs_s1[trial_idx, leg_idx, 3], legs_s1[trial_idx, leg_idx, 4], legs_s1[trial_idx, leg_idx, 5], legs_s1[trial_idx, leg_idx, 6], legs_s1[trial_idx, leg_idx, 7])
                 
                 get_aim_device(leg_type, leg_params, local_t - leg_start, leg_duration, s1_step_start_aim, s1_u_x, s1_u_y, s1_u_z, aim_temp)
                 s1_bench_boresight[0] = aim_temp[0]
@@ -652,7 +653,7 @@ if CUDA_AVAILABLE:
                 leg_start = legs_s2[trial_idx, leg_idx, 0]
                 leg_duration = legs_s2[trial_idx, leg_idx, 1] - leg_start
                 leg_type = int(legs_s2[trial_idx, leg_idx, 2])
-                leg_params = (legs_s2[trial_idx, leg_idx, 3], legs_s2[trial_idx, leg_idx, 4], legs_s2[trial_idx, leg_idx, 5], legs_s2[trial_idx, leg_idx, 6])
+                leg_params = (legs_s2[trial_idx, leg_idx, 3], legs_s2[trial_idx, leg_idx, 4], legs_s2[trial_idx, leg_idx, 5], legs_s2[trial_idx, leg_idx, 6], legs_s2[trial_idx, leg_idx, 7])
                 
                 get_aim_device(leg_type, leg_params, local_t - leg_start, leg_duration, s2_step_start_aim, s2_u_x, s2_u_y, s2_u_z, aim_temp)
                 s2_bench_boresight[0] = aim_temp[0]
@@ -1029,7 +1030,7 @@ def run_monte_carlo_cuda_batch(configs: list[MonteCarloConfig]) -> list[MonteCar
             
             for step in script.s1.movement_steps:
                 t_type = 0
-                p = [0.0, 0.0, 0.0, 0.0]
+                p = [0.0, 0.0, 0.0, 0.0, 0.0]
                 mv = step.movement
                 if isinstance(mv, Hold):
                     t_type = 0
@@ -1037,22 +1038,22 @@ def run_monte_carlo_cuda_batch(configs: list[MonteCarloConfig]) -> list[MonteCar
                     t_type = 1
                 elif isinstance(mv, Spiral):
                     t_type = 2
-                    p = [mv.w, mv.k, mv.max_radius, s1.bench.max_beam_speed]
+                    p = [mv.w, mv.k, mv.max_radius, s1.bench.max_beam_speed, mv.phase_offset]
                 elif isinstance(mv, SerpentineRaster):
                     t_type = 3
-                    p = [mv.radius, float(mv.steps), 1.0 if mv.horizontal else 0.0, 1.0]
+                    p = [mv.radius, float(mv.steps), 1.0 if mv.horizontal else 0.0, 1.0, 0.0]
                 elif isinstance(mv, Rosette):
                     t_type = 4
-                    p = [mv.A, mv.w1, mv.w2, 0.0]
+                    p = [mv.A, mv.w1, mv.w2, 0.0, 0.0]
                 elif isinstance(mv, Lissajous):
                     t_type = 5
-                    p = [mv.A, mv.wx, mv.wy, mv.delta]
+                    p = [mv.A, mv.wx, mv.wy, mv.delta, 0.0]
                 
-                legs_s1_list.append([global_t_start + step.start, global_t_start + step.end, float(t_type), p[0], p[1], p[2], p[3]])
+                legs_s1_list.append([global_t_start + step.start, global_t_start + step.end, float(t_type), p[0], p[1], p[2], p[3], p[4]])
                 
             for step in script.s2.movement_steps:
                 t_type = 0
-                p = [0.0, 0.0, 0.0, 0.0]
+                p = [0.0, 0.0, 0.0, 0.0, 0.0]
                 mv = step.movement
                 if isinstance(mv, Hold):
                     t_type = 0
@@ -1060,18 +1061,18 @@ def run_monte_carlo_cuda_batch(configs: list[MonteCarloConfig]) -> list[MonteCar
                     t_type = 1
                 elif isinstance(mv, Spiral):
                     t_type = 2
-                    p = [mv.w, mv.k, mv.max_radius, s2.bench.max_beam_speed]
+                    p = [mv.w, mv.k, mv.max_radius, s2.bench.max_beam_speed, mv.phase_offset]
                 elif isinstance(mv, SerpentineRaster):
                     t_type = 3
-                    p = [mv.radius, float(mv.steps), 1.0 if mv.horizontal else 0.0, 1.0]
+                    p = [mv.radius, float(mv.steps), 1.0 if mv.horizontal else 0.0, 1.0, 0.0]
                 elif isinstance(mv, Rosette):
                     t_type = 4
-                    p = [mv.A, mv.w1, mv.w2, 0.0]
+                    p = [mv.A, mv.w1, mv.w2, 0.0, 0.0]
                 elif isinstance(mv, Lissajous):
                     t_type = 5
-                    p = [mv.A, mv.wx, mv.wy, mv.delta]
+                    p = [mv.A, mv.wx, mv.wy, mv.delta, 0.0]
                 
-                legs_s2_list.append([global_t_start + step.start, global_t_start + step.end, float(t_type), p[0], p[1], p[2], p[3]])
+                legs_s2_list.append([global_t_start + step.start, global_t_start + step.end, float(t_type), p[0], p[1], p[2], p[3], p[4]])
 
             for step in script.s1.hardware_steps:
                 target_type = 0 if step.target == "beam" else 1
@@ -1099,8 +1100,8 @@ def run_monte_carlo_cuda_batch(configs: list[MonteCarloConfig]) -> list[MonteCar
     max_hw_s1 = max(len(l) for l in all_hw_s1)
     max_hw_s2 = max(len(l) for l in all_hw_s2)
     
-    legs_s1_arr = np.zeros((B, max_legs_s1, 7), dtype=FLOAT_DTYPE)
-    legs_s2_arr = np.zeros((B, max_legs_s2, 7), dtype=FLOAT_DTYPE)
+    legs_s1_arr = np.zeros((B, max_legs_s1, 8), dtype=FLOAT_DTYPE)
+    legs_s2_arr = np.zeros((B, max_legs_s2, 8), dtype=FLOAT_DTYPE)
     hw_s1_arr = np.zeros((B, max_hw_s1, 3), dtype=FLOAT_DTYPE)
     hw_s2_arr = np.zeros((B, max_hw_s2, 3), dtype=FLOAT_DTYPE)
     
@@ -1259,7 +1260,8 @@ def run_monte_carlo_cuda_batch(configs: list[MonteCarloConfig]) -> list[MonteCar
                 satellite=sim.satellite,
                 simulation=sim.simulation,
                 three_d_viz=sim.three_d_viz,
-                map_viz=sim.map_viz,
+                eye_viz=sim.eye_viz,
+                mag_viz=sim.mag_viz,
                 strategy=run_strategy_config,
             )
             

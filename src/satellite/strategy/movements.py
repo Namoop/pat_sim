@@ -59,6 +59,7 @@ class Spiral(MovementPattern):
     w: float
     k: float
     max_radius: float
+    phase_offset: float = 0.0
 
     def aim_at(self, local_t: float, duration: float, ctx: AimContext) -> Vec3:
         if self.max_radius == 0.0:
@@ -90,7 +91,7 @@ class Spiral(MovementPattern):
             
             theta_l = w * u
             u_start = R_start / w if w > 0.0 else 0.0
-            phi_l = k * u_start * 2.0 - k * u
+            phi_l = k * u_start * 2.0 - k * u + self.phase_offset
             
             sin_theta = math.sin(theta_l)
             cos_theta = math.cos(theta_l)
@@ -116,6 +117,7 @@ class Spiral(MovementPattern):
             u_z=ctx.u_z,
             max_radius=self.max_radius,
             max_beam_speed=ctx.max_beam_speed,
+            phase_offset=self.phase_offset,
         )
 
 

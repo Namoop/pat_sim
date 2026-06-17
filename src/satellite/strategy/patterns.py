@@ -38,6 +38,7 @@ def spiral_aim_at(
     u_z: Vec3,
     max_radius: float,
     max_beam_speed: float,
+    phase_offset: float = 0.0,
 ) -> Vec3:
     """Archimedean spiral aim with constant linear speed along the path, preserving duration."""
     if w <= 0.0:
@@ -63,7 +64,7 @@ def spiral_aim_at(
     if w * u > max_radius:
         u = max_radius / w
     
-    theta_l, phi_l = w * u, k * u
+    theta_l, phi_l = w * u, k * u + phase_offset
     
     sin_theta = math.sin(theta_l)
     cos_theta = math.cos(theta_l)
