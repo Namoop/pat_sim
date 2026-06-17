@@ -36,7 +36,6 @@ def test_asymmetric_swap_script_includes_reset_after_spiral():
         config=AsymmetricSwapConfig(
             spiral_radius=0.05,
             lock_duration=1.0,
-            spiral_speed=1.0,
         ),
         w=10.0,
         k=10.0,

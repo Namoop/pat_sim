@@ -14,14 +14,11 @@ uniform.max = 90.0
 
 [strategy.minor_offset]
 max_spiral_radius = "fov"
-spiral_speed = 0.4
 
 [strategy.single_miss]
 a_spiral_radius = 50.0
 b_spiral_radius = 50.0
-spiral_speed = 0.05
 
 [strategy.asymmetric_swap]
 spiral_radius = 50.0
 lock_duration = 1.0
-spiral_speed = 0.05

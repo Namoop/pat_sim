@@ -7,8 +7,6 @@ error.distribution = "gaussian"
 error.gaussian.std = 2.0
 
 [strategy.dual_spiral]
-speed_a = 4.990651
-speed_ratio = 1.883651
 
 [strategy.dual_raster]
 speed_a = 4.013988
@@ -38,8 +36,6 @@ max_turn_radius = 863.263
 bias_strength = 0.389001
 
 [strategy.concentric_shells]
-spiral_speed_a = 1.0
-speed_ratio = 1.41421356
 
 [strategy.random_walk]
 step_duration_a = 1.0
@@ -54,4 +50,3 @@ max_turn_radius = 50000.0
 [strategy.nested_spiral]
 outer_radius = 50.0
 inner_radius = 50.0
-spiral_speed = 1.0

@@ -118,11 +118,10 @@ def test_validate_slew_speed_invoked_from_try_run():
     strat = MinorOffsetStrategy(
         config=MinorOffsetConfig(
             max_spiral_radius=0.02,
-            spiral_speed=1.0,
         ),
         w=10.0,
         k=10.0,
     )
     result = strat.try_run(ctx, global_t_start=0.0)
-    # T = R / (w * speed) = 0.02 / (10.0 * 1.0) = 0.002
-    assert result.elapsed_t == pytest.approx(0.002)
+    # T = arc_length / max_beam_speed
+    assert result.elapsed_t == pytest.approx(0.00100013, abs=1e-7)

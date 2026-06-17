@@ -76,22 +76,16 @@ def base_config(
             params={
                 "minor_offset": MinorOffsetConfig(
                     max_spiral_radius="fov",
-                    spiral_speed=0.4,
                 ),
                 "single_miss": SingleMissConfig(
                     a_spiral_radius=0.05,
                     b_spiral_radius=0.05,
-                    spiral_speed=0.16,
                 ),
                 "asymmetric_swap": AsymmetricSwapConfig(
                     spiral_radius=0.05,
                     lock_duration=1.0,
-                    spiral_speed=0.16,
                 ),
-                "dual_spiral": DualSpiralConfig(
-                    speed_a=0.05,
-                    speed_ratio=1.41421356,
-                ),
+                "dual_spiral": DualSpiralConfig(),
                 "dual_raster": DualRasterConfig(
                     steps_a=20,
                     steps_b=20,
@@ -100,8 +94,6 @@ def base_config(
                 ),
                 "concentric_shells": ConcentricShellsConfig(
                     radii_factors=(0.2, 0.5, 1.0),
-                    spiral_speed_a=0.05,
-                    speed_ratio=1.41421356,
                 ),
 
             },
