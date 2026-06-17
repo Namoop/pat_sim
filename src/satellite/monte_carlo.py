@@ -55,12 +55,18 @@ class MonteCarloSummary:
 
 def _sample_component(rng: np.random.Generator, error: ErrorDistributionConfig) -> tuple[float, float]:
     if isinstance(error, UniformErrorConfig):
-        theta = float(rng.uniform(error.theta_min, error.theta_max))
-        phi = float(rng.uniform(error.phi_min, error.phi_max))
+        val_theta = rng.uniform(error.min, error.max)
+        sign_theta = 1.0 if rng.random() < 0.5 else -1.0
+        theta = float(val_theta * sign_theta)
+        
+        val_phi = rng.uniform(error.min, error.max)
+        sign_phi = 1.0 if rng.random() < 0.5 else -1.0
+        phi = float(val_phi * sign_phi)
+        
         return theta, phi
     if isinstance(error, GaussianErrorConfig):
-        theta = float(rng.normal(error.theta_mean, error.theta_std))
-        phi = float(rng.normal(error.phi_mean, error.phi_std))
+        theta = float(rng.normal(error.mean, error.std))
+        phi = float(rng.normal(error.mean, error.std))
         return theta, phi
     raise TypeError(f"Unsupported error config: {type(error)!r}")
 

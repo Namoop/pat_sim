@@ -75,7 +75,7 @@ These parameters define spacecraft hardware limits, simulation steps, and visual
 
 ---
 
-## 3. Monte Carlo and Error Config (`MC_basic.toml` / `MC_scans.toml`)
+## 3. Monte Carlo and Error Config (`MonteCarlo.toml`)
 
 These parameters define jumble distributions, random seeds, and strategy parameter groups. Loaded by [load_monte_carlo_config](file:///home/theodore/Documents/satellite/src/satellite/config.py).
 
@@ -86,14 +86,15 @@ These parameters define jumble distributions, random seeds, and strategy paramet
 - `**runs**` (int): Number of batch runs to execute.
 - `**chain**` (array of strings): Ordered list of search strategies to run (e.g., `["minor_offset", "single_miss"]`).
 
-### `[error]` (Launch Jumble Distributions)
+### `[monte_carlo.error]`
 
 - `**distribution**` (string): Type of error distribution (`"uniform"` or `"gaussian"`).
-- `**theta_min**` / `**theta_max**` (float, milliradians): Bounds for uniform error on theta offset.
-- `**phi_min**` / `**phi_max**` (float, milliradians): Bounds for uniform error on phi offset.
-- `**theta_mean**` / `**theta_std**` (float, milliradians): Parameters for gaussian error on theta offset.
-- `**phi_mean**` / `**phi_std**` (float, milliradians): Parameters for gaussian error on phi offset.
+- `**uniform.min**` (float, milliradians, default: `0.0`): The minimum absolute value of the uniform error.
+- `**uniform.max**` (float, milliradians): The maximum absolute value of the uniform error.
+- `**gaussian.mean**` (float, milliradians, default: `0.0`): The mean of the Gaussian distribution.
+- `**gaussian.std**` (float, milliradians): The standard deviation of the Gaussian distribution.
 
+*Note on Uniform distribution: All values should be positive and the sign is random. The sampled magnitude is chosen uniformly from `[min, max]` and then assigned a random sign ($+$ or $-$), meaning that `min = 0`, `max = 2` results in a distribution covering `[-2, 2]` symmetrically.*
 ---
 
 ## 4. Strategy-Specific Config Parameters

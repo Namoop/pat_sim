@@ -4,12 +4,9 @@ seed = 42
 runs = 500
 chain = ["lissajous_scan"]
 
-[error]
+[monte_carlo.error]
 distribution = "gaussian"
-theta_mean = 0.0
-theta_std = 2.0
-phi_mean = 0.0
-phi_std = 2.0
+gaussian.std = 2.0
 
 [strategy.dual_spiral]
 speed_a = 4.990651

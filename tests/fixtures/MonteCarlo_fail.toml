@@ -4,12 +4,10 @@ seed = 3
 runs = 8
 chain = ["minor_offset", "single_miss"]
 
-[error]
+[monte_carlo.error]
 distribution = "uniform"
-theta_min = 60.0
-theta_max = 90.0
-phi_min = 60.0
-phi_max = 90.0
+uniform.min = 60.0
+uniform.max = 90.0
 
 [strategy]
 

@@ -172,12 +172,9 @@ seed = 42
 runs = 8
 chain = ["minor_offset", "single_miss"]
 
-[error]
+[monte_carlo.error]
 distribution = "uniform"
-theta_min = -0.02
-theta_max = 0.02
-phi_min = -0.02
-phi_max = 0.02
+uniform.max = 0.02
 
 [strategy]
 k = 10.0

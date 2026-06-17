@@ -141,19 +141,15 @@ class ScenarioInstance:
 @dataclass(frozen=True)
 class UniformErrorConfig:
     distribution: str
-    theta_min: float
-    theta_max: float
-    phi_min: float
-    phi_max: float
+    min: float
+    max: float
 
 
 @dataclass(frozen=True)
 class GaussianErrorConfig:
     distribution: str
-    theta_mean: float
-    theta_std: float
-    phi_mean: float
-    phi_std: float
+    mean: float
+    std: float
 
 
 ErrorDistributionConfig = UniformErrorConfig | GaussianErrorConfig
@@ -257,25 +253,23 @@ def _load_strategy(data: dict, chain_list: list[str] | None = None, default_k: f
     )
 
 
-def _load_error(data: dict) -> ErrorDistributionConfig:
-    distribution = str(data.get("distribution", "uniform")).lower()
+def _load_error(error_data: dict) -> ErrorDistributionConfig:
+    distribution = str(error_data.get("distribution", "uniform")).lower()
     if distribution == "uniform":
+        uniform_data = error_data.get("uniform", {})
         return UniformErrorConfig(
             distribution="uniform",
-            theta_min=_require_float(data, "theta_min", "[error]") * 1e-3,
-            theta_max=_require_float(data, "theta_max", "[error]") * 1e-3,
-            phi_min=_require_float(data, "phi_min", "[error]") * 1e-3,
-            phi_max=_require_float(data, "phi_max", "[error]") * 1e-3,
+            min=float(uniform_data.get("min", 0.0)) * 1e-3,
+            max=_require_float(uniform_data, "max", "[monte_carlo.error.uniform]") * 1e-3,
         )
     if distribution == "gaussian":
+        gaussian_data = error_data.get("gaussian", {})
         return GaussianErrorConfig(
             distribution="gaussian",
-            theta_mean=float(data.get("theta_mean", 0.0)) * 1e-3,
-            theta_std=_require_float(data, "theta_std", "[error]") * 1e-3,
-            phi_mean=float(data.get("phi_mean", 0.0)) * 1e-3,
-            phi_std=_require_float(data, "phi_std", "[error]") * 1e-3,
+            mean=float(gaussian_data.get("mean", 0.0)) * 1e-3,
+            std=_require_float(gaussian_data, "std", "[monte_carlo.error.gaussian]") * 1e-3,
         )
-    raise ValueError(f"Unsupported [error].distribution: {distribution!r}")
+    raise ValueError(f"Unsupported [monte_carlo.error].distribution: {distribution!r}")
 
 
 def load_simulation_config(path: str | Path) -> SimulationBundle:
@@ -387,7 +381,7 @@ def load_monte_carlo_config(path: str | Path) -> MonteCarloConfig:
     return MonteCarloConfig(
         simulation_path=simulation_path,
         seed=int(mc.get("seed", 0)),
-        error=_load_error(data.get("error", {})),
+        error=_load_error(mc.get("error", {})),
         strategy=strategy,
         runs=runs,
         chain=tuple(chain_list),
