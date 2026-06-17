@@ -342,11 +342,10 @@ def spiral(
     w: float,
     k: float,
     max_radius: float,
-    speed: float = 1.0,
     label: str = "spiral",
 ) -> None:
     _active_builder().movement(
-        Spiral(w=w, k=k, max_radius=max_radius, speed=speed),
+        Spiral(w=w, k=k, max_radius=max_radius),
         duration=duration,
         label=label,
     )

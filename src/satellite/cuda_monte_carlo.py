@@ -317,10 +317,56 @@ if CUDA_AVAILABLE:
                 out_aim[1] = u_z[1]
                 out_aim[2] = u_z[2]
                 return
-            u = speed * local_t
-            if w * u > max_radius:
-                u = max_radius / w
-            theta_l, phi_l = w * u, k * u
+            
+            if max_radius == 0.0:
+                R_start = angle_between_device(step_start_aim, u_z)
+                if R_start <= 0.0 or duration <= 0.0:
+                    out_aim[0] = u_z[0]
+                    out_aim[1] = u_z[1]
+                    out_aim[2] = u_z[2]
+                    return
+                t_reverse = duration - local_t
+                if t_reverse < 0.0:
+                    t_reverse = 0.0
+                
+                effective_speed = speed
+                if k <= 0.0:
+                    u = effective_speed * t_reverse
+                else:
+                    Y = (k * effective_speed * t_reverse) / w
+                    if Y <= 0.0:
+                        u = 0.0
+                    else:
+                        x = math.sqrt(2.0 * Y) if Y > 2.0 else Y
+                        for _ in range(3):
+                            sqrt_term = math.sqrt(1.0 + x * x)
+                            h_x = 0.5 * (x * sqrt_term + math.log(x + sqrt_term))
+                            diff = h_x - Y
+                            x = x - diff / sqrt_term
+                        u = x / k
+                theta_l = w * u
+                u_start = R_start / w
+                phi_l = k * u_start * 2.0 - k * u
+            else:
+                effective_speed = speed
+                
+                if k <= 0.0:
+                    u = effective_speed * local_t
+                else:
+                    Y = (k * effective_speed * local_t) / w
+                    if Y <= 0.0:
+                        u = 0.0
+                    else:
+                        x = math.sqrt(2.0 * Y) if Y > 2.0 else Y
+                        for _ in range(3):
+                            sqrt_term = math.sqrt(1.0 + x * x)
+                            h_x = 0.5 * (x * sqrt_term + math.log(x + sqrt_term))
+                            diff = h_x - Y
+                            x = x - diff / sqrt_term
+                        u = x / k
+                if w * u > max_radius:
+                    u = max_radius / w
+                theta_l, phi_l = w * u, k * u
             sin_theta = math.sin(theta_l)
             cos_theta = math.cos(theta_l)
             sin_phi = math.sin(phi_l)
@@ -991,7 +1037,7 @@ def run_monte_carlo_cuda_batch(configs: list[MonteCarloConfig]) -> list[MonteCar
                     t_type = 1
                 elif isinstance(mv, Spiral):
                     t_type = 2
-                    p = [mv.w, mv.k, mv.max_radius, mv.speed]
+                    p = [mv.w, mv.k, mv.max_radius, s1.bench.max_beam_speed]
                 elif isinstance(mv, SerpentineRaster):
                     t_type = 3
                     p = [mv.radius, float(mv.steps), 1.0 if mv.horizontal else 0.0, 1.0]
@@ -1014,7 +1060,7 @@ def run_monte_carlo_cuda_batch(configs: list[MonteCarloConfig]) -> list[MonteCar
                     t_type = 1
                 elif isinstance(mv, Spiral):
                     t_type = 2
-                    p = [mv.w, mv.k, mv.max_radius, mv.speed]
+                    p = [mv.w, mv.k, mv.max_radius, s2.bench.max_beam_speed]
                 elif isinstance(mv, SerpentineRaster):
                     t_type = 3
                     p = [mv.radius, float(mv.steps), 1.0 if mv.horizontal else 0.0, 1.0]

@@ -27,6 +27,7 @@ class AimContext:
     u_x: Vec3
     u_y: Vec3
     u_z: Vec3
+    max_beam_speed: float = 0.0
 
 
 class MovementPattern(ABC):
@@ -58,7 +59,6 @@ class Spiral(MovementPattern):
     w: float
     k: float
     max_radius: float
-    speed: float = 1.0
 
     def aim_at(self, local_t: float, duration: float, ctx: AimContext) -> Vec3:
         if self.max_radius == 0.0:
@@ -67,10 +67,30 @@ class Spiral(MovementPattern):
             R_start = angle_between(ctx.step_start_aim, ctx.center)
             if R_start <= 0.0 or duration <= 0.0:
                 return ctx.center
-            progress = min(local_t / duration, 1.0)
-            theta_l = R_start * (1.0 - progress)
-            u_start = (R_start / self.w) if self.w > 0.0 else 0.0
-            phi_l = self.k * u_start * (1.0 + progress)
+            
+            t_reverse = max(0.0, duration - local_t)
+            w = self.w
+            k = self.k
+            
+            effective_speed = ctx.max_beam_speed
+            if k <= 0.0:
+                u = effective_speed * t_reverse
+            else:
+                Y = (k * effective_speed * t_reverse) / w
+                if Y <= 0.0:
+                    u = 0.0
+                else:
+                    x = math.sqrt(2.0 * Y) if Y > 2.0 else Y
+                    for _ in range(3):
+                        sqrt_term = math.sqrt(1.0 + x * x)
+                        h_x = 0.5 * (x * sqrt_term + math.log(x + sqrt_term))
+                        diff = h_x - Y
+                        x = x - diff / sqrt_term
+                        u = x / k
+            
+            theta_l = w * u
+            u_start = R_start / w if w > 0.0 else 0.0
+            phi_l = k * u_start * 2.0 - k * u
             
             sin_theta = math.sin(theta_l)
             cos_theta = math.cos(theta_l)
@@ -95,7 +115,7 @@ class Spiral(MovementPattern):
             u_y=ctx.u_y,
             u_z=ctx.u_z,
             max_radius=self.max_radius,
-            speed=self.speed,
+            max_beam_speed=ctx.max_beam_speed,
         )
 
 
@@ -236,4 +256,5 @@ def build_aim_context(satellite, *, reset: bool = False) -> AimContext:
         u_x=u_x,
         u_y=u_y,
         u_z=u_z,
+        max_beam_speed=sat.bench.max_beam_speed,
     )

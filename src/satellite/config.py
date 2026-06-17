@@ -84,12 +84,19 @@ class StrategyConfig:
         return self.k * satellite.alpha / 3.141592653589793
 
     def spiral_duration(
-        self, radius: float, w: float, speed: float = 1.0
+        self, radius: float, w: float, max_beam_speed: float
     ) -> float:
-        """T = R / (w * speed)"""
-        if w <= 0:
+        """T = s(R / w) / max_beam_speed where s is the arc length of the spiral path."""
+        if w <= 0 or max_beam_speed <= 0:
             return 0.0
-        return radius / (w * speed)
+        k = self.k
+        if k <= 0.0:
+            return radius / (w * max_beam_speed)
+        import math
+        x = (k * radius) / w
+        sqrt_term = math.sqrt(1.0 + x * x)
+        arc_len = (w / (2.0 * k)) * (x * sqrt_term + math.log(x + sqrt_term))
+        return arc_len / max_beam_speed
 
     def reset_duration(
         self, radius: float, max_beam_speed: float
@@ -384,7 +391,9 @@ def load_monte_carlo_config(path: str | Path) -> MonteCarloConfig:
 
     overrides: dict[str, dict[str, Any]] = {}
     for key, value in mc.items():
-        if key in ("runs", "seed", "chain", "environment", "simulation_file", "simulation", "error"):
+        if key in ("runs", "seed", "chain", "environment", "simulation_file", "error"):
+            continue
+        if key == "simulation" and not isinstance(value, dict):
             continue
         if "." in key:
             parts = key.split(".", 1)

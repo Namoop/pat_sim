@@ -37,12 +37,29 @@ def spiral_aim_at(
     u_y: Vec3,
     u_z: Vec3,
     max_radius: float,
-    speed: float = 1.0,
+    max_beam_speed: float,
 ) -> Vec3:
-    """Archimedean spiral aim; angular radius grows as w·u, capped at max_radius."""
+    """Archimedean spiral aim with constant linear speed along the path, preserving duration."""
     if w <= 0.0:
         return u_z.copy()
-    u = speed * local_t
+    
+    effective_speed = max_beam_speed
+    
+    if k <= 0.0:
+        u = effective_speed * local_t
+    else:
+        Y = (k * effective_speed * local_t) / w
+        if Y <= 0.0:
+            u = 0.0
+        else:
+            x = math.sqrt(2.0 * Y) if Y > 2.0 else Y
+            for _ in range(3):
+                sqrt_term = math.sqrt(1.0 + x * x)
+                h_x = 0.5 * (x * sqrt_term + math.log(x + sqrt_term))
+                diff = h_x - Y
+                x = x - diff / sqrt_term
+            u = x / k
+
     if w * u > max_radius:
         u = max_radius / w
     
