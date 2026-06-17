@@ -399,7 +399,7 @@ def run_random_search(
             candidate, strategy_name, sim_cfg, mc_cfg, fixed_offsets, max_workers
         )
         print(
-            f"Trial {t}/{trials}: params={candidate} → "
+            f"Trial {t}/{trials}: params={candidate} -> "
             f"Cost: {cost:.4f} (SR: {success_rate * 100:.1f}%, Mean T: {mean_t:.2f}s)"
         )
 
@@ -476,7 +476,7 @@ def run_grid_search(
             candidate, strategy_name, sim_cfg, mc_cfg, fixed_offsets, max_workers
         )
         print(
-            f"Grid point {run_idx} (of {num_runs - skipped} valid): params={candidate} → "
+            f"Grid point {run_idx} (of {num_runs - skipped} valid): params={candidate} -> "
             f"Cost: {cost:.4f} (SR: {success_rate * 100:.1f}%, Mean T: {mean_t:.2f}s)"
         )
 

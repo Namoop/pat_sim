@@ -1,4 +1,4 @@
-"""RTX 3050 CUDA-accelerated Monte Carlo simulation runner."""
+"""CUDA-accelerated Monte Carlo simulation runner."""
 
 from __future__ import annotations
 
