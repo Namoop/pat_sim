@@ -6,16 +6,31 @@ import os
 import sys
 import math
 
-# Bootstrap local site-packages for NVIDIA wheels before importing Numba
-version_suffix = f"python{sys.version_info.major}.{sys.version_info.minor}"
-local_packages = os.path.expanduser(f"~/.local/lib/{version_suffix}/site-packages")
-if os.path.exists(local_packages):
-    if not os.environ.get("CUDA_HOME"):
-        os.environ["CUDA_HOME"] = os.path.join(local_packages, "nvidia/cuda_nvcc")
-    ld_path = os.environ.get("LD_LIBRARY_PATH", "")
-    lib_path = os.path.join(local_packages, "nvidia/cuda_runtime/lib")
-    if os.path.exists(lib_path) and lib_path not in ld_path:
-        os.environ["LD_LIBRARY_PATH"] = lib_path + (":" + ld_path if ld_path else "")
+# Bootstrap: add all NVIDIA pip-wheel library directories before importing Numba.
+# Numba needs libcudart.so (cuda_runtime/lib) AND libnvvm.so (cuda_nvcc/nvvm/lib64).
+_version_suffix = f"python{sys.version_info.major}.{sys.version_info.minor}"
+_nvidia_base = os.path.expanduser(f"~/.local/lib/{_version_suffix}/site-packages/nvidia")
+if os.path.isdir(_nvidia_base):
+    _extra = []
+    for _pkg in os.listdir(_nvidia_base):
+        for _sub in ("lib", "lib64", "nvvm/lib64"):
+            _d = os.path.join(_nvidia_base, _pkg, _sub)
+            if os.path.isdir(_d):
+                _extra.append(_d)
+    if _extra:
+        _ld = os.environ.get("LD_LIBRARY_PATH", "")
+        _have = set(_ld.split(":")) if _ld else set()
+        _new = [p for p in _extra if p not in _have]
+        if _new:
+            os.environ["LD_LIBRARY_PATH"] = ":".join(_new) + (":" + _ld if _ld else "")
+    _nvcc = os.path.join(_nvidia_base, "cuda_nvcc")
+    if os.path.isdir(_nvcc) and not os.environ.get("CUDA_HOME"):
+        os.environ["CUDA_HOME"] = _nvcc
+    _libdev = os.path.join(_nvcc, "nvvm", "libdevice")
+    if os.path.isdir(_libdev) and not os.environ.get("NUMBA_CUDA_LIBDEVICE_PATH"):
+        os.environ["NUMBA_CUDA_LIBDEVICE_PATH"] = _libdev
+    del _extra, _nvcc, _libdev
+del _version_suffix, _nvidia_base
 
 import numpy as np
 try:
