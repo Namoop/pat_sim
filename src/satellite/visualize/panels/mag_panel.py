@@ -51,10 +51,13 @@ class MagPanelWidget(QWidget):
         self._scene_signed_tilt = 0.0
         self._display_signed_tilt = 0.0
         self._display_pin_blend = 0.0
+        self._display_vertical_center_blend = 0.0
         self._camera_target_tilt = 0.0
         self._camera_target_pin_blend = 0.0
+        self._camera_target_vertical_center_blend = 0.0
         self._anim_start_tilt = 0.0
         self._anim_start_pin_blend = 0.0
+        self._anim_start_vertical_center_blend = 0.0
         self._anim_start_time = 0.0
         self._tilt_timer = QTimer(self)
         self._tilt_timer.setInterval(16)
@@ -132,6 +135,7 @@ class MagPanelWidget(QWidget):
         self._begin_camera_animation(
             self._scene_signed_tilt,
             self._mode_pin_blend(mode),
+            self._mode_vertical_center_blend(mode),
         )
 
     @staticmethod
@@ -141,8 +145,30 @@ class MagPanelWidget(QWidget):
         return 1.0
 
     @staticmethod
+    def _mode_vertical_center_blend(mode: ViewMode) -> float:
+        return 1.0 if mode in ("follow_s1", "follow_s2") else 0.0
+
+    @staticmethod
     def _is_live_tilt_mode(mode: ViewMode) -> bool:
         return mode in ("follow_s1", "follow_s2", "balance")
+
+    def _diagram_reference_cy(
+        self,
+        height: float,
+        bottom_margin: float,
+        link_span: float,
+        baseline_tilt: float,
+        pin_blend: float,
+        vertical_center_blend: float,
+    ) -> tuple[float, float, float]:
+        cy1_off, cy2_off = self._satellite_y_positions(
+            0.0, link_span, baseline_tilt, pin_blend
+        )
+        lowest_off = max(cy1_off, cy2_off)
+        cy_bottom = height - bottom_margin - (self._SAT_RADIUS + lowest_off) * self._DIAGRAM_SCALE
+        cy_center = height / 2.0
+        cy = (1.0 - vertical_center_blend) * cy_bottom + vertical_center_blend * cy_center
+        return cy, cy + cy1_off, cy + cy2_off
 
     def _scale_factor(self) -> float:
         if self._config is None:
@@ -218,20 +244,29 @@ class MagPanelWidget(QWidget):
         self,
         target_signed_tilt: float,
         target_pin_blend: float,
+        target_vertical_center_blend: float,
     ) -> None:
         self._camera_target_tilt = target_signed_tilt
         self._camera_target_pin_blend = target_pin_blend
+        self._camera_target_vertical_center_blend = target_vertical_center_blend
         if (
             abs(self._camera_target_tilt - self._display_signed_tilt) < 1e-9
             and abs(self._camera_target_pin_blend - self._display_pin_blend) < 1e-9
+            and abs(
+                self._camera_target_vertical_center_blend
+                - self._display_vertical_center_blend
+            )
+            < 1e-9
         ):
             self._display_signed_tilt = self._camera_target_tilt
             self._display_pin_blend = self._camera_target_pin_blend
+            self._display_vertical_center_blend = self._camera_target_vertical_center_blend
             self._tilt_timer.stop()
             self.update()
             return
         self._anim_start_tilt = self._display_signed_tilt
         self._anim_start_pin_blend = self._display_pin_blend
+        self._anim_start_vertical_center_blend = self._display_vertical_center_blend
         self._anim_start_time = time.perf_counter()
         if not self._tilt_timer.isActive():
             self._tilt_timer.start()
@@ -248,9 +283,18 @@ class MagPanelWidget(QWidget):
             self._anim_start_pin_blend
             + (self._camera_target_pin_blend - self._anim_start_pin_blend) * eased
         )
+        self._display_vertical_center_blend = (
+            self._anim_start_vertical_center_blend
+            + (
+                self._camera_target_vertical_center_blend
+                - self._anim_start_vertical_center_blend
+            )
+            * eased
+        )
         if t >= 1.0:
             self._display_signed_tilt = self._scene_signed_tilt
             self._display_pin_blend = self._camera_target_pin_blend
+            self._display_vertical_center_blend = self._camera_target_vertical_center_blend
             self._tilt_timer.stop()
         self.update()
 
@@ -275,10 +319,13 @@ class MagPanelWidget(QWidget):
             self._tilt_timer.stop()
             self._scene_signed_tilt = self._compute_target_signed_tilt()
             pin_blend = self._mode_pin_blend(self._view_mode)
+            vertical_center_blend = self._mode_vertical_center_blend(self._view_mode)
             self._display_signed_tilt = self._scene_signed_tilt
             self._display_pin_blend = pin_blend
+            self._display_vertical_center_blend = vertical_center_blend
             self._camera_target_tilt = self._scene_signed_tilt
             self._camera_target_pin_blend = pin_blend
+            self._camera_target_vertical_center_blend = vertical_center_blend
             if self._view_mode in self._buttons:
                 self._buttons[self._view_mode].setChecked(True)
         else:
@@ -357,13 +404,14 @@ class MagPanelWidget(QWidget):
         # when the camera is not animating.
         baseline_tilt = self._display_signed_tilt
         pin_blend = self._display_pin_blend
-        cy1_off, cy2_off = self._satellite_y_positions(
-            0.0, link_span, baseline_tilt, pin_blend
+        cy, cy1, cy2 = self._diagram_reference_cy(
+            H,
+            bottom_margin,
+            link_span,
+            baseline_tilt,
+            pin_blend,
+            self._display_vertical_center_blend,
         )
-        lowest_off = max(cy1_off, cy2_off)
-        cy = H - bottom_margin - (self._SAT_RADIUS + lowest_off) * self._DIAGRAM_SCALE
-        cy1 = cy + cy1_off
-        cy2 = cy + cy2_off
 
         # Title (fixed size; not part of the scaled diagram)
         painter.setPen(QColor(40, 40, 40))
