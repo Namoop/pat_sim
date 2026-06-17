@@ -118,6 +118,8 @@ class View3DPanel:
         self._pv = pv
         self._result: ScenarioResult | None = None
         self._current_t = 0.0
+        self._active_camera_preset = "center"
+        self._pending_camera_restore: dict | None = None
 
         self._widget = QWidget(parent)
         layout = QVBoxLayout(self._widget)
@@ -221,7 +223,34 @@ class View3DPanel:
     def profiling_active(self) -> bool:
         return self._profiler.enabled or self._sim_profile_enabled
 
+    def _capture_camera_state(self) -> dict | None:
+        if not self._scene_built or self.plotter is None:
+            return None
+        cam = self.plotter.camera
+        state = {
+            "focal_point": tuple(cam.focal_point),
+            "position": tuple(cam.position),
+            "up": tuple(cam.up),
+            "view_angle": float(cam.view_angle),
+            "clipping_range": tuple(cam.clipping_range),
+            "parallel_scale": float(cam.parallel_scale),
+        }
+        return state
+
+    def _restore_camera_state(self, state: dict) -> None:
+        if not self._scene_built or self.plotter is None:
+            return
+        cam = self.plotter.camera
+        cam.focal_point = state["focal_point"]
+        cam.position = state["position"]
+        cam.up = state["up"]
+        cam.view_angle = state["view_angle"]
+        cam.clipping_range = state["clipping_range"]
+        cam.parallel_scale = state["parallel_scale"]
+        self.plotter.render()
+
     def set_result(self, result: ScenarioResult) -> None:
+        self._pending_camera_restore = self._capture_camera_state()
         self._result = result
         config = result.config
         viz = config.three_d_viz
@@ -349,11 +378,15 @@ class View3DPanel:
             view_angle=pose.view_angle,
         )
 
-    def _on_camera_button(self, key: str) -> None:
+    def _apply_camera_for_preset(self, key: str) -> None:
         if key == "center":
             self._apply_center_camera()
         else:
             self._apply_camera_preset(key)
+
+    def _on_camera_button(self, key: str) -> None:
+        self._active_camera_preset = key
+        self._apply_camera_for_preset(key)
 
     def _position_camera_overlay(self) -> None:
         margin = 12
@@ -413,7 +446,11 @@ class View3DPanel:
                 label=label,
             )
 
-        self._apply_center_camera()
+        if self._pending_camera_restore is not None:
+            self._restore_camera_state(self._pending_camera_restore)
+            self._pending_camera_restore = None
+        else:
+            self._apply_camera_for_preset(self._active_camera_preset)
 
     def _to_polydata(self, verts: np.ndarray, faces: np.ndarray):
         pv = self._pv

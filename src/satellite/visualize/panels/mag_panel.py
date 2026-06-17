@@ -270,15 +270,15 @@ class MagPanelWidget(QWidget):
         self._result = result
         self._config = result.config
         if result_changed:
-            self._scene_signed_tilt = 0.0
-            self._display_signed_tilt = 0.0
-            self._display_pin_blend = 0.0
-            self._camera_target_tilt = 0.0
-            self._camera_target_pin_blend = 0.0
-            self._view_mode = "center"
             self._tilt_timer.stop()
-            if "center" in self._buttons:
-                self._buttons["center"].setChecked(True)
+            self._scene_signed_tilt = self._compute_target_signed_tilt()
+            pin_blend = self._mode_pin_blend(self._view_mode)
+            self._display_signed_tilt = self._scene_signed_tilt
+            self._display_pin_blend = pin_blend
+            self._camera_target_tilt = self._scene_signed_tilt
+            self._camera_target_pin_blend = pin_blend
+            if self._view_mode in self._buttons:
+                self._buttons[self._view_mode].setChecked(True)
         else:
             self._scene_signed_tilt = self._compute_target_signed_tilt()
             if self._is_live_tilt_mode(self._view_mode):
