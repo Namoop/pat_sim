@@ -32,6 +32,7 @@ class MagPanelWidget(QWidget):
 
     _TILT_ANIM_DURATION = 0.4
     _DIAGRAM_SCALE = 1.5
+    _SAT_RADIUS = 8.0
 
     @staticmethod
     def _ease_tilt(t: float) -> float:
@@ -333,16 +334,17 @@ class MagPanelWidget(QWidget):
 
         W = float(self.width())
         H = float(self.height())
-        cy = H / 2.0
         cx1 = W * 0.25
         cx2 = W * 0.75
+        link_span = cx2 - cx1
 
         # Compute scaling factors based on config
         axis_limit = config.eye_viz.axis_limit
         visual_limit_deg = config.mag_viz.visual_limit_deg
+        bottom_margin = config.mag_viz.bottom_margin
 
-        fov_cone_length = (cx2 - cx1) * config.mag_viz.fov_cone_length
-        beam_cone_length = (cx2 - cx1) * config.mag_viz.beam_cone_length
+        fov_cone_length = link_span * config.mag_viz.fov_cone_length
+        beam_cone_length = link_span * config.mag_viz.beam_cone_length
 
         scale_factor = (
             math.radians(visual_limit_deg) / axis_limit
@@ -355,8 +357,13 @@ class MagPanelWidget(QWidget):
         # when the camera is not animating.
         baseline_tilt = self._display_signed_tilt
         pin_blend = self._display_pin_blend
-        link_span = cx2 - cx1
-        cy1, cy2 = self._satellite_y_positions(cy, link_span, baseline_tilt, pin_blend)
+        cy1_off, cy2_off = self._satellite_y_positions(
+            0.0, link_span, baseline_tilt, pin_blend
+        )
+        lowest_off = max(cy1_off, cy2_off)
+        cy = H - bottom_margin - (self._SAT_RADIUS + lowest_off) * self._DIAGRAM_SCALE
+        cy1 = cy + cy1_off
+        cy2 = cy + cy2_off
 
         # Title (fixed size; not part of the scaled diagram)
         painter.setPen(QColor(40, 40, 40))
@@ -467,7 +474,7 @@ class MagPanelWidget(QWidget):
             # 3. Draw Satellite Point
             painter.setPen(QPen(QColor(0, 0, 0), 1.5))
             painter.setBrush(QBrush(color))
-            painter.drawEllipse(QPointF(cx, cy_sat), 8.0, 8.0)
+            painter.drawEllipse(QPointF(cx, cy_sat), self._SAT_RADIUS, self._SAT_RADIUS)
 
             # 4. Draw Label
             painter.setPen(QColor(40, 40, 40))

@@ -31,3 +31,4 @@ slider_debounce_ms = 1
 visual_limit_deg = 40.0
 fov_cone_length = 1.01
 beam_cone_length = 1.01
+bottom_margin = 48.0

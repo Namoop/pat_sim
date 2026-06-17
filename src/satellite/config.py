@@ -76,6 +76,7 @@ class MagVizConfig:
     visual_limit_deg: float
     fov_cone_length: float = 1.0
     beam_cone_length: float = 1.0
+    bottom_margin: float = 48.0
 
 
 MapVizConfig = EyeVizConfig
@@ -242,10 +243,12 @@ def _load_mag_viz(data: dict) -> MagVizConfig:
     visual_limit_deg = float(data.get("visual_limit_deg", 25.0))
     fov_cone_length = float(data.get("fov_cone_length", 1.0))
     beam_cone_length = float(data.get("beam_cone_length", 1.0))
+    bottom_margin = float(data.get("bottom_margin", 48.0))
     return MagVizConfig(
         visual_limit_deg=visual_limit_deg,
         fov_cone_length=fov_cone_length,
         beam_cone_length=beam_cone_length,
+        bottom_margin=bottom_margin,
     )
 
 
