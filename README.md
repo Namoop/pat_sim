@@ -41,4 +41,5 @@ For details on configuration, strategy details, CLI reference, and architecture/
 - **[docs/strategies.md](docs/strategies.md)**: Descriptions of built-in pointing search strategies.
 - **[docs/cli.md](docs/cli.md)**: Detailed command-line reference, benchmarking, and troubleshooting.
 - **[docs/model.md](docs/model.md)**: Physics model description, FSM acquisition logic, and package layout.
+- **[docs/optimize.md](docs/optimize.md)**: Strategy parameter optimizer — methodology, CLI options, and physical speed validation.
 

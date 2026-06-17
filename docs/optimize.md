@@ -1,6 +1,6 @@
 # Pointing Acquisition Strategy Parameter Optimization
 
-This folder contains a utility script to find optimal parameters for built-in acquisition strategies in the satellite simulator.
+The `src/optimize` module provides a utility to find optimal parameters for built-in acquisition strategies in the satellite simulator.
 
 ## Optimization Methodology
 
@@ -92,6 +92,6 @@ PYTHONPATH=src python -m optimize --strategy random_walk --method grid --grid-po
 | `--grid-points` | `int` | `5` | Points per parameter axis for `grid` search. |
 | `--eval-runs` | `int` | `30` | Number of pre-sampled scenarios used to evaluate each candidate configuration. Higher is more accurate but slower. |
 | `--sim-config` | `str` | `Simulation.toml` | Path to the simulation configuration file. |
-| `--mc-config` | `str` | `MC_scans.toml` | Path to the Monte Carlo configuration file. |
+| `--mc-config` | `str` | `MonteCarlo.toml` | Path to the Monte Carlo configuration file. |
 | `--workers` | `int` | `CPU-1` | Maximum parallel worker processes to use. |
 | `--seed` | `int` | `42` | Random seed used to pre-sample pointing offsets. |
