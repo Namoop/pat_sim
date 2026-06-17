@@ -159,9 +159,23 @@ class MagPanelWidget(QWidget):
                     visual_alpha,
                     beam_cone_length,
                 )
-                painter.setPen(QPen(QColor(255, 102, 0), 1.5))
-                painter.setBrush(QBrush(QColor(255, 136, 0, 80)))
+                # Fill the polygon with NoPen outline
+                painter.setPen(Qt.PenStyle.NoPen)
+                partner_panel = scene.s2 if name == "S1" else scene.s1
+                if partner_panel.partner_in_fov:
+                    # Normal orange beam
+                    painter.setBrush(QBrush(QColor(255, 136, 0, 80)))
+                    outline_pen = QPen(QColor(255, 102, 0), 1.5)
+                else:
+                    # Gray beam with decent opacity
+                    painter.setBrush(QBrush(QColor(180, 180, 180, 100)))
+                    outline_pen = QPen(QColor(140, 140, 140), 1.5)
                 painter.drawPolygon(beam_poly)
+
+                # Draw only the two side lines
+                painter.setPen(outline_pen)
+                painter.drawLine(beam_poly[0], beam_poly[1])
+                painter.drawLine(beam_poly[0], beam_poly[2])
 
             # 2. Draw Receiver FOV Dotted Cone if active
             if panel.fov is not None:
@@ -172,11 +186,17 @@ class MagPanelWidget(QWidget):
                     visual_fov,
                     fov_cone_length,
                 )
-                fov_pen = QPen(color, 1.5)
-                fov_pen.setStyle(Qt.PenStyle.DashLine)
+                # Apply transparency to the receiver FOV dotted lines
+                fov_color = QColor(color)
+                fov_color.setAlpha(150)
+                fov_pen = QPen(fov_color, 1.5)
+                fov_pen.setStyle(Qt.PenStyle.DotLine)
                 painter.setPen(fov_pen)
                 painter.setBrush(Qt.BrushStyle.NoBrush)
-                painter.drawPolygon(fov_poly)
+
+                # Draw only the two side lines
+                painter.drawLine(fov_poly[0], fov_poly[1])
+                painter.drawLine(fov_poly[0], fov_poly[2])
 
             # 3. Draw Satellite Point
             painter.setPen(QPen(QColor(0, 0, 0), 1.5))
