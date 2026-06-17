@@ -1,5 +1,5 @@
 [monte_carlo]
-simulation = "Simulation.toml"
+environment = "Environment.toml"
 seed = 3
 runs = 8
 chain = ["minor_offset", "single_miss"]

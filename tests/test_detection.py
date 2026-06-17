@@ -33,14 +33,14 @@ def test_incoming_from_source_points_at_transmitter():
 
 
 def test_off_axis_beam_rejected_when_source_outside_fov():
-    sim = load_simulation_config("config/Simulation.toml")
-    instance = load_scenario_config("config/default.toml")
+    sim = load_simulation_config("config/Environment.toml")
+    instance = load_scenario_config("config/Scenario.toml")
     instance = replace(
         instance,
         s1=BenchOffsetConfig(0.02, 0.01),
         s2=BenchOffsetConfig(0.02, 0.015),
     )
-    mc_strategy = load_monte_carlo_config("config/MC_basic.toml")
+    mc_strategy = load_monte_carlo_config("config/_montecarlo_minor.toml")
     cfg = build_scenario_config(sim, instance, strategy=mc_strategy.strategy)
     result = run_scenario(cfg)
 
@@ -73,12 +73,12 @@ def test_off_axis_beam_rejected_when_source_outside_fov():
 
 
 def test_scenario_distance_override():
-    sim = load_simulation_config("config/Simulation.toml")
-    instance = load_scenario_config("config/default.toml")
+    sim = load_simulation_config("config/Environment.toml")
+    instance = load_scenario_config("config/Scenario.toml")
     from dataclasses import replace
  
     overridden = replace(instance, overrides={"simulation": {"distance": 500.0}})
-    mc = load_monte_carlo_config("config/MC_basic.toml")
+    mc = load_monte_carlo_config("config/_montecarlo_minor.toml")
     cfg = build_scenario_config(sim, overridden, strategy=mc.strategy)
     s1_pos, s2_pos = positions_for_distance(500.0)
     np.testing.assert_allclose(cfg.s1.position, s1_pos)
@@ -86,8 +86,8 @@ def test_scenario_distance_override():
 
 
 def test_scenario_generic_overrides():
-    sim = load_simulation_config("config/Simulation.toml")
-    instance = load_scenario_config("config/default.toml")
+    sim = load_simulation_config("config/Environment.toml")
+    instance = load_scenario_config("config/Scenario.toml")
     from dataclasses import replace
  
     overridden = replace(
@@ -97,7 +97,7 @@ def test_scenario_generic_overrides():
             "satellite": {"max_fsm_radius": 0.5},
         }
     )
-    mc = load_monte_carlo_config("config/MC_basic.toml")
+    mc = load_monte_carlo_config("config/_montecarlo_minor.toml")
     cfg = build_scenario_config(sim, overridden, strategy=mc.strategy)
     
     assert cfg.simulation.t_step == 0.005
@@ -108,7 +108,7 @@ def test_scenario_toml_simulation_path_and_override_parsing(tmp_path):
     toml_content = """
 [scenario]
 name = "override_test"
-simulation_file = "Simulation.toml"
+environment = "Environment.toml"
 simulation.t_step = 0.005
 chain = ["minor_offset"]
 
@@ -123,7 +123,7 @@ bench_phi_offset = 1.5
     p = tmp_path / "scenario_test.toml"
     p.write_text(toml_content)
     
-    # We also need a Simulation.toml in the same dir for resolving
+    # We also need an Environment.toml in the same dir for resolving
     sim_content = """
 [satellite]
 body_radius = 0.5
@@ -154,7 +154,7 @@ profile_frames = false
 axis_limit = 10.0
 slider_debounce_ms = 16
 """
-    (tmp_path / "Simulation.toml").write_text(sim_content)
+    (tmp_path / "Environment.toml").write_text(sim_content)
     
     # Load and build config
     from satellite.config import load_single_scenario

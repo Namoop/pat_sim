@@ -91,7 +91,7 @@ python -m optimize --strategy random_walk --method grid --grid-points 10
 | `--trials` | `int` | `20` | Number of iterations for `random` or `optuna` search. |
 | `--grid-points` | `int` | `5` | Points per parameter axis for `grid` search. |
 | `--eval-runs` | `int` | `30` | Number of pre-sampled scenarios used to evaluate each candidate configuration. Higher is more accurate but slower. |
-| `--sim-config` | `str` | `Simulation.toml` | Path to the simulation configuration file. |
+| `--env-config` | `str` | `Environment.toml` | Path to the environment configuration file. |
 | `--mc-config` | `str` | `MonteCarlo.toml` | Path to the Monte Carlo configuration file. |
 | `--workers` | `int` | `CPU-1` | Maximum parallel worker processes to use. |
 | `--seed` | `int` | `42` | Random seed used to pre-sample pointing offsets. |

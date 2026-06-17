@@ -18,7 +18,7 @@ def test_autoplay_requires_monte_carlo():
 
 def test_autoplay_requires_positive_speed():
     with pytest.raises(SystemExit):
-        main(["--monte-carlo", "config/MC_basic.toml", "--autoplay", "0"])
+        main(["--monte-carlo", "config/_montecarlo_minor.toml", "--autoplay", "0"])
 
 
 def test_autoplay_without_speed_defaults_to_one(monkeypatch):
@@ -30,19 +30,19 @@ def test_autoplay_without_speed_defaults_to_one(monkeypatch):
         return 0
 
     monkeypatch.setattr("satellite.visualize.run_visualizer", fake_run_visualizer)
-    main(["--monte-carlo", str(repo / "config/MC_basic.toml"), "--visualize", "--autoplay"])
+    main(["--monte-carlo", str(repo / "config/_montecarlo_minor.toml"), "--visualize", "--autoplay"])
     assert captured["autoplay_speed"] == 1.0
 
 
 def test_autoplay_requires_visualization(tmp_path):
     repo = Path(__file__).resolve().parents[1]
-    sim = tmp_path / "Simulation.toml"
-    sim.write_text((repo / "config/Simulation.toml").read_text())
-    mc = tmp_path / "MC_basic.toml"
+    sim = tmp_path / "Environment.toml"
+    sim.write_text((repo / "config/Environment.toml").read_text())
+    mc = tmp_path / "_montecarlo_minor.toml"
     mc.write_text(
         (FIXTURES / "MonteCarlo_success.toml")
         .read_text()
-        .replace('simulation = "Simulation.toml"', f'simulation = "{sim.name}"')
+        .replace('environment = "Environment.toml"', f'environment = "{sim.name}"')
     )
     with pytest.raises(SystemExit):
         main(["--monte-carlo", str(mc), "--autoplay", "1"])

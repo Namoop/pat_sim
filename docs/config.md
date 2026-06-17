@@ -6,7 +6,7 @@ All angular values, pointing offsets, and angular speeds in the configuration fi
 
 ---
 
-## 1. Scenario Instance Config (`default.toml`)
+## 1. Scenario Instance Config (`Scenario.toml`)
 
 These parameters define a specific scenario run and are loaded by [load_scenario_config](file:///home/theodore/Documents/satellite/src/satellite/config.py).
 
@@ -14,7 +14,7 @@ These parameters define a specific scenario run and are loaded by [load_scenario
 
 - `name` (string): Unique identifier for the scenario instance.
 - `chain` (array of strings, required): Ordered list of search strategies to run (e.g., `["minor_offset", "single_miss"]`).
-- `simulation_file` or `simulation` (string, optional): Path to the associated `Simulation.toml` file (resolved relative to the scenario file). Note that if you also specify overrides under `simulation` (such as `simulation.t_step`), you must use `simulation_file = "..."` to avoid TOML table redefinition errors.
+- `environment`, `simulation_file`, or `simulation` (string, optional): Path to the associated `Environment.toml` file (resolved relative to the scenario file). Note that if you also specify overrides under `simulation` (such as `simulation.t_step`), you must use `environment = "..."` to avoid TOML table redefinition errors.
 - `visualize` (string, optional): Automatically opens visualizer after a single run if set to `"3d"` or `"map"`.
 - **Arbitrary Property Overrides**: Any simulation or satellite property can be overridden for the specific scenario using dotted keys or nested sub-tables under `[scenario]`.
   - **Dotted Keys**: `simulation.distance = 500`, `simulation.t_step = 0.001`, or `satellite.max_fsm_radius = 0.5`.
@@ -36,7 +36,7 @@ These parameters define a specific scenario run and are loaded by [load_scenario
 
 ---
 
-## 2. Hardware and Environment Config (`Simulation.toml`)
+## 2. Hardware and Environment Config (`Environment.toml`)
 
 These parameters define spacecraft hardware limits, simulation steps, and visualizer properties. Loaded by [load_simulation_config](file:///home/theodore/Documents/satellite/src/satellite/config.py).
 
@@ -81,10 +81,11 @@ These parameters define jumble distributions, random seeds, and strategy paramet
 
 ### `[monte_carlo]`
 
-- `simulation` (string): Path to the associated `Simulation.toml` file.
+- `environment`, `simulation_file`, or `simulation` (string): Path to the associated `Environment.toml` file.
 - `seed` (int): Base random seed for reproducing jumble errors.
 - `runs` (int): Number of batch runs to execute.
 - `chain` (array of strings): Ordered list of search strategies to run (e.g., `["minor_offset", "single_miss"]`).
+- **Arbitrary Property Overrides**: Any simulation or satellite property can be overridden using dotted keys or nested sub-tables under `[monte_carlo]` (exactly matching the overrides behavior in Section 1).
 
 ### `[monte_carlo.error]`
 
@@ -98,19 +99,41 @@ These parameters define jumble distributions, random seeds, and strategy paramet
 
 *Note on Gaussian distribution: Both $\theta$ and $\phi$ offsets are generated independently from this same distribution.*
 
+## 4. Parameter Optimization Config (`Optimize.toml`)
+
+These parameters define the configuration for pointing acquisition strategy parameter tuning (via grid, random, or Optuna search).
+
+### `[optimize]`
+
+- `strategy` (string, required): The name of the strategy to optimize (e.g., `"lissajous_scan"`).
+- `method` (string): The search algorithm to employ. Choices: `"grid"`, `"random"`, or `"optuna"`.
+- `trials` (int): Number of trials to run when using `"random"` or `"optuna"` methods.
+- `trial_seed` (int, optional): Seed for the search algorithm sampler.
+
+### `[monte_carlo]`
+
+Defines the evaluation environment for testing candidate parameter sets.
+- `environment`, `simulation_file`, or `simulation` (string): Path to the associated `Environment.toml` base config.
+- `seed` (int): Seed for sampling fixed pointing offsets to evaluate candidates.
+- `runs` (int): Number of evaluation offsets tested per trial.
+- `error.<param>` the settings in the previous section for `[monte_carlo.error]`
+
 ---
 
-## 4. Strategy-Specific Config Parameters
+## 5. Strategy-Specific Config Parameters
 
 These parameters tune the behavior of individual strategies. For a detailed reference of all parameters for each individual search strategy, see [docs/strategies.md](strategies.md).
 
 ### Examples
 
 #### `[strategy.minor_offset]` (FOV-limited spiral)
-* `max_spiral_radius` (float or `"fov"`, milliradians): Limit of the spiral search radius. `"fov"` dynamically matches `dish_fov`.
-* `spiral_speed` (float): Speed multiplier for the spiral track.
+
+- `max_spiral_radius` (float or `"fov"`, milliradians): Limit of the spiral search radius. `"fov"` dynamically matches `dish_fov`.
+- `spiral_speed` (float): Speed multiplier for the spiral track.
 
 #### `[strategy.single_miss]` (Two-phase alternating spiral)
-* `a_spiral_radius` (float or `"fov"`, milliradians): Spiral radius for S1.
-* `b_spiral_radius` (float or `"fov"`, milliradians): Spiral radius for S2.
-* `spiral_speed` (float): Speed multiplier for the spirals.
+
+- `a_spiral_radius` (float or `"fov"`, milliradians): Spiral radius for S1.
+- `b_spiral_radius` (float or `"fov"`, milliradians): Spiral radius for S2.
+- `spiral_speed` (float): Speed multiplier for the spirals.
+

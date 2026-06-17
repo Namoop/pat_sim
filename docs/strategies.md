@@ -24,7 +24,7 @@ Custom strategies are implemented using the Python DSL in `src/satellite/strateg
 
 ## Global Search Constraints
 
-Several strategies reference a global bounding volume for the search. This is typically configured in `Simulation.toml`.
+Several strategies reference a global bounding volume for the search. This is typically configured in `Environment.toml`.
 
 
 | Parameter           | Default  | Description                                                                                                   |

@@ -52,10 +52,10 @@ def test_seeded_sampling_is_reproducible():
 
 
 def test_build_scenario_config_x_axis_positions():
-    sim_path = REPO_ROOT / "config/Simulation.toml"
+    sim_path = REPO_ROOT / "config/Environment.toml"
     sim = load_simulation_config(sim_path)
-    instance = load_scenario_config(REPO_ROOT / "config/default.toml")
-    mc = load_monte_carlo_config(REPO_ROOT / "config/MC_basic.toml")
+    instance = load_scenario_config(REPO_ROOT / "config/Scenario.toml")
+    mc = load_monte_carlo_config(REPO_ROOT / "config/_montecarlo_minor.toml")
     cfg = build_scenario_config(sim, instance, strategy=mc.strategy)
     s1_pos, s2_pos = positions_for_distance(sim.simulation.distance)
     np.testing.assert_allclose(cfg.s1.position, s1_pos)
@@ -64,7 +64,7 @@ def test_build_scenario_config_x_axis_positions():
 
 def test_monte_carlo_success_biased_fixture():
     mc = load_monte_carlo_config(FIXTURES / "MonteCarlo_success.toml")
-    mc = replace(mc, simulation_path=(REPO_ROOT / "config/Simulation.toml").resolve())
+    mc = replace(mc, simulation_path=(REPO_ROOT / "config/Environment.toml").resolve())
     summary = run_monte_carlo(mc, max_workers=1)
     assert summary.runs == 15
     assert summary.success_rate >= 0.8
@@ -72,7 +72,7 @@ def test_monte_carlo_success_biased_fixture():
 
 def test_monte_carlo_failure_biased_fixture():
     mc = load_monte_carlo_config(FIXTURES / "MonteCarlo_fail.toml")
-    mc = replace(mc, simulation_path=(REPO_ROOT / "config/Simulation.toml").resolve())
+    mc = replace(mc, simulation_path=(REPO_ROOT / "config/Environment.toml").resolve())
     summary = run_monte_carlo(mc, max_workers=1)
     assert summary.runs == 8
     assert summary.successes == 0
@@ -137,7 +137,7 @@ def test_monte_carlo_graceful_interrupt(monkeypatch):
     mc = load_monte_carlo_config(FIXTURES / "MonteCarlo_success.toml")
     mc = replace(
         mc,
-        simulation_path=(REPO_ROOT / "config/Simulation.toml").resolve(),
+        simulation_path=(REPO_ROOT / "config/Environment.toml").resolve(),
         runs=5,
         chain=mc.strategy.chain,
     )
@@ -167,7 +167,7 @@ def test_monte_carlo_graceful_interrupt(monkeypatch):
 def test_monte_carlo_toml_parsing(tmp_path):
     toml_content = """
 [monte_carlo]
-simulation = "Simulation.toml"
+environment = "Environment.toml"
 seed = 42
 runs = 8
 chain = ["minor_offset", "single_miss"]
@@ -188,5 +188,40 @@ chain = ["minor_offset"]
     assert mc.seed == 42
     assert mc.chain == ("minor_offset", "single_miss")
     assert "single_miss" in mc.strategy.params
+
+
+def test_monte_carlo_overrides_parsing_and_application(tmp_path):
+    sim_file = tmp_path / "Environment.toml"
+    sim_file.write_text((REPO_ROOT / "config/Environment.toml").read_text())
+
+    toml_content = f"""
+[monte_carlo]
+environment = "{sim_file.name}"
+seed = 42
+runs = 2
+chain = ["minor_offset"]
+simulation.distance = 750.0
+satellite.max_beam_speed = 99.0
+
+[monte_carlo.error]
+distribution = "uniform"
+uniform.max = 0.02
+"""
+    p = tmp_path / "test_mc_overrides.toml"
+    p.write_text(toml_content)
+    
+    mc = load_monte_carlo_config(p)
+    assert mc.overrides["simulation"]["distance"] == 750.0
+    assert mc.overrides["satellite"]["max_beam_speed"] == 99.0
+
+    sim = load_simulation_config(sim_file)
+    from satellite.config import ScenarioInstance, BenchOffsetConfig, build_scenario_config
+    dummy = BenchOffsetConfig(0.0, 0.0)
+    instance = ScenarioInstance("test", dummy, dummy, overrides=mc.overrides)
+    cfg = build_scenario_config(sim, instance, strategy=mc.strategy)
+
+    assert cfg.simulation.distance == 750.0
+    assert cfg.satellite.max_beam_speed == 0.099
+
 
 
