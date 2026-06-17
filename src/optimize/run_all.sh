@@ -28,7 +28,7 @@ METHOD="${2:-random}"
 EVAL_RUNS="${3:-30}"
 
 OPTIMIZER="src/optimize/__main__.py"
-SIM_CONFIG="config/Simulation.toml"
+ENV_CONFIG="config/Environment.toml"
 MC_CONFIG="config/MonteCarlo.toml"
 LOG_DIR="src/optimize/logs"
 
@@ -51,8 +51,8 @@ if [[ ! -f "$OPTIMIZER" ]]; then
     exit 1
 fi
 
-if [[ ! -f "$SIM_CONFIG" ]]; then
-    echo "ERROR: $SIM_CONFIG not found. Run this script from the repository root." >&2
+if [[ ! -f "$ENV_CONFIG" ]]; then
+    echo "ERROR: $ENV_CONFIG not found. Run this script from the repository root." >&2
     exit 1
 fi
 
@@ -85,7 +85,7 @@ echo " Strategies : ${TOTAL}"
 echo " Method     : ${METHOD}"
 echo " Trials     : ${TRIALS}"
 echo " Eval runs  : ${EVAL_RUNS}"
-echo " Sim config : ${SIM_CONFIG}"
+echo " Env config : ${ENV_CONFIG}"
 echo " MC config  : ${MC_CONFIG}"
 echo " Log dir    : ${LOG_DIR}"
 echo " Started    : $(date '+%Y-%m-%d %H:%M:%S')"
@@ -115,7 +115,7 @@ for i in "${!STRATEGIES[@]}"; do
             --method     "$METHOD" \
             --trials     "$TRIALS" \
             --eval-runs  "$EVAL_RUNS" \
-            --sim-config "$SIM_CONFIG" \
+            --env-config "$ENV_CONFIG" \
             --mc-config  "$MC_CONFIG" \
         2>&1 | tee "$LOG_FILE"; then
 

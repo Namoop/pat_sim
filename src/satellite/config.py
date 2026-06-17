@@ -163,6 +163,7 @@ class MonteCarloConfig:
     strategy: StrategyConfig
     runs: int
     chain: tuple[str, ...]
+    overrides: dict[str, dict[str, Any]] = field(default_factory=dict)
 
 
 def positions_for_distance(distance: float) -> tuple[Vec3, Vec3]:
@@ -296,7 +297,9 @@ def load_scenario_config(path: str | Path) -> ScenarioInstance:
     if scenario_chain is None:
         raise ValueError(f"scenario.chain is required in scenario config: {path}")
         
-    simulation_rel = scenario.get("simulation_file")
+    simulation_rel = scenario.get("environment")
+    if simulation_rel is None:
+        simulation_rel = scenario.get("simulation_file")
     if simulation_rel is None:
         simulation_val = scenario.get("simulation")
         if isinstance(simulation_val, (str, Path)):
@@ -314,7 +317,7 @@ def load_scenario_config(path: str | Path) -> ScenarioInstance:
     
     overrides: dict[str, dict[str, Any]] = {}
     for key, value in scenario.items():
-        if key in ("name", "chain", "simulation_file", "visualize"):
+        if key in ("name", "chain", "environment", "simulation_file", "visualize"):
             continue
         if key == "simulation" and isinstance(value, (str, Path)):
             continue
@@ -355,7 +358,12 @@ def load_monte_carlo_config(path: str | Path) -> MonteCarloConfig:
     with config_path.open("rb") as f:
         data = tomllib.load(f)
     mc = data.get("monte_carlo", {})
-    simulation_rel = str(mc.get("simulation", "Simulation.toml"))
+    simulation_rel = mc.get("environment")
+    if simulation_rel is None:
+        simulation_rel = mc.get("simulation_file")
+    if simulation_rel is None:
+        simulation_rel = mc.get("simulation", "Environment.toml")
+    simulation_rel = str(simulation_rel)
     simulation_path = (config_path.parent / simulation_rel).resolve()
     
     if not simulation_path.exists():
@@ -373,8 +381,18 @@ def load_monte_carlo_config(path: str | Path) -> MonteCarloConfig:
     
     runs = int(mc.get("runs", 1))
     chain_list = list(mc.get("chain", []))
-    if not chain_list:
-        raise ValueError("monte_carlo.chain is required")
+
+    overrides: dict[str, dict[str, Any]] = {}
+    for key, value in mc.items():
+        if key in ("runs", "seed", "chain", "environment", "simulation_file", "simulation", "error"):
+            continue
+        if "." in key:
+            parts = key.split(".", 1)
+            section, prop = parts[0], parts[1]
+            overrides.setdefault(section, {})[prop] = value
+        elif isinstance(value, dict):
+            for prop, val in value.items():
+                overrides.setdefault(key, {})[prop] = val
 
     strategy = _load_strategy(data.get("strategy", {}), chain_list=chain_list, default_k=sim_bundle.satellite.k)
 
@@ -385,6 +403,7 @@ def load_monte_carlo_config(path: str | Path) -> MonteCarloConfig:
         strategy=strategy,
         runs=runs,
         chain=tuple(chain_list),
+        overrides=overrides,
     )
 
 
@@ -466,9 +485,9 @@ def load_single_scenario(
         simulation_path = instance.simulation_path
         
     if simulation_path is None:
-        fallback_path = Path(scenario_path).parent / "Simulation.toml"
+        fallback_path = Path(scenario_path).parent / "Environment.toml"
         if not fallback_path.exists():
-            fallback_path = Path("config/Simulation.toml")
+            fallback_path = Path("config/Environment.toml")
         simulation_path = fallback_path
 
     sim = load_simulation_config(simulation_path)

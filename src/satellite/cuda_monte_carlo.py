@@ -908,7 +908,7 @@ def is_strategy_chain_supported_on_gpu(mc: MonteCarloConfig) -> bool:
     
     from satellite.config import BenchOffsetConfig
     dummy_offset = BenchOffsetConfig(0.0, 0.0)
-    mock_config = build_scenario_config(sim, ScenarioInstance("dummy_s", dummy_offset, dummy_offset), strategy=mc.strategy)
+    mock_config = build_scenario_config(sim, ScenarioInstance("dummy_s", dummy_offset, dummy_offset, overrides=getattr(mc, "overrides", {})), strategy=mc.strategy)
     
     s1 = Satellite.build("S1", mock_config.s1, partner_pos, mock_config)
     s2 = Satellite.build("S2", mock_config.s2, dummy_pos, mock_config)
@@ -941,6 +941,10 @@ def run_monte_carlo_cuda_batch(configs: list[MonteCarloConfig]) -> list[MonteCar
     """Launch multiple Monte Carlo configs in a single GPU kernel batch."""
     import time
     
+    for c in configs:
+        if not c.chain:
+            raise ValueError("monte_carlo.chain is required to run a Monte Carlo simulation")
+
     B = len(configs)
     if B == 0:
         return []
@@ -962,7 +966,7 @@ def run_monte_carlo_cuda_batch(configs: list[MonteCarloConfig]) -> list[MonteCar
     all_global_t_starts = []
     
     for mc_cfg in configs:
-        mock_config = build_scenario_config(sim, ScenarioInstance("dummy_s", dummy_offset, dummy_offset), strategy=mc_cfg.strategy)
+        mock_config = build_scenario_config(sim, ScenarioInstance("dummy_s", dummy_offset, dummy_offset, overrides=getattr(mc_cfg, "overrides", {})), strategy=mc_cfg.strategy)
         s1 = Satellite.build("S1", mock_config.s1, partner_pos, mock_config)
         s2 = Satellite.build("S2", mock_config.s2, dummy_pos, mock_config)
         ctx = StrategyContext(s1=s1, s2=s2, config=mock_config)

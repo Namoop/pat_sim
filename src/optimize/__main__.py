@@ -749,10 +749,10 @@ def main():
         help="Number of pre-sampled initial offset scenarios for evaluation.",
     )
     parser.add_argument(
-        "--sim-config",
+        "--env-config",
         type=str,
-        default="config/Simulation.toml",
-        help="Path to Simulation.toml config.",
+        default="config/Environment.toml",
+        help="Path to Environment.toml config.",
     )
     parser.add_argument(
         "--mc-config",
@@ -781,7 +781,7 @@ def main():
 
     args = parser.parse_args()
 
-    sim_cfg = load_simulation_config(args.sim_config)
+    sim_cfg = load_simulation_config(args.env_config)
     mc_cfg = load_monte_carlo_config(args.mc_config)
 
     print(

@@ -151,6 +151,7 @@ def run_monte_carlo_single(
         name=f"mc_run_{run_index}",
         s1=s1_off,
         s2=s2_off,
+        overrides=mc.overrides,
     )
     config = build_scenario_config(sim, instance, strategy=strategy or mc.strategy)
     t0 = time.perf_counter()
@@ -247,6 +248,9 @@ def run_monte_carlo(
     mc: MonteCarloConfig,
     max_workers: int | None = None,
 ) -> MonteCarloSummary:
+    if not mc.chain:
+        raise ValueError("monte_carlo.chain is required to run a Monte Carlo simulation")
+
     from satellite.cuda_monte_carlo import is_strategy_chain_supported_on_gpu, run_monte_carlo_cuda
     if is_strategy_chain_supported_on_gpu(mc):
         print("Running Monte Carlo simulation on GPU (RTX 3050)...", flush=True)

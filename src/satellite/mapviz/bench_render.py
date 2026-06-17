@@ -104,7 +104,7 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Benchmark mapviz QPainter render.")
     parser.add_argument(
         "--scenario",
-        default="config/default.toml",
+        default="config/Scenario.toml",
         help="Scenario instance TOML",
     )
     parser.add_argument(

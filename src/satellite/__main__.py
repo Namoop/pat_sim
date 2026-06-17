@@ -21,21 +21,25 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument(
         "--monte-carlo",
+        nargs="?",
+        const=Path("config/MonteCarlo.toml"),
         type=Path,
         default=None,
-        help="Run Monte Carlo batch from config/MonteCarlo.toml",
+        help="Run Monte Carlo batch; defaults to config/MonteCarlo.toml if flag is provided without path",
     )
     parser.add_argument(
         "--scenario",
+        nargs="?",
+        const=Path("config/Scenario.toml"),
         type=Path,
-        default=Path("config/default.toml"),
-        help="Scenario instance TOML (bench offsets, optional distance override)",
+        default=Path("config/Scenario.toml"),
+        help="Scenario instance TOML (default: config/Scenario.toml)",
     )
     parser.add_argument(
-        "--simulation",
+        "--environment",
         type=Path,
         default=None,
-        help="Simulation base TOML (physics, timing, visualization; default: config/Simulation.toml or scenario-defined)",
+        help="Environment base TOML (physics, timing, visualization; default: config/Environment.toml or scenario-defined)",
     )
 
     parser.add_argument(
@@ -115,11 +119,11 @@ def main(argv: list[str] | None = None) -> int:
         print(f"Scenario config not found: {args.scenario}", file=sys.stderr)
         return 1
 
-    if args.simulation is not None and not args.simulation.exists():
-        print(f"Simulation config not found: {args.simulation}", file=sys.stderr)
+    if args.environment is not None and not args.environment.exists():
+        print(f"Environment config not found: {args.environment}", file=sys.stderr)
         return 1
 
-    config = load_single_scenario(args.scenario, args.simulation)
+    config = load_single_scenario(args.scenario, args.environment)
     result = run_scenario(config)
     print(format_summary(result))
 
