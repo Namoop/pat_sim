@@ -73,13 +73,13 @@ Run the optimization script from the root repository directory:
 
 ```bash
 # Basic Random Search optimization for random_curve (20 trials)
-PYTHONPATH=src python -m optimize --strategy random_curve --method random --trials 20
+python -m optimize --strategy random_curve --method random --trials 20
 
 # Optuna Bayesian optimization for center_rebias (50 trials)
-PYTHONPATH=src python -m optimize --strategy center_rebias --method optuna --trials 50
+python -m optimize --strategy center_rebias --method optuna --trials 50
 
 # Grid Search optimization for random_walk (10 grid points)
-PYTHONPATH=src python -m optimize --strategy random_walk --method grid --grid-points 10
+python -m optimize --strategy random_walk --method grid --grid-points 10
 ```
 
 ### Command-Line Options
