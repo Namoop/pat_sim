@@ -14,15 +14,11 @@ if TYPE_CHECKING:
 
 @dataclass(frozen=True)
 class DualSpiralConfig:
-    speed_a: float = 1.0
-    speed_ratio: float = 1.41421356  # sqrt(2)
+    pass
 
 
 def parse_dual_spiral_config(data: dict) -> DualSpiralConfig:
-    return DualSpiralConfig(
-        speed_a=float(data.get("speed_a", 1.0)),
-        speed_ratio=float(data.get("speed_ratio", 1.41421356)),
-    )
+    return DualSpiralConfig()
 
 
 @register_strategy("dual_spiral", parse_dual_spiral_config)
@@ -44,13 +40,11 @@ class DualSpiralStrategy(SearchStrategy):
         from satellite.strategy.actions import hold
 
         max_radius = ctx.config.simulation.max_search_radius
-        speed_a = self.config.speed_a
-        speed_b = speed_a * self.config.speed_ratio
+        max_beam_speed = ctx.config.satellite.max_beam_speed
         strategy_config = ctx.config.strategy
 
         # Duration for out-and-back spiral
-        duration_a = strategy_config.spiral_duration(max_radius, self.w, speed_a)
-        duration_b = strategy_config.spiral_duration(max_radius, self.w, speed_b)
+        duration = strategy_config.spiral_duration(max_radius, self.w, max_beam_speed)
         timeout = ctx.config.simulation.timeout
 
         script = strategy(self.name)
@@ -58,24 +52,24 @@ class DualSpiralStrategy(SearchStrategy):
         with script.satellite("S1"):
             beam.enable(); receiver.enable()
             current_t = 0.0
-            cycle_a = 2 * duration_a
-            if cycle_a > 0.0:
-                while current_t + cycle_a <= timeout:
-                    spiral(duration=duration_a, w=self.w, k=self.k, max_radius=max_radius, speed=speed_a)
-                    spiral(duration=duration_a, w=self.w, k=self.k, max_radius=0, speed=speed_a)
-                    current_t += cycle_a
+            cycle = 2 * duration
+            if cycle > 0.0:
+                while current_t + cycle <= timeout:
+                    spiral(duration=duration, w=self.w, k=self.k, max_radius=max_radius)
+                    spiral(duration=duration, w=self.w, k=self.k, max_radius=0)
+                    current_t += cycle
             if current_t < timeout:
                 hold(duration=timeout - current_t)
 
         with script.satellite("S2"):
             beam.enable(); receiver.enable()
             current_t = 0.0
-            cycle_b = 2 * duration_b
-            if cycle_b > 0.0:
-                while current_t + cycle_b <= timeout:
-                    spiral(duration=duration_b, w=self.w, k=self.k, max_radius=max_radius, speed=speed_b)
-                    spiral(duration=duration_b, w=self.w, k=self.k, max_radius=0, speed=speed_b)
-                    current_t += cycle_b
+            cycle = 2 * duration
+            if cycle > 0.0:
+                while current_t + cycle <= timeout:
+                    spiral(duration=duration, w=self.w, k=self.k, max_radius=max_radius)
+                    spiral(duration=duration, w=self.w, k=self.k, max_radius=0)
+                    current_t += cycle
             if current_t < timeout:
                 hold(duration=timeout - current_t)
 

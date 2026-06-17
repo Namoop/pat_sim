@@ -16,7 +16,6 @@ if TYPE_CHECKING:
 @dataclass(frozen=True)
 class MinorOffsetConfig:
     max_spiral_radius: str | float
-    spiral_speed: float
 
 
 def parse_minor_offset_config(data: dict) -> MinorOffsetConfig:
@@ -25,7 +24,6 @@ def parse_minor_offset_config(data: dict) -> MinorOffsetConfig:
         radius = float(radius) * 1e-3
     return MinorOffsetConfig(
         max_spiral_radius=radius,
-        spiral_speed=float(data.get("spiral_speed", 1.0)),
     )
 
 
@@ -54,8 +52,9 @@ class MinorOffsetStrategy(SearchStrategy):
         radius = StrategyConfig.resolve_radius(
             self.config.max_spiral_radius, ctx.config.satellite.dish_fov
         )
+        max_beam_speed = ctx.config.satellite.max_beam_speed
         duration = ctx.config.strategy.spiral_duration(
-            radius, self.w, self.config.spiral_speed
+            radius, self.w, max_beam_speed
         )
 
         script = strategy(self.name)
@@ -67,7 +66,6 @@ class MinorOffsetStrategy(SearchStrategy):
                 w=self.w,
                 k=self.k,
                 max_radius=radius,
-                speed=self.config.spiral_speed,
                 label="S1 FOV spiral",
             )
         with script.satellite("S2"):

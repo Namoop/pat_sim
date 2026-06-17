@@ -17,7 +17,6 @@ if TYPE_CHECKING:
 class SingleMissConfig:
     a_spiral_radius: str | float
     b_spiral_radius: str | float
-    spiral_speed: float
 
 
 def parse_single_miss_config(data: dict) -> SingleMissConfig:
@@ -30,7 +29,6 @@ def parse_single_miss_config(data: dict) -> SingleMissConfig:
     return SingleMissConfig(
         a_spiral_radius=a_radius,
         b_spiral_radius=b_radius,
-        spiral_speed=float(data.get("spiral_speed", 1.0)),
     )
 
 
@@ -63,10 +61,10 @@ class SingleMissStrategy(SearchStrategy):
         strategy_config = ctx.config.strategy
 
         p1_duration = strategy_config.spiral_duration(
-            a_radius, self.w, self.config.spiral_speed
+            a_radius, self.w, max_beam_speed
         )
         p2_duration = strategy_config.spiral_duration(
-            b_radius, self.w, self.config.spiral_speed
+            b_radius, self.w, max_beam_speed
         )
 
         # Reset from max radius back to center
@@ -83,7 +81,6 @@ class SingleMissStrategy(SearchStrategy):
                 w=self.w,
                 k=self.k,
                 max_radius=a_radius,
-                speed=self.config.spiral_speed,
                 label="S1 wide spiral",
             )
             reset(duration=reset_duration, label="S1 bench reset")
@@ -98,7 +95,6 @@ class SingleMissStrategy(SearchStrategy):
                 w=self.w,
                 k=self.k,
                 max_radius=b_radius,
-                speed=self.config.spiral_speed,
                 label="S2 wide spiral",
             )
         return script.build()

@@ -17,7 +17,6 @@ if TYPE_CHECKING:
 class AsymmetricSwapConfig:
     spiral_radius: str | float
     lock_duration: float
-    spiral_speed: float = 1.0
 
 
 def parse_asymmetric_swap_config(data: dict) -> AsymmetricSwapConfig:
@@ -27,7 +26,6 @@ def parse_asymmetric_swap_config(data: dict) -> AsymmetricSwapConfig:
     return AsymmetricSwapConfig(
         spiral_radius=radius,
         lock_duration=float(data.get("lock_duration", 1.0)),
-        spiral_speed=float(data.get("spiral_speed", 1.0)),
     )
 
 
@@ -66,7 +64,7 @@ class AsymmetricSwapStrategy(SearchStrategy):
         strategy_config = ctx.config.strategy
 
         probe_duration = strategy_config.spiral_duration(
-            radius, self.w, self.config.spiral_speed
+            radius, self.w, max_beam_speed
         )
         reset_duration = strategy_config.reset_duration(radius, max_beam_speed)
 
@@ -77,7 +75,7 @@ class AsymmetricSwapStrategy(SearchStrategy):
             # Phase 1: Probing
             beam.enable(); receiver.disable()
             spiral(duration=probe_duration, w=self.w, k=self.k, max_radius=radius, 
-                   speed=self.config.spiral_speed, label="S1 probe spiral")
+                   label="S1 probe spiral")
             reset(duration=reset_duration, label="S1 reset")
 
             # Phase 2: Listening (Swap)
@@ -99,7 +97,7 @@ class AsymmetricSwapStrategy(SearchStrategy):
             # Phase 2: Probing (Swap)
             beam.enable(); receiver.disable()
             spiral(duration=probe_duration, w=self.w, k=self.k, max_radius=radius, 
-                   speed=self.config.spiral_speed, label="S2 probe spiral")
+                   label="S2 probe spiral")
             reset(duration=reset_duration, label="S2 reset")
 
             # Phase 3: Reciprocal Lock

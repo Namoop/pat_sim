@@ -42,11 +42,11 @@ class NestedSpiralStrategy(SearchStrategy):
 
         max_radius = sim_cfg.max_search_radius
         timeout = sim_cfg.timeout
-        speed = sat_cfg.max_beam_speed  # always physical maximum
+        max_beam_speed = sat_cfg.max_beam_speed
 
         # Duration for S2 to complete one full spiral pass
         duration_inner = ctx.config.strategy.spiral_duration(
-            max_radius, self.w, speed
+            max_radius, self.w, max_beam_speed
         )
 
         # Generate step points for S1 — a sunflower lattice covering the cone
@@ -95,7 +95,6 @@ class NestedSpiralStrategy(SearchStrategy):
                         w=self.w,
                         k=self.k,
                         max_radius=max_radius if out_spiral else 0.0,
-                        speed=speed,
                     )
                     out_spiral = not out_spiral
                     current_t += duration_inner
