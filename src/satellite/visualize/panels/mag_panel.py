@@ -31,6 +31,7 @@ class MagPanelWidget(QWidget):
     """Custom drawn 2D side-view widget for the 'mag' visualization."""
 
     _TILT_ANIM_DURATION = 0.4
+    _DIAGRAM_SCALE = 1.5
 
     @staticmethod
     def _ease_tilt(t: float) -> float:
@@ -357,6 +358,16 @@ class MagPanelWidget(QWidget):
         link_span = cx2 - cx1
         cy1, cy2 = self._satellite_y_positions(cy, link_span, baseline_tilt, pin_blend)
 
+        # Title (fixed size; not part of the scaled diagram)
+        painter.setPen(QColor(40, 40, 40))
+        painter.setFont(QFont("Sans", 11, QFont.Weight.Bold))
+        painter.drawText(15, 25, "2D Magnitude Alignment Profile")
+
+        painter.save()
+        painter.translate(W * 0.5, cy)
+        painter.scale(self._DIAGRAM_SCALE, self._DIAGRAM_SCALE)
+        painter.translate(-W * 0.5, -cy)
+
         # Draw the baseline
         los_pen = QPen(QColor(210, 210, 210), 1.0)
         los_pen.setStyle(Qt.PenStyle.DashLine)
@@ -369,12 +380,6 @@ class MagPanelWidget(QWidget):
             ref_pen.setStyle(Qt.PenStyle.SolidLine)
             painter.setPen(ref_pen)
             painter.drawLine(QPointF(cx1, cy), QPointF(cx2, cy))
-
-        # Title / Mode indicator
-        painter.setPen(QColor(40, 40, 40))
-        painter.setFont(QFont("Sans", 11, QFont.Weight.Bold))
-        status_text = "Mutual Lock Established" if scene.capture_active else "Searching / Re-aligning"
-        painter.drawText(15, 25, f"2D Alignment Profile — {status_text}")
 
         alpha = config.satellite.alpha
         dish_fov = config.satellite.dish_fov
@@ -469,29 +474,7 @@ class MagPanelWidget(QWidget):
             painter.setFont(QFont("Sans", 10, QFont.Weight.Bold))
             painter.drawText(int(cx) - 10, int(cy_sat) - 14, name)
 
-            # 5. Draw Telemetry under each satellite
-            painter.setFont(QFont("Monospace", 9))
-            painter.setPen(QColor(80, 80, 80))
-            tel_y = int(cy_sat) + 30
-            painter.drawText(int(cx) - 80, tel_y, f"tx: {'ON' if panel.is_transmitting else 'OFF'}")
-            painter.drawText(int(cx) - 80, tel_y + 15, f"rx: {'ON' if panel.fov is not None else 'OFF'}")
-            painter.drawText(
-                int(cx) - 80,
-                tel_y + 30,
-                f"dev_tx: {offset_mag_tx*1e3:.2f} mrad",
-            )
-            painter.drawText(
-                int(cx) - 80,
-                tel_y + 45,
-                f"dev_rx: {offset_mag_rx*1e3:.2f} mrad",
-            )
-
-        # Draw Scale / Legend at the bottom
-        painter.setFont(QFont("Sans", 8))
-        painter.setPen(QColor(120, 120, 120))
-        legend_y = int(H) - 15
-        painter.drawText(15, legend_y, f"Cone scaling: {visual_limit_deg}° visual offset at {axis_limit*1e3:.1f} mrad physical deflection")
-
+        painter.restore()
         painter.end()
         self._last_paint_seconds = time.perf_counter() - t0
 
