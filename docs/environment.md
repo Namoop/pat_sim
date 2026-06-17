@@ -36,7 +36,19 @@ The configuration file is loaded by [load_simulation_config](file:///home/theodo
 - `ribbon_v_steps` (int): Number of steps across the swept ribbon width.
 - `profile_frames` (bool): Enables profiling of visualization updates.
 
-### `[map_viz]` (2D Map Defaults)
+### `[eye_viz]` (2D Eye Defaults)
 
 - `axis_limit` (float, milliradians): Limit of the visualizer's 2D angular map plots.
 - `slider_debounce_ms` (int): Debounce time in milliseconds for visualizer UI slider inputs.
+
+> [!NOTE]
+> Named **Eye** because you are seeing the "eye" of each satellite, and since there are two satellites total, it looks kind of like eyes.
+
+### `[mag_viz]` (2D Magnitude Defaults)
+
+- `visual_limit_deg` (float): Visual angular limit in degrees.
+- `fov_cone_length` (float): Default receiver FOV cone length (defaults to `1.0` if omitted).
+- `beam_cone_length` (float): Default transmitter beam cone length (defaults to `1.0` if omitted).
+
+> [!NOTE]
+> Named **Mag** (short for magnitude) since all you see is in 2D representing the total magnitude offset.

@@ -30,8 +30,12 @@ Runs a satellite SDA communication scenario.
 
 ### Command-line Options
 
-- `**--visualize [{3d,map}]**`  
-Opens the unified visualization window after the run. The optional choice `3d` or `map` picks the **initial tab** (3D PyVista view or angular θ/φ map). `--visualize` alone is equivalent to `--visualize 3d`. If omitted, the window opens when `[scenario].visualize` is specified as `"3d"` or `"map"` in the scenario config. With `--monte-carlo`, opens an interactive step-through mode: **Next** runs the next sampled scenario (or closes on the last run / single scenario). On successful runs the timeline ends at mutual lock — replay cache, slider, and playback cannot scrub past that point. Playback controls sit above the view; the **event log** (system, S1, S2) is in a three-column strip at the bottom.
+- `**--visualize [{3d,eye,mag}]**`  
+Opens the unified visualization window after the run. The optional choice `3d`, `eye`, or `mag` picks the **initial tab** (3D PyVista view, angular θ/φ eye map, or 2D magnitude alignment). `--visualize` alone is equivalent to `--visualize 3d`. If omitted, the window opens when `[scenario].visualize` is specified as `"3d"`, `"eye"`, or `"mag"` in the scenario config. With `--monte-carlo`, opens an interactive step-through mode: **Next** runs the next sampled scenario (or closes on the last run / single scenario). On successful runs the timeline ends at mutual lock — replay cache, slider, and playback cannot scrub past that point. Playback controls sit above the view; the **event log** (system, S1, S2) is in a three-column strip at the bottom.
+
+> [!NOTE]
+> - **Eye View (`eye`)**: Named "eye" because you are seeing the "eye" of each satellite, and since there are two satellites total, it looks kind of like eyes.
+> - **Mag View (`mag`)**: Short for "magnitude" since all you see is in 2D representing the total magnitude offset.
 - `**--monte-carlo [MONTE_CARLO]`** (default if flag present but path omitted: `config/MonteCarlo.toml`)  
 Runs a Monte Carlo batch from the specified TOML file. Without `--visualize`, runs the full batch headlessly and prints a summary. With visualization enabled (via `--visualize`), runs one scenario at a time in the visualizer; use **Next** to advance.
 - `**--scenario [SCENARIO]`** (default: `config/Scenario.toml`)  
@@ -47,8 +51,8 @@ Starting time `t` when opening a visualizer.
 # Run the default scenario
 python -m satellite
 
-# Visualize with specific starting time and map tab initially active
-python -m satellite --visualize map --t 2.5
+# Visualize with specific starting time and eye tab initially active
+python -m satellite --visualize eye --t 2.5
 
 # Run Monte Carlo simulation batch
 python -m satellite --monte-carlo config/MonteCarlo.toml

@@ -55,7 +55,7 @@ src/
       strategies/   — built-in strategy implementations
     sda/            — bench, transmitter, receiver
     scenario.py     — orchestration and replay
-    visualize/      — unified 3D + map visualizer
+    visualize/      — unified 3D + eye + mag visualizer
     mapviz/         — QPainter angular map panels
   optimize/
     __main__.py     — parameter optimizer entrypoint
@@ -69,7 +69,7 @@ src/
 ```bash
 pip install -e .
 pip install -e ".[gpu]"      # optional GPU-acceleration with Numba and CUDA
-pip install -e ".[viz]"      # interactive 3D + angular map (PyVista, PyQt6)
+pip install -e ".[viz]"      # interactive 3D + eye map (PyVista, PyQt6)
 pip install -e ".[opt]"      # optional Optuna strategy parameter optimizer
 pip install -e ".[all]"      # install everything (viz, gpu, opt, dev)
 ```
@@ -84,8 +84,8 @@ pip install -e ".[all]"      # install everything (viz, gpu, opt, dev)
 # Run the default scenario
 python -m satellite
 
-# Visualize with specific starting time and map tab initially active
-python -m satellite --visualize map --t 2.5
+# Visualize with specific starting time and eye tab initially active
+python -m satellite --visualize eye --t 2.5
 
 # Run Monte Carlo simulation batch (defaults to config/MonteCarlo.toml)
 python -m satellite --monte-carlo
