@@ -14,12 +14,16 @@ if TYPE_CHECKING:
 
 @dataclass(frozen=True)
 class ConcentricShellsConfig:
-    radii_factors: tuple[float, ...] = (0.2, 0.5, 1.0)
+    num_shells: int = 3
+    growth_exponent: float = 1.0
+    s2_offset_shells: int = 0
 
 
 def parse_concentric_shells_config(data: dict) -> ConcentricShellsConfig:
     return ConcentricShellsConfig(
-        radii_factors=tuple(data.get("radii_factors", (0.2, 0.5, 1.0))),
+        num_shells=int(data.get("num_shells", 3)),
+        growth_exponent=float(data.get("growth_exponent", 1.0)),
+        s2_offset_shells=int(data.get("s2_offset_shells", 0)),
     )
 
 
@@ -46,13 +50,21 @@ class ConcentricShellsStrategy(SearchStrategy):
         strategy_config = ctx.config.strategy
         timeout = ctx.config.simulation.timeout
 
+        # Generate radii factors based on the parameters
+        num_shells = max(1, self.config.num_shells)
+        growth_exponent = self.config.growth_exponent
+        
+        factors = []
+        for i in range(1, num_shells + 1):
+            factors.append((i / num_shells) ** growth_exponent)
+
         script = strategy(self.name)
         import itertools
 
         with script.satellite("S1"):
             beam.enable(); receiver.enable()
             current_t = 0.0
-            factors_s1 = itertools.cycle(self.config.radii_factors)
+            factors_s1 = itertools.cycle(factors)
             while current_t < timeout:
                 factor = next(factors_s1)
                 r = factor * max_radius
@@ -72,7 +84,12 @@ class ConcentricShellsStrategy(SearchStrategy):
         with script.satellite("S2"):
             beam.enable(); receiver.enable()
             current_t = 0.0
-            factors_s2 = itertools.cycle(self.config.radii_factors)
+            
+            # Roll factors for S2
+            offset = self.config.s2_offset_shells % num_shells
+            rolled_factors = factors[offset:] + factors[:offset]
+            factors_s2 = itertools.cycle(rolled_factors)
+            
             while current_t < timeout:
                 factor = next(factors_s2)
                 r = factor * max_radius

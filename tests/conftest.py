@@ -4,13 +4,14 @@
 from __future__ import annotations
 
 from satellite.config import (
-    MapVizConfig,
+    EyeVizConfig,
     SatelliteInstanceConfig,
     ScenarioConfig,
     SharedSatelliteConfig,
     SimulationConfig,
     StrategyConfig,
     ThreeDVizConfig,
+    MagVizConfig,
 )
 from satellite.math3d import as_vec3
 from satellite.strategy.strategies.asymmetric_swap import AsymmetricSwapConfig
@@ -65,10 +66,15 @@ def base_config(
             ribbon_v_steps=4,
             profile_frames=False,
         ),
-        map_viz=MapVizConfig(
+        eye_viz=EyeVizConfig(
             axis_limit=0.1,
             profile_frames=False,
             slider_debounce_ms=16,
+        ),
+        mag_viz=MagVizConfig(
+            visual_limit_deg=1.0,
+            fov_cone_length=1.0,
+            beam_cone_length=1.0,
         ),
         strategy=StrategyConfig(
             k=10.0,
@@ -93,7 +99,9 @@ def base_config(
                     speed_ratio=1.41421356,
                 ),
                 "concentric_shells": ConcentricShellsConfig(
-                    radii_factors=(0.2, 0.5, 1.0),
+                    num_shells=3,
+                    growth_exponent=1.0,
+                    s2_offset_shells=0,
                 ),
 
             },

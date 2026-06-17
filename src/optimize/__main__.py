@@ -116,14 +116,22 @@ def build_parameter_spaces(sim_cfg, mc_cfg) -> dict:
             "s2_w1": ("float", 0.1, w_ros_max),
             "s2_w2": ("float", 0.1, w_ros_max),
         },
-        "dual_spiral": {},
+        "dual_spiral": {
+            "k_ratio":        ("float", 0.5, 2.0),
+            "s2_hold_delay":  ("float", 0.0, 5.0),
+            "phase_offset":   ("float", 0.0, 6.2831853),
+        },
         "dual_raster": {
             "steps_a":     ("int",   5,     steps_max),
             "steps_b":     ("int",   5,     steps_max),
             "speed_a":     ("float", 0.001, speed_raster_max),
             "speed_ratio": ("float", 1.0,   ratio_raster_max),
         },
-        "concentric_shells": {},
+        "concentric_shells": {
+            "num_shells":       ("int", 2, 5),
+            "growth_exponent":  ("float", 0.5, 2.0),
+            "s2_offset_shells": ("int", 0, 4),
+        },
     }
 
 
