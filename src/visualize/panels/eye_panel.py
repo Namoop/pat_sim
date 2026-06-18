@@ -4,12 +4,21 @@ from __future__ import annotations
 
 import time
 from dataclasses import dataclass
-from typing import Callable
+from typing import Callable, Literal
 
 import numpy as np
 from PyQt6.QtCore import QPointF, QRectF, Qt
 from PyQt6.QtGui import QBrush, QColor, QFont, QImage, QPainter, QPen
-from PyQt6.QtWidgets import QHBoxLayout, QSizePolicy, QVBoxLayout, QWidget
+from PyQt6.QtWidgets import (
+    QButtonGroup,
+    QGridLayout,
+    QHBoxLayout,
+    QLabel,
+    QPushButton,
+    QSizePolicy,
+    QVBoxLayout,
+    QWidget,
+)
 
 from scenario.run import ScenarioResult
 from visualize.diagnostics import FrameProfiler
@@ -20,6 +29,29 @@ from visualize.eye_history import (
 )
 from visualize.frames import pixel_to_tangent
 from visualize.scene import EyeScene, EyeView, build_scene
+
+CorrelationMode = Literal["none", "target", "cursor", "heatmap"]
+
+_EYE_BTN_STYLE = (
+    "QPushButton {"
+    "  background-color: #f5f5f7;"
+    "  border: 1px solid #d2d2d7;"
+    "  border-radius: 4px;"
+    "  padding: 4px 12px;"
+    "  color: #1d1d1f;"
+    "  font-family: 'Sans';"
+    "  font-size: 11px;"
+    "  font-weight: bold;"
+    "}"
+    "QPushButton:hover {"
+    "  background-color: #e8e8ed;"
+    "}"
+    "QPushButton:checked {"
+    "  background-color: #0071e3;"
+    "  color: white;"
+    "  border-color: #0071e3;"
+    "}"
+)
 
 
 @dataclass(frozen=True)
@@ -122,6 +154,12 @@ class EyeCanvas(QWidget):
         self.setAttribute(Qt.WidgetAttribute.WA_OpaquePaintEvent, True)
         if hover_source:
             self.setMouseTracking(True)
+
+    def set_hover_enabled(self, enabled: bool) -> None:
+        self._hover_source = enabled
+        self.setMouseTracking(enabled)
+        if not enabled and self._on_hover is not None:
+            self._on_hover(None)
 
     @property
     def axis_limit(self) -> float:
@@ -345,14 +383,6 @@ class EyeCanvas(QWidget):
         painter.setBrush(QBrush(partner_color))
         painter.drawEllipse(pt, 5.0, 5.0)
 
-        painter.setPen(QColor(80, 80, 80))
-        painter.setFont(QFont("Sans", 9))
-        painter.drawText(
-            int(plot.right()) - 28,
-            int(plot.top()) + 14,
-            partner_label,
-        )
-
         tick_font = QFont("Sans", 8)
         painter.setFont(tick_font)
         painter.setPen(QColor(100, 100, 100))
@@ -372,6 +402,18 @@ class EyeCanvas(QWidget):
             self._on_paint_complete(self._last_paint_seconds)
 
 
+class _OverlayHost(QWidget):
+    """Canvas host that repositions floating overlay controls on resize."""
+
+    def __init__(self, panel: "EyePanel", parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self._panel = panel
+
+    def resizeEvent(self, event) -> None:  # noqa: N802
+        super().resizeEvent(event)
+        self._panel._position_overlay()
+
+
 class EyePanel:
     """Embedded angular eye view; caller owns timeline scrubbing."""
 
@@ -382,16 +424,69 @@ class EyePanel:
         layout = QVBoxLayout(self._widget)
         layout.setContentsMargins(0, 0, 0, 0)
 
-        canvas_host = QWidget(self._widget)
-        canvas_host_layout = QHBoxLayout(canvas_host)
+        self._canvas_host = _OverlayHost(self, self._widget)
+        canvas_host_layout = QHBoxLayout(self._canvas_host)
         canvas_host_layout.setContentsMargins(0, 0, 0, 0)
 
-        self._canvas_s1 = EyeCanvas(axis_limit=1.0, hover_source=True)
-        self._canvas_s2 = EyeCanvas(axis_limit=1.0, hover_source=True)
+        self._canvas_s1 = EyeCanvas(axis_limit=1.0)
+        self._canvas_s2 = EyeCanvas(axis_limit=1.0)
         canvas_host_layout.addWidget(self._canvas_s1, stretch=1)
         canvas_host_layout.addWidget(self._canvas_s2, stretch=1)
 
-        layout.addWidget(canvas_host, stretch=1)
+        layout.addWidget(self._canvas_host, stretch=1)
+
+        self._btn_bar = QWidget(self._canvas_host)
+        self._btn_bar.setAutoFillBackground(True)
+        self._btn_bar.setStyleSheet("background-color: #ffffff;")
+        btn_bar_layout = QVBoxLayout(self._btn_bar)
+        btn_bar_layout.setContentsMargins(0, 0, 0, 0)
+        btn_bar_layout.setSpacing(4)
+
+        self._mode_label = QLabel("Coverage overlay", self._btn_bar)
+        self._mode_label.setStyleSheet(
+            "color: #6e6e73; font-family: 'Sans'; font-size: 11px;"
+            " background-color: #ffffff;"
+        )
+        self._mode_label.setAlignment(Qt.AlignmentFlag.AlignRight)
+        btn_bar_layout.addWidget(self._mode_label)
+
+        btn_grid = QWidget(self._btn_bar)
+        btn_grid_layout = QGridLayout(btn_grid)
+        btn_grid_layout.setContentsMargins(0, 0, 0, 0)
+        btn_grid_layout.setHorizontalSpacing(6)
+        btn_grid_layout.setVerticalSpacing(6)
+
+        self._btn_group = QButtonGroup(self._btn_bar)
+        self._btn_group.setExclusive(True)
+        self._mode_buttons: dict[CorrelationMode, QPushButton] = {}
+        for row, modes in enumerate(
+            [
+                [("none", "None"), ("heatmap", "Heatmap")],
+                [("target", "Target"), ("cursor", "Cursor")],
+            ]
+        ):
+            for col, (mode, label) in enumerate(modes):
+                btn = QPushButton(label, btn_grid)
+                btn.setCheckable(True)
+                btn.setStyleSheet(_EYE_BTN_STYLE)
+                btn.setSizePolicy(
+                    QSizePolicy.Policy.Expanding,
+                    QSizePolicy.Policy.Fixed,
+                )
+                self._btn_group.addButton(btn)
+                self._mode_buttons[mode] = btn
+                btn.clicked.connect(
+                    lambda checked, m=mode: self._set_correlation_mode(m)
+                )
+                btn_grid_layout.addWidget(btn, row, col)
+
+        for col in range(2):
+            btn_grid_layout.setColumnStretch(col, 1)
+
+        btn_bar_layout.addWidget(btn_grid)
+
+        self._mode_buttons["target"].setChecked(True)
+        self._position_overlay()
 
         self._profiler = FrameProfiler.from_env(False)
         self._sim_profile_enabled = False
@@ -404,15 +499,33 @@ class EyePanel:
         self._s1_hover_center: tuple[float, float] | None = None
         self._s2_hover_center: tuple[float, float] | None = None
         self._current_t: float = 0.0
+        self._correlation_mode: CorrelationMode = "target"
         self._hover_correlation_enabled = True
         self._correlation_blob_alpha = 100
+        self._last_scene: EyeScene | None = None
 
         self._canvas_s1.set_hover_callback(self._on_s1_hover)
         self._canvas_s2.set_hover_callback(self._on_s2_hover)
+        self._update_hover_tracking()
 
     @property
     def widget(self):
         return self._widget
+
+    def _position_overlay(self) -> None:
+        margin = 12
+        self._btn_bar.adjustSize()
+        bar_w = self._btn_bar.sizeHint().width()
+        bar_h = self._btn_bar.sizeHint().height()
+        host = self._canvas_host
+        self._btn_bar.setGeometry(
+            host.width() - margin - bar_w,
+            margin,
+            bar_w,
+            bar_h,
+        )
+        if self._btn_bar.isVisible():
+            self._btn_bar.raise_()
 
     def set_profile_callback(self, callback) -> None:
         self._profile_callback = callback
@@ -436,11 +549,10 @@ class EyePanel:
         self._history = None
         self._s1_hover_center = None
         self._s2_hover_center = None
+        self._last_scene = None
         self._initialized = False
-        self._canvas_s1.set_hover_beam(None, radius=0.0)
-        self._canvas_s2.set_hover_beam(None, radius=0.0)
-        self._canvas_s1.clear_correlation_blob()
-        self._canvas_s2.clear_correlation_blob()
+        self._update_hover_tracking()
+        self._clear_all_correlation_overlays()
 
     def ensure_initialized(self) -> None:
         if self._initialized or self._result is None:
@@ -487,8 +599,8 @@ class EyePanel:
         else:
             self._update_canvases(scene)
 
-        if self._s1_hover_center is not None or self._s2_hover_center is not None:
-            self._refresh_correlation_overlays()
+        self._last_scene = scene
+        self._apply_correlation_overlays(scene)
 
         return EyeFrameInfo(
             capture_active=scene.capture_active,
@@ -498,54 +610,103 @@ class EyePanel:
     def close_panel(self) -> None:
         pass
 
-    def _on_s1_hover(self, center: tuple[float, float] | None) -> None:
-        if not self._hover_correlation_enabled:
+    def set_overlay_visible(self, visible: bool) -> None:
+        self._btn_bar.setVisible(visible)
+        if visible:
+            self._position_overlay()
+
+    def _set_correlation_mode(self, mode: CorrelationMode) -> None:
+        if self._correlation_mode == mode:
             return
-        self._s1_hover_center = center
-        if center is None:
+        self._correlation_mode = mode
+        self._s1_hover_center = None
+        self._s2_hover_center = None
+        self._update_hover_tracking()
+        self._apply_correlation_overlays(self._last_scene)
+
+    def _update_hover_tracking(self) -> None:
+        cursor_active = (
+            self._hover_correlation_enabled and self._correlation_mode == "cursor"
+        )
+        self._canvas_s1.set_hover_enabled(cursor_active)
+        self._canvas_s2.set_hover_enabled(cursor_active)
+
+    def _clear_all_correlation_overlays(self) -> None:
+        self._canvas_s1.set_hover_beam(None, radius=0.0)
+        self._canvas_s2.set_hover_beam(None, radius=0.0)
+        self._canvas_s1.clear_correlation_blob()
+        self._canvas_s2.clear_correlation_blob()
+
+    def _apply_correlation_overlays(self, scene: EyeScene | None) -> None:
+        if not self._hover_correlation_enabled or self._history is None:
+            self._clear_all_correlation_overlays()
+            return
+
+        if self._correlation_mode in ("none", "heatmap"):
+            self._clear_all_correlation_overlays()
+            return
+
+        alpha = self._history.alpha
+
+        if self._correlation_mode == "target":
+            if scene is None:
+                return
+            s1_center = scene.s1.partner
+            s2_center = scene.s2.partner
+            self._canvas_s1.set_hover_beam(s1_center, radius=alpha)
+            self._canvas_s2.set_hover_beam(s2_center, radius=alpha)
+            self._refresh_s1_to_s2_overlay(s1_center)
+            self._refresh_s2_to_s1_overlay(s2_center)
+            return
+
+        # cursor mode
+        if self._s1_hover_center is None:
             self._canvas_s1.set_hover_beam(None, radius=0.0)
             self._canvas_s2.clear_correlation_blob()
-            return
-        alpha = self._history.alpha if self._history is not None else 0.0
-        self._canvas_s1.set_hover_beam(center, radius=alpha)
-        self._refresh_s1_to_s2_overlay()
+        else:
+            self._canvas_s1.set_hover_beam(self._s1_hover_center, radius=alpha)
+            self._refresh_s1_to_s2_overlay(self._s1_hover_center)
 
-    def _on_s2_hover(self, center: tuple[float, float] | None) -> None:
-        if not self._hover_correlation_enabled:
-            return
-        self._s2_hover_center = center
-        if center is None:
+        if self._s2_hover_center is None:
             self._canvas_s2.set_hover_beam(None, radius=0.0)
             self._canvas_s1.clear_correlation_blob()
+        else:
+            self._canvas_s2.set_hover_beam(self._s2_hover_center, radius=alpha)
+            self._refresh_s2_to_s1_overlay(self._s2_hover_center)
+
+    def _on_s1_hover(self, center: tuple[float, float] | None) -> None:
+        if not self._hover_correlation_enabled or self._correlation_mode != "cursor":
             return
-        alpha = self._history.alpha if self._history is not None else 0.0
-        self._canvas_s2.set_hover_beam(center, radius=alpha)
-        self._refresh_s2_to_s1_overlay()
+        self._s1_hover_center = center
+        if center is not None:
+            self._s2_hover_center = None
+        self._apply_correlation_overlays(self._last_scene)
 
-    def _refresh_correlation_overlays(self) -> None:
-        if self._s1_hover_center is not None:
-            self._refresh_s1_to_s2_overlay()
-        if self._s2_hover_center is not None:
-            self._refresh_s2_to_s1_overlay()
+    def _on_s2_hover(self, center: tuple[float, float] | None) -> None:
+        if not self._hover_correlation_enabled or self._correlation_mode != "cursor":
+            return
+        self._s2_hover_center = center
+        if center is not None:
+            self._s1_hover_center = None
+        self._apply_correlation_overlays(self._last_scene)
 
-    def _refresh_s1_to_s2_overlay(self) -> None:
-        if (
-            not self._hover_correlation_enabled
-            or self._history is None
-            or self._s1_hover_center is None
-        ):
+    def _refresh_s1_to_s2_overlay(
+        self,
+        center: tuple[float, float],
+    ) -> None:
+        if not self._hover_correlation_enabled or self._history is None:
             return
 
         fov_centers = query_correlated_fov(
             self._history,
-            self._s1_hover_center,
+            center,
             self._current_t,
             source="S1",
         )
         plot = self._canvas_s2._plot_rect()
         cache_key = _BlobCacheKey(
             source="S1",
-            hover_center=self._s1_hover_center,
+            hover_center=center,
             t_max=self._current_t,
             match_count=int(fov_centers.shape[0]),
             plot_w=int(plot.width()),
@@ -558,24 +719,23 @@ class EyePanel:
             cache_key=cache_key,
         )
 
-    def _refresh_s2_to_s1_overlay(self) -> None:
-        if (
-            not self._hover_correlation_enabled
-            or self._history is None
-            or self._s2_hover_center is None
-        ):
+    def _refresh_s2_to_s1_overlay(
+        self,
+        center: tuple[float, float],
+    ) -> None:
+        if not self._hover_correlation_enabled or self._history is None:
             return
 
         fov_centers = query_correlated_fov(
             self._history,
-            self._s2_hover_center,
+            center,
             self._current_t,
             source="S2",
         )
         plot = self._canvas_s1._plot_rect()
         cache_key = _BlobCacheKey(
             source="S2",
-            hover_center=self._s2_hover_center,
+            hover_center=center,
             t_max=self._current_t,
             match_count=int(fov_centers.shape[0]),
             plot_w=int(plot.width()),
