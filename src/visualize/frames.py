@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from satellite.math.geometry import transmitter_basis
+from satellite.math.geometry import direction_with_tangent_offset, transmitter_basis
 from satellite.math.math3d import Vec3, cross, dot, norm, normalize, spherical_angles_from_direction
 from satellite.physics.transmitter import TransmitterSDA
 
@@ -55,6 +55,53 @@ def point_in_disc(
     d_theta = point[0] - center[0]
     d_phi = point[1] - center[1]
     return float(np.hypot(d_theta, d_phi)) <= radius + 1e-12
+
+
+def discs_overlap(
+    c1: tuple[float, float],
+    r1: float,
+    c2: tuple[float, float],
+    r2: float,
+) -> bool:
+    """True when two tangent-plane discs overlap."""
+    d_theta = c1[0] - c2[0]
+    d_phi = c1[1] - c2[1]
+    return float(np.hypot(d_theta, d_phi)) < (r1 + r2) + 1e-12
+
+
+def effective_aim_from_snapshot(
+    bench_boresight: Vec3,
+    fsm_theta: float,
+    fsm_phi: float,
+) -> Vec3:
+    """Receive/transmit aim from replay snapshot (mirrors FastSteeringMirror)."""
+    u_x, u_y, _ = transmitter_basis(
+        *spherical_angles_from_direction(bench_boresight)
+    )
+    return direction_with_tangent_offset(
+        bench_boresight,
+        u_x,
+        u_y,
+        fsm_theta,
+        fsm_phi,
+    )
+
+
+def pixel_to_tangent(
+    plot_left: float,
+    plot_top: float,
+    plot_width: float,
+    plot_height: float,
+    px: float,
+    py: float,
+    axis_limit: float,
+) -> tuple[float, float]:
+    """Inverse of EyeCanvas._to_pixel for mouse coordinates."""
+    u = (px - plot_left) / plot_width
+    v = (py - plot_top) / plot_height
+    theta = u * 2.0 * axis_limit - axis_limit
+    phi = axis_limit - v * 2.0 * axis_limit
+    return theta, phi
 
 
 def spiral_trail_in_map(

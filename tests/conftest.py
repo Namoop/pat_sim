@@ -72,6 +72,8 @@ def base_config(
             axis_limit=0.1,
             profile_frames=False,
             slider_debounce_ms=16,
+            hover_correlation_enabled=True,
+            correlation_blob_alpha=100,
         ),
         mag_viz=MagVizConfig(
             visual_limit_deg=1.0,

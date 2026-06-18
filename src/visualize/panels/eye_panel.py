@@ -8,11 +8,17 @@ from typing import Callable
 
 import numpy as np
 from PyQt6.QtCore import QPointF, QRectF, Qt
-from PyQt6.QtGui import QBrush, QColor, QFont, QPainter, QPen
+from PyQt6.QtGui import QBrush, QColor, QFont, QImage, QPainter, QPen
 from PyQt6.QtWidgets import QHBoxLayout, QSizePolicy, QVBoxLayout, QWidget
 
 from scenario.run import ScenarioResult
 from visualize.diagnostics import FrameProfiler
+from visualize.eye_history import (
+    EyeHistoryCache,
+    build_eye_history,
+    query_correlated_fov,
+)
+from visualize.frames import pixel_to_tangent
 from visualize.scene import EyeScene, EyeView, build_scene
 
 
@@ -28,21 +34,94 @@ class _EyeCanvasState:
     partner_label: str
 
 
+@dataclass(frozen=True)
+class _BlobCacheKey:
+    source: str
+    hover_center: tuple[float, float]
+    t_max: float
+    match_count: int
+    plot_w: int
+    plot_h: int
+
+
+def _render_correlation_blob(
+    plot: QRectF,
+    fov_centers: np.ndarray,
+    fov_radius: float,
+    axis_limit: float,
+    alpha: int,
+) -> QImage | None:
+    """Raster-union of FOV discs into a single tinted image."""
+    if fov_centers.size == 0:
+        return None
+
+    w = max(1, int(plot.width()))
+    h = max(1, int(plot.height()))
+    mask = QImage(w, h, QImage.Format.Format_ARGB32)
+    mask.fill(0)
+
+    painter = QPainter(mask)
+    painter.setRenderHint(QPainter.RenderHint.Antialiasing, False)
+    painter.setPen(Qt.PenStyle.NoPen)
+    painter.setBrush(QBrush(QColor(255, 255, 255, 255)))
+
+    limit = axis_limit
+    for theta, phi in fov_centers:
+        u = (theta + limit) / (2.0 * limit)
+        v = (limit - phi) / (2.0 * limit)
+        cx = u * plot.width()
+        cy = v * plot.height()
+        r_px = (fov_radius / (2.0 * limit)) * plot.width()
+        painter.drawEllipse(QPointF(cx, cy), r_px, r_px)
+
+    painter.end()
+
+    tinted = QImage(w, h, QImage.Format.Format_ARGB32)
+    tinted.fill(0)
+    tint_painter = QPainter(tinted)
+    tint_painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_Source)
+    tint_painter.drawImage(0, 0, mask)
+    tint_painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_SourceIn)
+    tint_painter.fillRect(0, 0, w, h, QColor(68, 136, 255, alpha))
+    tint_painter.end()
+    return tinted
+
+
 class EyeCanvas(QWidget):
     """Single satellite θ/φ eye plot drawn with QPainter."""
 
-    def __init__(self, *, axis_limit: float, parent: QWidget | None = None) -> None:
+    def __init__(
+        self,
+        *,
+        axis_limit: float,
+        parent: QWidget | None = None,
+        hover_source: bool = False,
+    ) -> None:
         super().__init__(parent)
         self._axis_limit = axis_limit
+        self._hover_source = hover_source
         self._state: _EyeCanvasState | None = None
         self._last_paint_seconds = 0.0
         self._on_paint_complete: Callable[[float], None] | None = None
+        self._on_hover: Callable[[tuple[float, float] | None], None] | None = None
+
+        self._hover_beam_center: tuple[float, float] | None = None
+        self._hover_beam_radius: float = 0.0
+
+        self._correlation_centers: np.ndarray | None = None
+        self._correlation_fov_radius: float = 0.0
+        self._correlation_blob_alpha: int = 100
+        self._blob_cache_key: _BlobCacheKey | None = None
+        self._blob_cache_image: QImage | None = None
+
         self.setSizePolicy(
             QSizePolicy.Policy.Expanding,
             QSizePolicy.Policy.Expanding,
         )
         self.setMinimumSize(200, 200)
         self.setAttribute(Qt.WidgetAttribute.WA_OpaquePaintEvent, True)
+        if hover_source:
+            self.setMouseTracking(True)
 
     @property
     def axis_limit(self) -> float:
@@ -55,6 +134,12 @@ class EyeCanvas(QWidget):
     def last_paint_seconds(self) -> float:
         return self._last_paint_seconds
 
+    def set_hover_callback(
+        self,
+        callback: Callable[[tuple[float, float] | None], None] | None,
+    ) -> None:
+        self._on_hover = callback
+
     def set_view(self, view: EyeView, *, partner_label: str) -> bool:
         """Update view state. Returns True if a repaint was requested."""
         new_state = _EyeCanvasState(view=view, partner_label=partner_label)
@@ -63,6 +148,52 @@ class EyeCanvas(QWidget):
         self._state = new_state
         self.update()
         return True
+
+    def set_hover_beam(
+        self,
+        center: tuple[float, float] | None,
+        *,
+        radius: float,
+    ) -> None:
+        if center == self._hover_beam_center and radius == self._hover_beam_radius:
+            return
+        self._hover_beam_center = center
+        self._hover_beam_radius = radius
+        self.update()
+
+    def set_correlation_blob(
+        self,
+        fov_centers: np.ndarray | None,
+        *,
+        fov_radius: float,
+        alpha: int,
+        cache_key: _BlobCacheKey | None,
+    ) -> None:
+        self._correlation_centers = fov_centers
+        self._correlation_fov_radius = fov_radius
+        self._correlation_blob_alpha = alpha
+        if cache_key != self._blob_cache_key:
+            self._blob_cache_key = cache_key
+            if fov_centers is not None and cache_key is not None:
+                plot = self._plot_rect()
+                self._blob_cache_image = _render_correlation_blob(
+                    plot,
+                    fov_centers,
+                    fov_radius,
+                    self._axis_limit,
+                    alpha,
+                )
+            else:
+                self._blob_cache_image = None
+        self.update()
+
+    def clear_correlation_blob(self) -> None:
+        self.set_correlation_blob(
+            None,
+            fov_radius=0.0,
+            alpha=0,
+            cache_key=None,
+        )
 
     def _plot_rect(self) -> QRectF:
         margin = 36.0
@@ -87,6 +218,35 @@ class EyeCanvas(QWidget):
 
     def _radius_px(self, plot: QRectF, radius_rad: float) -> float:
         return (radius_rad / (2.0 * self._axis_limit)) * plot.width()
+
+    def _tangent_from_mouse(self, pos: QPointF) -> tuple[float, float] | None:
+        plot = self._plot_rect()
+        if not plot.contains(pos):
+            return None
+        theta, phi = pixel_to_tangent(
+            plot.left(),
+            plot.top(),
+            plot.width(),
+            plot.height(),
+            pos.x(),
+            pos.y(),
+            self._axis_limit,
+        )
+        limit = self._axis_limit
+        if abs(theta) > limit or abs(phi) > limit:
+            return None
+        return theta, phi
+
+    def mouseMoveEvent(self, event) -> None:  # noqa: N802
+        if not self._hover_source or self._on_hover is None:
+            return
+        self._on_hover(self._tangent_from_mouse(event.position()))
+        super().mouseMoveEvent(event)
+
+    def leaveEvent(self, event) -> None:  # noqa: N802
+        if self._hover_source and self._on_hover is not None:
+            self._on_hover(None)
+        super().leaveEvent(event)
 
     def paintEvent(self, event) -> None:  # noqa: N802
         del event
@@ -166,6 +326,19 @@ class EyeCanvas(QWidget):
             painter.setBrush(QBrush(QColor(128, 128, 128, 200)))
             painter.drawEllipse(bd_pt, 4.0, 4.0)
 
+        if self._hover_beam_center is not None and self._hover_beam_radius > 0.0:
+            h_theta, h_phi = self._hover_beam_center
+            h_center = self._to_pixel(plot, h_theta, h_phi)
+            h_r = self._radius_px(plot, self._hover_beam_radius)
+            hover_pen = QPen(QColor(255, 136, 0), 1.5)
+            hover_pen.setStyle(Qt.PenStyle.DashLine)
+            painter.setPen(hover_pen)
+            painter.setBrush(QBrush(QColor(255, 136, 0, 40)))
+            painter.drawEllipse(h_center, h_r, h_r)
+
+        if self._blob_cache_image is not None:
+            painter.drawImage(int(plot.left()), int(plot.top()), self._blob_cache_image)
+
         partner_color = QColor(34, 170, 34) if partner_label == "S2" else QColor(204, 34, 34)
         pt = self._to_pixel(plot, view.partner[0], view.partner[1])
         painter.setPen(Qt.PenStyle.NoPen)
@@ -213,8 +386,8 @@ class EyePanel:
         canvas_host_layout = QHBoxLayout(canvas_host)
         canvas_host_layout.setContentsMargins(0, 0, 0, 0)
 
-        self._canvas_s1 = EyeCanvas(axis_limit=1.0)
-        self._canvas_s2 = EyeCanvas(axis_limit=1.0)
+        self._canvas_s1 = EyeCanvas(axis_limit=1.0, hover_source=True)
+        self._canvas_s2 = EyeCanvas(axis_limit=1.0, hover_source=True)
         canvas_host_layout.addWidget(self._canvas_s1, stretch=1)
         canvas_host_layout.addWidget(self._canvas_s2, stretch=1)
 
@@ -226,6 +399,16 @@ class EyePanel:
         self._replay_step_count = 0
         self._profile_callback = None
         self._initialized = False
+
+        self._history: EyeHistoryCache | None = None
+        self._s1_hover_center: tuple[float, float] | None = None
+        self._s2_hover_center: tuple[float, float] | None = None
+        self._current_t: float = 0.0
+        self._hover_correlation_enabled = True
+        self._correlation_blob_alpha = 100
+
+        self._canvas_s1.set_hover_callback(self._on_s1_hover)
+        self._canvas_s2.set_hover_callback(self._on_s2_hover)
 
     @property
     def widget(self):
@@ -248,13 +431,24 @@ class EyePanel:
         self._profiling_active = (
             self._profiler.enabled or self._sim_profile_enabled
         )
+        self._hover_correlation_enabled = eye_cfg.hover_correlation_enabled
+        self._correlation_blob_alpha = eye_cfg.correlation_blob_alpha
+        self._history = None
+        self._s1_hover_center = None
+        self._s2_hover_center = None
         self._initialized = False
+        self._canvas_s1.set_hover_beam(None, radius=0.0)
+        self._canvas_s2.set_hover_beam(None, radius=0.0)
+        self._canvas_s1.clear_correlation_blob()
+        self._canvas_s2.clear_correlation_blob()
 
     def ensure_initialized(self) -> None:
         if self._initialized or self._result is None:
             return
         self._initialized = True
-        self._result.ensure_replay_timeline()
+        timeline = self._result.ensure_replay_timeline()
+        if self._hover_correlation_enabled:
+            self._history = build_eye_history(self._result, timeline)
 
     def apply_t(self, t: float) -> EyeFrameInfo:
         result = self._result
@@ -264,6 +458,7 @@ class EyePanel:
 
         total_t = result.playable_t_end
         t = float(np.clip(t, 0.0, total_t))
+        self._current_t = t
 
         if self._profiling_active:
             frame_start = time.perf_counter()
@@ -292,6 +487,9 @@ class EyePanel:
         else:
             self._update_canvases(scene)
 
+        if self._s1_hover_center is not None or self._s2_hover_center is not None:
+            self._refresh_correlation_overlays()
+
         return EyeFrameInfo(
             capture_active=scene.capture_active,
             event_log=tuple(event_log),
@@ -299,6 +497,96 @@ class EyePanel:
 
     def close_panel(self) -> None:
         pass
+
+    def _on_s1_hover(self, center: tuple[float, float] | None) -> None:
+        if not self._hover_correlation_enabled:
+            return
+        self._s1_hover_center = center
+        if center is None:
+            self._canvas_s1.set_hover_beam(None, radius=0.0)
+            self._canvas_s2.clear_correlation_blob()
+            return
+        alpha = self._history.alpha if self._history is not None else 0.0
+        self._canvas_s1.set_hover_beam(center, radius=alpha)
+        self._refresh_s1_to_s2_overlay()
+
+    def _on_s2_hover(self, center: tuple[float, float] | None) -> None:
+        if not self._hover_correlation_enabled:
+            return
+        self._s2_hover_center = center
+        if center is None:
+            self._canvas_s2.set_hover_beam(None, radius=0.0)
+            self._canvas_s1.clear_correlation_blob()
+            return
+        alpha = self._history.alpha if self._history is not None else 0.0
+        self._canvas_s2.set_hover_beam(center, radius=alpha)
+        self._refresh_s2_to_s1_overlay()
+
+    def _refresh_correlation_overlays(self) -> None:
+        if self._s1_hover_center is not None:
+            self._refresh_s1_to_s2_overlay()
+        if self._s2_hover_center is not None:
+            self._refresh_s2_to_s1_overlay()
+
+    def _refresh_s1_to_s2_overlay(self) -> None:
+        if (
+            not self._hover_correlation_enabled
+            or self._history is None
+            or self._s1_hover_center is None
+        ):
+            return
+
+        fov_centers = query_correlated_fov(
+            self._history,
+            self._s1_hover_center,
+            self._current_t,
+            source="S1",
+        )
+        plot = self._canvas_s2._plot_rect()
+        cache_key = _BlobCacheKey(
+            source="S1",
+            hover_center=self._s1_hover_center,
+            t_max=self._current_t,
+            match_count=int(fov_centers.shape[0]),
+            plot_w=int(plot.width()),
+            plot_h=int(plot.height()),
+        )
+        self._canvas_s2.set_correlation_blob(
+            fov_centers,
+            fov_radius=self._history.fov_radius,
+            alpha=self._correlation_blob_alpha,
+            cache_key=cache_key,
+        )
+
+    def _refresh_s2_to_s1_overlay(self) -> None:
+        if (
+            not self._hover_correlation_enabled
+            or self._history is None
+            or self._s2_hover_center is None
+        ):
+            return
+
+        fov_centers = query_correlated_fov(
+            self._history,
+            self._s2_hover_center,
+            self._current_t,
+            source="S2",
+        )
+        plot = self._canvas_s1._plot_rect()
+        cache_key = _BlobCacheKey(
+            source="S2",
+            hover_center=self._s2_hover_center,
+            t_max=self._current_t,
+            match_count=int(fov_centers.shape[0]),
+            plot_w=int(plot.width()),
+            plot_h=int(plot.height()),
+        )
+        self._canvas_s1.set_correlation_blob(
+            fov_centers,
+            fov_radius=self._history.fov_radius,
+            alpha=self._correlation_blob_alpha,
+            cache_key=cache_key,
+        )
 
     def _emit_profile(self) -> None:
         if self._profile_callback is None:

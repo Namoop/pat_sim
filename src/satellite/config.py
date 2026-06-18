@@ -51,6 +51,8 @@ class EyeVizConfig:
     axis_limit: float
     profile_frames: bool
     slider_debounce_ms: int
+    hover_correlation_enabled: bool = True
+    correlation_blob_alpha: int = 100
 
 
 @dataclass(frozen=True)
@@ -113,6 +115,8 @@ def _load_eye_viz(data: dict) -> EyeVizConfig:
         axis_limit=float(data.get("axis_limit", 0.1)) * 1e-3,
         profile_frames=bool(data.get("profile_frames", False)),
         slider_debounce_ms=int(data.get("slider_debounce_ms", 16)),
+        hover_correlation_enabled=bool(data.get("hover_correlation_enabled", True)),
+        correlation_blob_alpha=int(data.get("correlation_blob_alpha", 100)),
     )
 
 
