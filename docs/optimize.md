@@ -154,3 +154,7 @@ error.distribution = "gaussian"
 error.gaussian.std = 2.0
 ```
 
+After a run completes, the optimizer writes `src/optimize/logs/{strategy}_{hash6}.log` where `hash6` is the first six hex characters of a SHA-256 fingerprint of the evaluation configuration. The full 64-character hash appears in the first line as `# config_hash: <full64>`. The fingerprint covers the `[optimize]`, `[monte_carlo]`, `[satellite]`, and `[simulation]` TOML blocks only (not the comment header or `[strategy.<name>]` results). Re-running with the same configuration overwrites the existing log; if two different configurations collide on the six-character prefix, the write raises an error instead of silently overwriting.
+
+The file continues with comment headers for run status and best cost, then TOML blocks for `[strategy.<name>]`, `[optimize]`, `[monte_carlo]`, `[satellite]`, and `[simulation]`.
+

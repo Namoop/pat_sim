@@ -87,6 +87,7 @@ from config import load_toml
 from montecarlo.run import load_monte_carlo_config, sample_offsets
 from montecarlo.types import GaussianErrorConfig, MonteCarloConfig
 from optimize.config import parse as parse_optimize
+from optimize.result_log import build_summary_lines, write_result_log
 from satellite.config import load_simulation_config
 from scenario.run import run_scenario
 from scenario.types import ScenarioInstance, build_scenario_config
@@ -287,7 +288,7 @@ def evaluate_candidate(
     mc_cfg,
     fixed_offsets: list,
     max_workers: int,
-) -> tuple[float, float, float]:
+) -> tuple[float, float, float, float | None]:
     from strategy.base import CONFIG_PARSERS
 
     params = dict(params)
@@ -325,7 +326,7 @@ def evaluate_candidate(
         mean_t = summary.mean_t if summary.mean_t is not None else timeout
         penalty = timeout * 2.0
         cost = ((1.0 - success_rate) * penalty) + mean_t
-        return cost, success_rate, mean_t
+        return cost, success_rate, mean_t, summary.median_t
 
     # Fallback to CPU parallel execution
     tasks = [
@@ -356,11 +357,12 @@ def evaluate_candidate(
     success_rate = successes / len(fixed_offsets)
     timeout = sim_cfg.simulation.timeout
     mean_t = float(np.mean(hit_times)) if hit_times else timeout
+    median_t = float(np.median(hit_times)) if hit_times else None
 
     # Cost: prioritise lock rate first, then speed
     penalty = timeout * 2.0
     cost = ((1.0 - success_rate) * penalty) + mean_t
-    return cost, success_rate, mean_t
+    return cost, success_rate, mean_t, median_t
 
 
 # ---------------------------------------------------------------------------
@@ -438,7 +440,7 @@ def run_random_search(
                 resampled += 1
                 continue  # draw again — does NOT advance completed_trials
 
-            cost, success_rate, mean_t = evaluate_candidate(
+            cost, success_rate, mean_t, _median_t = evaluate_candidate(
                 candidate, strategy_name, sim_cfg, mc_cfg, fixed_offsets, max_workers
             )
             completed_trials += 1
@@ -521,7 +523,7 @@ def run_grid_search(
                 skipped += 1
                 continue  # skip this grid point entirely
 
-            cost, success_rate, mean_t = evaluate_candidate(
+            cost, success_rate, mean_t, _median_t = evaluate_candidate(
                 candidate, strategy_name, sim_cfg, mc_cfg, fixed_offsets, max_workers
             )
             completed_trials += 1
@@ -1001,29 +1003,60 @@ def main():
         interrupted = True
 
     elapsed = time.time() - start_time
-    if interrupted:
-        print(
-            f"\n--- Optimization interrupted after {elapsed:.1f}s "
-            f"({completed_trials} trial(s) completed) ---"
-        )
-    else:
-        print(f"\n--- Optimization completed in {elapsed:.1f}s ---")
 
+    if best_params and strategy == "lissajous_scan":
+        best_params["s1_delta"] = 1.570796
+        best_params["s2_delta"] = 1.570796
+
+    summary_lines = build_summary_lines(
+        interrupted=interrupted,
+        elapsed=elapsed,
+        completed_trials=completed_trials,
+        best_cost=best_cost,
+        best_params=best_params or None,
+    )
+    print(f"\n{summary_lines[0]}")
+    for line in summary_lines[1:]:
+        print(line)
+
+    optimize_section: dict = {
+        "strategy": strategy,
+        "method": method,
+        "trials": trials,
+    }
+    if trial_seed is not None:
+        optimize_section["trial_seed"] = trial_seed
+    if method == "grid":
+        optimize_section["grid_points"] = grid_points
+
+    best_success_rate: float | None = None
+    best_mean_t: float | None = None
+    best_median_t: float | None = None
     if best_params:
-        print(f"Best objective cost score: {best_cost:.4f}")
+        _, best_success_rate, best_mean_t, best_median_t = evaluate_candidate(
+            best_params,
+            strategy,
+            sim_cfg,
+            mc_cfg,
+            fixed_offsets,
+            max_workers,
+        )
 
-        if strategy == "lissajous_scan":
-            best_params["s1_delta"] = 1.570796
-            best_params["s2_delta"] = 1.570796
-
-        print("Optimal Parameters:")
-        for k, v in best_params.items():
-            if isinstance(v, float):
-                print(f"  {k} = {v:.6f}")
-            else:
-                print(f"  {k} = {v}")
-    elif interrupted and completed_trials == 0:
-        print("Stopped before any trials finished.")
+    log_path = write_result_log(
+        strategy=strategy,
+        optimize_section=optimize_section,
+        mc_cfg=mc_cfg,
+        sim=sim_cfg,
+        best_params=dict(best_params) if best_params else None,
+        interrupted=interrupted,
+        elapsed=elapsed,
+        completed_trials=completed_trials,
+        best_cost=best_cost,
+        success_rate=best_success_rate,
+        mean_t=best_mean_t if best_success_rate and best_success_rate > 0 else None,
+        median_t=best_median_t if best_success_rate and best_success_rate > 0 else None,
+    )
+    print(f"Result log written to {log_path}")
 
     if interrupted:
         raise SystemExit(130)
