@@ -111,4 +111,6 @@ To run the test suite, notably in automated environments:
   ```
 2. **Run Pytest with Environment Variables**: The project uses an auto-bootstrap mechanism in `src/satellite/__init__.py` that can cause issues or unexpected argument stripping if re-executed.
   To bypass this auto-bootstrap and run the tests correctly, set `SATELLITE_NO_GPU=1` and ensure the project path is in your `PYTHONPATH`:
-
+  ```bash
+  PYTHONPATH=src:. SATELLITE_NO_GPU=1 .venv/bin/pytest
+  ```

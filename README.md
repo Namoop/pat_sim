@@ -117,4 +117,6 @@ If you are an agentic coding assistant working on this codebase, follow these in
    **Always set `PYTHONPATH=src:.`**.
 3. **Running the Test Suite:**
   Execute tests within the virtual environment using:
-
+  ```bash
+  PYTHONPATH=src:. SATELLITE_NO_GPU=1 .venv/bin/pytest
+  ```
