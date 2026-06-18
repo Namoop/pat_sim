@@ -18,7 +18,7 @@ This document provides a detailed overview of the search strategies available in
 | `random_curve`      | Smooth random walk in angle space                                         |
 | `nested_spiral`     | Concentric Archimedean spirals |
 
-Custom strategies are implemented using the Python DSL in `src/satellite/strategy/actions.py`; TOML files configure built-in chain parameters.
+Custom strategies are implemented using the Python DSL in `src/strategy/actions.py`; TOML files configure built-in chain parameters.
 
 ---
 

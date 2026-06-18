@@ -44,19 +44,30 @@ The repository is structured as a Python package containing the following module
 
 ```
 src/
+  config.py         — TOML helpers, path resolution, override merging
   satellite/
-    sim/            — config loaders, scenario/MC runners, detection, replay
+    config.py       — Environment.toml loader
+    detection.py    — beam–dish hit tests
     physics/        — bench, transmitter, receiver, FSM
     math/           — vector math and geometric constructions
-    strategy/
-      actions.py    — timeline DSL and StrategyScript
-      runner.py     — frame runner
-      schedule.py   — compiled timeline for replay
-      meta.py       — strategy chain orchestrator
-      strategies/   — built-in strategy implementations
-    visualize/      — unified 3D + eye + mag visualizer
-    mapviz/           — QPainter angular map panels
+  strategy/
+    config.py       — [strategy] section parser
+    actions.py      — timeline DSL and StrategyScript
+    runner.py       — frame runner
+    schedule.py     — compiled timeline for replay
+    meta.py         — strategy chain orchestrator
+    strategies/     — built-in strategy implementations
+  visualize/        — unified 3D + eye + mag visualizer
+    frames.py       — tangent-plane projection (shared by eye and mag)
+    scene.py        — eye scene builder (shared by eye and mag)
+    panels/
+      panel_3d.py   — PyVista 3D view
+      eye_panel.py
+      mag_panel.py
+  scenario/         — single-scenario CLI and runner (config, types, run, replay, diagnostics)
+  montecarlo/       — Monte Carlo batch CLI and runner (config, types, run, cuda)
   optimize/
+    config.py       — [optimize] section parser
     __main__.py     — parameter optimizer entrypoint
     run_all.sh      — batch script to run optimization
 ```

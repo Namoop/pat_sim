@@ -16,6 +16,30 @@ For a detailed walkthrough of the physical system model (satellites, optical ben
 
 ---
 
+## Configuration Architecture
+
+Configuration is split across per-module parsers; runners orchestrate loading and merging:
+
+| Module | Role |
+|--------|------|
+| [`config.py`](../src/config.py) | `load_toml`, path resolution, override merge helpers |
+| [`scenario/types.py`](../src/scenario/types.py) | `ScenarioConfig`, `ScenarioInstance`, `build_scenario_config` |
+| [`montecarlo/types.py`](../src/montecarlo/types.py) | `MonteCarloConfig`, error distribution types |
+| [`satellite/config.py`](../src/satellite/config.py) | `Environment.toml` types and `load_simulation_config` |
+| [`scenario/config.py`](../src/scenario/config.py) | Parses `[scenario]`, `[s1]`, `[s2]` → `ScenarioInstance` |
+| [`strategy/config.py`](../src/strategy/config.py) | Parses `[strategy]` and per-strategy sections → `StrategyConfig` |
+| [`montecarlo/config.py`](../src/montecarlo/config.py) | Parses `[monte_carlo]` and error distribution |
+| [`optimize/config.py`](../src/optimize/config.py) | Parses `[optimize]` |
+
+Orchestration entry points:
+
+- **Single scenario:** `load_single_scenario` in [`scenario/run.py`](../src/scenario/run.py)
+- **Monte Carlo batch:** `load_monte_carlo_config` in [`montecarlo/run.py`](../src/montecarlo/run.py)
+
+See [environment.md](environment.md), [scenario.md](scenario.md), and [monte_carlo.md](monte_carlo.md) for TOML field reference.
+
+---
+
 ## CLI Usage Reference
 
 This section provides a detailed reference for running the satellite simulation and related command-line utilities.
@@ -69,13 +93,13 @@ python -m montecarlo config/MonteCarlo.toml
 
 ---
 
-### Map Render Benchmark
+### Eye View Render Benchmark
 
 ```bash
-python -m satellite.mapviz.bench_render [options]
+python -m visualize.bench_eye_render [options]
 ```
 
-Benchmark the mapviz QPainter render path (headless Qt). Requires the `[viz]` extra dependency (PyQt6).
+Benchmark the eye-view QPainter render path (headless Qt). Requires the `[viz]` extra dependency (PyQt6).
 
 ### Benchmark Options
 
@@ -92,7 +116,7 @@ RNG seed for sample times.
 
 ### Linux/Wayland Visualization Troubleshooting
 
-On Linux with Wayland, Qt windows (map visualizer) may fail to open or render incorrectly. Force the X11 backend via `QT_QPA_PLATFORM=xcb`:
+On Linux with Wayland, Qt windows (visualizer) may fail to open or render incorrectly. Force the X11 backend via `QT_QPA_PLATFORM=xcb`:
 
 ```bash
 QT_QPA_PLATFORM=xcb python -m scenario [...]

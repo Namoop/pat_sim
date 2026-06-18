@@ -114,6 +114,8 @@ python -m optimize --strategy random_walk --method grid --grid-points 10
 
 Instead of passing all parameters via the command line, the optimizer can be configured using a dedicated TOML file (e.g., `config/Optimize.toml`).
 
+The `[optimize]` block is parsed by [`optimize/config.py`](../src/optimize/config.py). Monte Carlo evaluation settings use the same parsers as batch runs (`montecarlo/config.py`, assembled by `load_monte_carlo_config` in `montecarlo/run.py`).
+
 The configuration file contains two primary blocks:
 
 ### `[optimize]` (Search Control)

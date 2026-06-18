@@ -2,7 +2,7 @@
 
 This document describes the parameters defined in `Scenario.toml` (e.g. `config/Scenario.toml`), which configures a single execution run with fixed pointing offsets.
 
-The configuration file is loaded by [load_scenario_config](file:///home/theodore/Documents/satellite/src/satellite/sim/config.py). All angular values in scenario configurations are defined in **milliradians**.
+Scenario sections are parsed by [`scenario/config.py`](../src/scenario/config.py) (`load_scenario_config` / `parse`). For a full runnable config, [`load_single_scenario`](../src/scenario/run.py) in `scenario/run.py` loads the scenario TOML, parses `[scenario]` / `[s1]` / `[s2]` and `[strategy]`, loads the referenced `Environment.toml`, and merges them via `build_scenario_config` in [`scenario/types.py`](../src/scenario/types.py). All angular values in scenario configurations are defined in **milliradians**.
 
 ---
 
@@ -13,7 +13,7 @@ The configuration file is loaded by [load_scenario_config](file:///home/theodore
 - `name` (string): Unique identifier for the scenario instance.
 - `chain` (array of strings, required): Ordered list of search strategies to run in sequence (e.g., `["minor_offset", "single_miss"]`).
 - `environment` (string, optional): Path to the associated environment config TOML file (e.g. `"Environment.toml"`, resolved relative to the scenario file).
-- `visualize` (string, optional): Automatically opens the visualizer after a single run if set to `"3d"` or `"map"`.
+- `visualize` (string, optional): Automatically opens the visualizer after a single run if set to `"3d"` or `"eye"`.
 - **Arbitrary Property Overrides**: Any simulation or satellite property can be overridden for the specific scenario using dotted keys or nested sub-tables under `[scenario]`.
   - *Dotted Keys Example*: `simulation.distance = 500` or `satellite.max_fsm_radius = 0.5`.
   - *Nested Tables Example*: `[scenario.simulation] distance = 500`
