@@ -4,21 +4,26 @@ from __future__ import annotations
 
 from contextlib import nullcontext
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 import numpy as np
 
-from satellite.sim.config import ScenarioConfig, default_beam_length
+from config import load_toml
+from scenario.config import parse as parse_scenario
+from scenario.types import ScenarioConfig, build_scenario_config, default_beam_length
+from satellite.config import load_simulation_config
+from strategy.config import parse as parse_strategy
 from satellite.math.geometry import actual_target_direction
 from satellite.math.math3d import Vec3, angle_between, distance, normalize
-from satellite.strategy.base import StrategyContext, link_established
-from satellite.strategy.meta import MetaStrategy, MetaStrategyResult
-from satellite.strategy.movements import Reset, build_aim_context
-from satellite.strategy.runner import FrameRunner
-from satellite.strategy.schedule import LegSchedule
+from strategy.base import StrategyContext, link_established
+from strategy.meta import MetaStrategy, MetaStrategyResult
+from strategy.movements import Reset, build_aim_context
+from strategy.runner import FrameRunner
+from strategy.schedule import LegSchedule
 
 if TYPE_CHECKING:
-    from satellite.sim.diagnostics import SimReplayProfiler
+    from scenario.diagnostics import SimReplayProfiler
     from satellite.physics.receiver import ReceiverSDA
     from satellite.physics.transmitter import TransmitterSDA
 
@@ -161,7 +166,7 @@ class ScenarioResult:
 
     def ensure_replay_timeline(self):
         if self._replay_timeline is None:
-            from satellite.sim.replay_timeline import build_replay_timeline
+            from scenario.replay import build_replay_timeline
 
             self._replay_timeline = build_replay_timeline(self)
         return self._replay_timeline
@@ -172,7 +177,7 @@ class ScenarioResult:
         *,
         event_log: list[str] | None = None,
     ) -> None:
-        from satellite.sim.replay_timeline import replay_to_t
+        from scenario.replay import replay_to_t
 
         replay_to_t(self, t_end, event_log=event_log)
 
@@ -243,3 +248,35 @@ def format_summary(result: ScenarioResult) -> str:
             )
 
     return "\n".join(lines)
+
+
+def load_single_scenario(
+    scenario_path: str | Path,
+    simulation_path: str | Path | None = None,
+) -> ScenarioConfig:
+    """Merge scenario instance and environment base, with strategy from the same TOML."""
+    path = Path(scenario_path)
+    data = load_toml(path)
+    instance = parse_scenario(data, path=path)
+
+    if simulation_path is None:
+        simulation_path = instance.simulation_path
+
+    if simulation_path is None:
+        fallback_path = path.parent / "Environment.toml"
+        if not fallback_path.exists():
+            fallback_path = Path("config/Environment.toml")
+        simulation_path = fallback_path
+
+    sim = load_simulation_config(simulation_path)
+
+    strategy_data = data.get("strategy", {})
+    if "chain" not in strategy_data:
+        strategy_data = dict(strategy_data)
+        strategy_data["chain"] = instance.chain
+    strategy = parse_strategy(strategy_data, chain=instance.chain)
+
+    if not strategy.chain:
+        raise ValueError(f"Strategy chain must be specified in the scenario config: {scenario_path}")
+
+    return build_scenario_config(sim, instance, strategy=strategy)

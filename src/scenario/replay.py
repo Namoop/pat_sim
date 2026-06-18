@@ -7,12 +7,12 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 
-from satellite.strategy.base import StrategyContext
-from satellite.strategy.runner import FrameRunner
-from satellite.strategy.schedule import ScheduledScript
+from strategy.base import StrategyContext
+from strategy.runner import FrameRunner
+from strategy.schedule import ScheduledScript
 
 if TYPE_CHECKING:
-    from satellite.sim.scenario import ScenarioResult
+    from scenario.run import ScenarioResult
     from satellite.physics.receiver import ReceiverSDA
 
 

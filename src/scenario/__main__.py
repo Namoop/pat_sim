@@ -8,16 +8,8 @@ from pathlib import Path
 
 import satellite  # noqa: F401 — CUDA bootstrap
 
-from satellite.sim.config import load_single_scenario
-from satellite.sim.scenario import format_summary, run_scenario
-
-
-def _normalize_viz_mode(viz_mode: str | None) -> str | None:
-    if viz_mode == "map":
-        return "eye"
-    if viz_mode == "dist":
-        return "mag"
-    return viz_mode
+from scenario.run import load_single_scenario
+from scenario.run import format_summary, run_scenario
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -41,7 +33,7 @@ def main(argv: list[str] | None = None) -> int:
         "--visualize",
         nargs="?",
         const="3d",
-        choices=("3d", "eye", "mag", "map", "dist"),
+        choices=("3d", "eye", "mag"),
         default=None,
         help=(
             "Open unified visualization window; optional 3d, eye, or mag picks the initial tab. "
@@ -70,13 +62,13 @@ def main(argv: list[str] | None = None) -> int:
 
     exit_code = 0 if result.success else 1
 
-    viz_mode = _normalize_viz_mode(args.visualize)
+    viz_mode = args.visualize
     if viz_mode is None:
-        viz_mode = _normalize_viz_mode(config.visualize)
+        viz_mode = config.visualize
 
     if viz_mode is not None:
-        from satellite.visualize import run_visualizer
-        from satellite.visualize.session import SingleResultSession
+        from visualize import run_visualizer
+        from visualize.session import SingleResultSession
 
         try:
             run_visualizer(

@@ -8,16 +8,8 @@ from pathlib import Path
 
 import satellite  # noqa: F401 — CUDA bootstrap
 
-from satellite.sim.config import load_monte_carlo_config
-from satellite.sim.monte_carlo import format_monte_carlo_summary, run_monte_carlo
-
-
-def _normalize_viz_mode(viz_mode: str | None) -> str | None:
-    if viz_mode == "map":
-        return "eye"
-    if viz_mode == "dist":
-        return "mag"
-    return viz_mode
+from montecarlo.run import load_monte_carlo_config
+from montecarlo.run import format_monte_carlo_summary, run_monte_carlo
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -35,7 +27,7 @@ def main(argv: list[str] | None = None) -> int:
         "--visualize",
         nargs="?",
         const="3d",
-        choices=("3d", "eye", "mag", "map", "dist"),
+        choices=("3d", "eye", "mag"),
         default=None,
         help=(
             "Open unified visualization window; optional 3d, eye, or mag picks the initial tab. "
@@ -72,13 +64,13 @@ def main(argv: list[str] | None = None) -> int:
 
     mc = load_monte_carlo_config(args.config)
 
-    viz_mode = _normalize_viz_mode(args.visualize)
+    viz_mode = args.visualize
     if args.autoplay is not None and viz_mode is None:
         parser.error("--autoplay requires visualization (--visualize)")
 
     if viz_mode is not None:
-        from satellite.visualize import run_visualizer
-        from satellite.visualize.session import MonteCarloVizSession
+        from visualize import run_visualizer
+        from visualize.session import MonteCarloVizSession
 
         session = MonteCarloVizSession(mc)
         try:

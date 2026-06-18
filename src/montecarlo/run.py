@@ -8,22 +8,22 @@ import multiprocessing
 import sys
 import time
 from dataclasses import dataclass
+from pathlib import Path
 
 import numpy as np
 
-from satellite.sim.config import (
-    BenchOffsetConfig,
+from config import load_toml
+from montecarlo.config import parse as parse_monte_carlo
+from montecarlo.types import (
     ErrorDistributionConfig,
     GaussianErrorConfig,
     MonteCarloConfig,
-    ScenarioInstance,
-    StrategyConfig,
     UniformErrorConfig,
-    build_scenario_config,
-    load_monte_carlo_config,
-    load_simulation_config,
 )
-from satellite.sim.scenario import ScenarioResult, run_scenario
+from scenario.types import BenchOffsetConfig, ScenarioInstance, build_scenario_config
+from satellite.config import load_simulation_config
+from strategy.config import StrategyConfig, parse as parse_strategy
+from scenario.run import ScenarioResult, run_scenario
 
 
 @dataclass(frozen=True)
@@ -121,6 +121,27 @@ def format_monte_carlo_run_complete(
     return f"{prefix} Failed after t={total_t:.3g} timeout (tried {tried})"
 
 
+def load_monte_carlo_config(path: str | Path) -> MonteCarloConfig:
+    config_path = Path(path)
+    data = load_toml(config_path)
+    settings = parse_monte_carlo(data, path=config_path)
+    sim_bundle = load_simulation_config(settings.simulation_path)
+    strategy = parse_strategy(
+        data.get("strategy", {}),
+        chain=list(settings.chain),
+        default_k=sim_bundle.satellite.k,
+    )
+    return MonteCarloConfig(
+        simulation_path=settings.simulation_path,
+        seed=settings.seed,
+        error=settings.error,
+        strategy=strategy,
+        runs=settings.runs,
+        chain=settings.chain,
+        overrides=settings.overrides,
+    )
+
+
 def run_monte_carlo_single(
     mc: MonteCarloConfig,
     sim,
@@ -151,6 +172,7 @@ def run_monte_carlo_single(
         name=f"mc_run_{run_index}",
         s1=s1_off,
         s2=s2_off,
+        chain=mc.chain,
         overrides=mc.overrides,
     )
     config = build_scenario_config(sim, instance, strategy=strategy or mc.strategy)
@@ -251,7 +273,7 @@ def run_monte_carlo(
     if not mc.chain:
         raise ValueError("monte_carlo.chain is required to run a Monte Carlo simulation")
 
-    from satellite.sim.cuda_monte_carlo import is_strategy_chain_supported_on_gpu, run_monte_carlo_cuda
+    from montecarlo.cuda import is_strategy_chain_supported_on_gpu, run_monte_carlo_cuda
     if is_strategy_chain_supported_on_gpu(mc):
         print("Running Monte Carlo simulation on GPU...", flush=True)
         return run_monte_carlo_cuda(mc)
