@@ -32,8 +32,6 @@ class FrameRunResult:
 
 @dataclass
 class FrameStepResult:
-    visible_12: bool
-    visible_21: bool
     locked: bool
     events: list[str] = field(default_factory=list)
 
@@ -344,18 +342,7 @@ class FrameRunner:
         )
         if ev: events.extend(ev)
 
-        # Re-check visibility for compatibility with FrameStepResult
-        # (This is slightly slow but only used by tests and non-inlined callers)
-        v12 = s1_runtime.beam_enabled and s2_runtime.receiver_enabled and link_established(
-            self.ctx.s1, self.ctx.s2, self.ctx.s1.bench.bench_boresight, self.ctx.config
-        )
-        v21 = s2_runtime.beam_enabled and s1_runtime.receiver_enabled and link_established(
-            self.ctx.s2, self.ctx.s1, self.ctx.s2.bench.bench_boresight, self.ctx.config
-        )
-
         return FrameStepResult(
-            visible_12=v12,
-            visible_21=v21,
             locked=locked,
             events=events,
         )

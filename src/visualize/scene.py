@@ -114,15 +114,6 @@ def build_view(
     )
 
 
-def build_panel(
-    result: ScenarioResult,
-    satellite: SatelliteName,
-    t: float,
-) -> EyeView:
-    """Backward-compatible alias for :func:`build_view`."""
-    return build_view(result, satellite, t)
-
-
 def build_scene(result: ScenarioResult, t: float) -> EyeScene:
     result.replay_to(t)
     s1 = build_view(result, "S1", t)

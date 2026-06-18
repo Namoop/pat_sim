@@ -59,10 +59,7 @@ if os.environ.get("SATELLITE_NO_GPU") != "1" and not os.environ.get("_SATELLITE_
 
             if _run_module:
                 _args = [sys.executable, "-m", _run_module] + sys.argv[1:]
-            elif sys.argv[0] == "-m":
-                _args = [sys.executable, "-m", "satellite"] + sys.argv[1:]
             else:
-                # Fallback: re-run the script file directly (keeps sys.argv intact)
                 _args = [sys.executable] + sys.argv
 
             try:

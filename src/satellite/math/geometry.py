@@ -477,27 +477,6 @@ def desmos_k_surface_mesh(
     return vertices, np.array(faces, dtype=np.int64)
 
 
-def spiral_trail_on_plane(
-    p1: Vec3,
-    t_max: float,
-    boresight_fn: Callable[[float], Vec3],
-    plane_distance: float,
-    num_steps: int,
-    plane_normal: Vec3 | None = None,
-) -> np.ndarray:
-    """Backward-compatible spiral polyline on the target plane."""
-    if plane_normal is None:
-        plane_normal = normalize(boresight_fn(0.0))
-    return spiral_path_on_target_plane(
-        p1,
-        t_max,
-        boresight_fn,
-        plane_normal,
-        plane_distance,
-        num_steps,
-    )
-
-
 def actual_position_from_jumble(
     p1: Vec3,
     believed_boresight: Vec3,

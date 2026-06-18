@@ -134,5 +134,5 @@ def load_simulation_config(path: str | Path) -> SimulationBundle:
         simulation=_load_simulation_section(data.get("simulation", {})),
         three_d_viz=_load_three_d_viz(data.get("3d_viz", {})),
         eye_viz=_load_eye_viz(data.get("eye_viz", {})),
-        mag_viz=_load_mag_viz(data.get("mag_viz", data.get("dist_viz", {}))),
+        mag_viz=_load_mag_viz(data.get("mag_viz", {})),
     )

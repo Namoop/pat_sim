@@ -7,9 +7,7 @@ from pathlib import Path
 from config import collect_overrides, resolve_relative_path
 from scenario.types import BenchOffsetConfig, ScenarioInstance
 
-_SCENARIO_SKIP = frozenset(
-    {"name", "chain", "environment", "simulation_file", "visualize"}
-)
+_SCENARIO_SKIP = frozenset({"name", "chain", "environment", "visualize"})
 
 
 def parse(data: dict, *, path: str | Path) -> ScenarioInstance:
@@ -23,12 +21,6 @@ def parse(data: dict, *, path: str | Path) -> ScenarioInstance:
         raise ValueError(f"scenario.chain is required in scenario config: {path}")
 
     simulation_rel = scenario.get("environment")
-    if simulation_rel is None:
-        simulation_rel = scenario.get("simulation_file")
-    if simulation_rel is None:
-        simulation_val = scenario.get("simulation")
-        if isinstance(simulation_val, (str, Path)):
-            simulation_rel = simulation_val
 
     simulation_path = None
     if simulation_rel is not None and isinstance(simulation_rel, (str, Path)):

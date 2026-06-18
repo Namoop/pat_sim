@@ -77,16 +77,13 @@ def build_scenario_config(
     satellite = apply_dict_overrides(sim.satellite, overrides.get("satellite", {}))
     simulation = apply_dict_overrides(sim.simulation, overrides.get("simulation", {}))
 
-    three_d_viz_overrides = overrides.get("3d_viz", overrides.get("three_d_viz", {}))
+    three_d_viz_overrides = overrides.get("3d_viz", {})
     three_d_viz = apply_dict_overrides(sim.three_d_viz, three_d_viz_overrides)
 
     eye_viz_overrides = overrides.get("eye_viz", {})
     eye_viz = apply_dict_overrides(sim.eye_viz, eye_viz_overrides)
 
-    mag_viz_overrides = overrides.get(
-        "mag_viz",
-        overrides.get("dist_viz", overrides.get("dist_visualization", {})),
-    )
+    mag_viz_overrides = overrides.get("mag_viz", {})
     mag_viz = apply_dict_overrides(sim.mag_viz, mag_viz_overrides)
 
     s1_pos, s2_pos = positions_for_distance(simulation.distance)

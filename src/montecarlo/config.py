@@ -16,9 +16,7 @@ from montecarlo.types import (
     UniformErrorConfig,
 )
 
-_MC_SKIP = frozenset(
-    {"runs", "seed", "chain", "environment", "simulation_file", "error"}
-)
+_MC_SKIP = frozenset({"runs", "seed", "chain", "environment", "error"})
 
 
 @dataclass(frozen=True)
@@ -60,17 +58,11 @@ def parse(data: dict, *, path: str | Path) -> MonteCarloSettings:
     config_path = Path(path)
     mc = data.get("monte_carlo", {})
 
-    simulation_rel = mc.get("environment")
-    if simulation_rel is None:
-        simulation_rel = mc.get("simulation_file")
-    if simulation_rel is None:
-        simulation_rel = mc.get("simulation", "Environment.toml")
+    simulation_rel = mc.get("environment", "Environment.toml")
     simulation_path = resolve_environment_path(str(simulation_rel), config_path)
 
     chain_list = list(mc.get("chain", []))
     overrides = collect_overrides(mc, skip_keys=_MC_SKIP)
-    if "simulation" in mc and not isinstance(mc["simulation"], dict):
-        overrides.pop("simulation", None)
 
     return MonteCarloSettings(
         simulation_path=simulation_path,

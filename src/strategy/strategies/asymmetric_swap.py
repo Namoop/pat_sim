@@ -44,13 +44,10 @@ class AsymmetricSwapStrategy(SearchStrategy):
 
     @classmethod
     def from_config(cls, config: ScenarioConfig) -> AsymmetricSwapStrategy:
-        # Fallback to asymmetric_probe if swap not present in config yet
         params = config.strategy.params.get("asymmetric_swap")
         if params is None:
-            params = config.strategy.params.get("asymmetric_probe")
-        if params is None:
             params = AsymmetricSwapConfig(spiral_radius=0.05, lock_duration=1.0)
-        
+
         return cls(
             config=params,
             w=config.strategy.spiral_w(config.satellite),
