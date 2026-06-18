@@ -6,9 +6,11 @@ from typing import Protocol
 
 import numpy as np
 
-from satellite.sim.config import MonteCarloConfig, StrategyConfig, load_simulation_config
-from satellite.sim.monte_carlo import run_monte_carlo_single
-from satellite.sim.scenario import ScenarioResult
+from montecarlo.types import MonteCarloConfig
+from satellite.config import load_simulation_config
+from strategy.config import StrategyConfig
+from montecarlo.run import run_monte_carlo_single
+from scenario.run import ScenarioResult
 
 
 class VizSession(Protocol):

@@ -12,11 +12,11 @@ from PyQt6.QtCore import QPointF, Qt, QTimer
 from PyQt6.QtGui import QBrush, QColor, QFont, QPainter, QPen, QPolygonF
 from PyQt6.QtWidgets import QButtonGroup, QGridLayout, QPushButton, QSizePolicy, QVBoxLayout, QWidget
 
-from satellite.mapviz.frames import direction_to_tangent_angles
-from satellite.mapviz.scene import MapScene, build_scene
+from visualize.frames import direction_to_tangent_angles
+from visualize.scene import EyeScene, build_scene
 from satellite.math.math3d import angle_between
-from satellite.sim.scenario import ScenarioResult
-from satellite.visualize.diagnostics import FrameProfiler
+from scenario.run import ScenarioResult
+from visualize.diagnostics import FrameProfiler
 
 ViewMode = Literal["center", "s1", "s2", "follow_s1", "follow_s2", "balance"]
 
@@ -43,7 +43,7 @@ class MagPanelWidget(QWidget):
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
-        self._scene: MapScene | None = None
+        self._scene: EyeScene | None = None
         self._result: ScenarioResult | None = None
         self._config = None
         self._last_paint_seconds = 0.0
@@ -310,7 +310,7 @@ class MagPanelWidget(QWidget):
         super().resizeEvent(event)
         self._position_buttons()
 
-    def set_scene(self, scene: MapScene, result: ScenarioResult) -> None:
+    def set_scene(self, scene: EyeScene, result: ScenarioResult) -> None:
         result_changed = result is not self._result
         self._scene = scene
         self._result = result

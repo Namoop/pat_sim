@@ -9,13 +9,13 @@ import numpy as np
 
 from satellite.math.geometry import axis_perpendicular_basis
 from satellite.math.math3d import normalize
-from satellite.sim.scenario import ScenarioResult
-from satellite.visualize.viz_geometry import cone_mesh_for_aim
-from satellite.visualize.diagnostics import FrameProfiler
+from scenario.run import ScenarioResult
+from visualize.viz_geometry import cone_mesh_for_aim
+from visualize.diagnostics import FrameProfiler
 
 
 @dataclass(frozen=True)
-class View3DFrameInfo:
+class ThreeDFrameInfo:
     capture_active: bool
     event_log: tuple[str, ...]
 
@@ -103,7 +103,7 @@ _CAMERA_PRESETS: dict[str, _CameraPreset] = {
 }
 
 
-class View3DPanel:
+class ThreeDPanel:
     """Embedded 3D PyVista view; caller owns timeline scrubbing."""
 
     def __init__(self, parent) -> None:
@@ -179,7 +179,7 @@ class View3DPanel:
         from PyQt6.QtCore import QObject, QEvent
 
         class _ResizeForwarder(QObject):
-            def __init__(self, panel: View3DPanel) -> None:
+            def __init__(self, panel: ThreeDPanel) -> None:
                 super().__init__()
                 self._panel = panel
 
@@ -284,10 +284,10 @@ class View3DPanel:
         print(f"Replay timeline: {timeline.memory_summary()}")
         self._build_scene()
 
-    def apply_t(self, t: float) -> View3DFrameInfo:
+    def apply_t(self, t: float) -> ThreeDFrameInfo:
         result = self._result
         if result is None:
-            raise RuntimeError("View3DPanel.set_result must be called first")
+            raise RuntimeError("ThreeDPanel.set_result must be called first")
         self.ensure_initialized()
 
         total_t = result.playable_t_end
@@ -306,7 +306,7 @@ class View3DPanel:
         self._profiler.end_frame()
         self._emit_profile()
 
-        return View3DFrameInfo(
+        return ThreeDFrameInfo(
             capture_active=result.mutual_lock(t),
             event_log=tuple(event_log),
         )

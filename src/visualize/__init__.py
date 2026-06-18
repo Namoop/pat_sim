@@ -1,8 +1,8 @@
-from satellite.visualize.session import MonteCarloVizSession, SingleResultSession
+from visualize.session import MonteCarloVizSession, SingleResultSession
 
 
 def run_visualizer(*args, **kwargs):
-    from satellite.visualize.app import run_visualizer as _run
+    from visualize.app import run_visualizer as _run
 
     return _run(*args, **kwargs)
 

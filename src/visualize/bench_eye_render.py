@@ -1,4 +1,4 @@
-"""Benchmark mapviz QPainter render path (headless Qt)."""
+"""Benchmark eye-view QPainter render path (headless Qt)."""
 
 from __future__ import annotations
 
@@ -8,10 +8,10 @@ import time
 
 import numpy as np
 
-from satellite.sim.config import load_single_scenario
-from satellite.mapviz.panel_widget import AngularMapPanel
-from satellite.mapviz.scene import build_scene
-from satellite.sim.scenario import run_scenario
+from scenario.run import load_single_scenario
+from scenario.run import run_scenario
+from visualize.panels.eye_panel import EyeCanvas
+from visualize.scene import build_scene
 
 
 def _percentile(sorted_vals: list[float], p: float) -> float:
@@ -39,14 +39,14 @@ def run_benchmark(
     result = run_scenario(config)
     result.ensure_replay_timeline()
     total_t = result.playable_t_end
-    map_cfg = config.map_viz
+    eye_cfg = config.eye_viz
 
     app = QApplication.instance() or QApplication([])
-    panel_s1 = AngularMapPanel(axis_limit=map_cfg.axis_limit)
-    panel_s2 = AngularMapPanel(axis_limit=map_cfg.axis_limit)
-    for panel in (panel_s1, panel_s2):
-        panel.setAttribute(Qt.WidgetAttribute.WA_DontShowOnScreen, True)
-        panel.resize(520, 480)
+    canvas_s1 = _EyeCanvas(axis_limit=eye_cfg.axis_limit)
+    canvas_s2 = _EyeCanvas(axis_limit=eye_cfg.axis_limit)
+    for canvas in (canvas_s1, canvas_s2):
+        canvas.setAttribute(Qt.WidgetAttribute.WA_DontShowOnScreen, True)
+        canvas.resize(520, 480)
     app.processEvents()
 
     rng = np.random.default_rng(seed)
@@ -70,10 +70,10 @@ def run_benchmark(
         build_times.append(time.perf_counter() - t_build)
 
         t_paint = time.perf_counter()
-        if panel_s1.set_panel(scene.s1, partner_label="S2"):
-            panel_s1.repaint()
-        if panel_s2.set_panel(scene.s2, partner_label="S1"):
-            panel_s2.repaint()
+        if canvas_s1.set_view(scene.s1, partner_label="S2"):
+            canvas_s1.repaint()
+        if canvas_s2.set_view(scene.s2, partner_label="S1"):
+            canvas_s2.repaint()
         paint_times.append(time.perf_counter() - t_paint)
 
         frame_times.append(time.perf_counter() - t0)
@@ -86,7 +86,7 @@ def run_benchmark(
             f"max={vals_ms[-1]:.2f} ms"
         )
 
-    print(f"Mapviz QPainter benchmark ({samples} samples, t in [0, {total_t:.2f}])")
+    print(f"Eye view QPainter benchmark ({samples} samples, t in [0, {total_t:.2f}])")
     report("replay", replay_times)
     report("build_scene", build_times)
     report("paint", paint_times)
@@ -101,7 +101,7 @@ def run_benchmark(
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="Benchmark mapviz QPainter render.")
+    parser = argparse.ArgumentParser(description="Benchmark eye-view QPainter render.")
     parser.add_argument(
         "--scenario",
         default="config/Scenario.toml",

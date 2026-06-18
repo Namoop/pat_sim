@@ -1,4 +1,4 @@
-"""Tangent-plane projection for angular map visualization."""
+"""Tangent-plane projection for eye-view visualization."""
 
 from __future__ import annotations
 

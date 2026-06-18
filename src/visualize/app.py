@@ -6,13 +6,13 @@ from typing import Literal
 
 import numpy as np
 
-from satellite.sim.scenario import format_summary
-from satellite.visualize.panels.mag_panel import MagPanel
-from satellite.visualize.panels.event_log_panel import EventLogPanel
-from satellite.visualize.panels.eye_panel import EyePanel
-from satellite.visualize.panels.view3d import View3DPanel
-from satellite.visualize.qt_util import configure_qt_platform, install_sigint_handler
-from satellite.visualize.session import MonteCarloVizSession, SingleResultSession, VizSession
+from scenario.run import format_summary
+from visualize.panels.mag_panel import MagPanel
+from visualize.panels.event_log_panel import EventLogPanel
+from visualize.panels.eye_panel import EyePanel
+from visualize.panels.panel_3d import ThreeDPanel
+from visualize.qt_util import configure_qt_platform, install_sigint_handler
+from visualize.session import MonteCarloVizSession, SingleResultSession, VizSession
 
 
 PLAY_INTERVAL_MS = 50
@@ -151,7 +151,7 @@ def run_visualizer(
             root_layout.addWidget(self._controls_bar)
 
             self._stack = QStackedWidget()
-            self._panel_3d = View3DPanel(self._stack)
+            self._panel_3d = ThreeDPanel(self._stack)
             self._panel_eye = EyePanel(self._stack)
             self._panel_mag = MagPanel(self._stack)
             self._stack.addWidget(self._panel_3d.widget)
