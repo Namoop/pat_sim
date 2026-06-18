@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from satellite.strategy.actions import MovementStep, StrategyScript
+from strategy.actions import MovementStep, StrategyScript
 
 
 @dataclass(frozen=True)

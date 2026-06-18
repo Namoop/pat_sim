@@ -6,7 +6,7 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 
 from satellite.math.math3d import Vec3
-from satellite.strategy.patterns import (
+from strategy.patterns import (
     basis_at_direction,
     circle_aim_at,
     grid_aim_at,

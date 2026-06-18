@@ -5,11 +5,11 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from satellite.strategy.actions import beam, receiver, strategy
-from satellite.strategy.base import SearchStrategy, StrategyContext, register_strategy
+from strategy.actions import beam, receiver, strategy
+from strategy.base import SearchStrategy, StrategyContext, register_strategy
 
 if TYPE_CHECKING:
-    from satellite.sim.config import ScenarioConfig
+    from scenario.types import ScenarioConfig
 
 
 @dataclass(frozen=True)
@@ -43,7 +43,7 @@ class LissajousScanStrategy(SearchStrategy):
         return cls(config=config.strategy.params.get("lissajous_scan", LissajousScanConfig()))
 
     def build_script(self, ctx: StrategyContext):
-        from satellite.strategy.movements import Lissajous
+        from strategy.movements import Lissajous
         import math
 
         max_radius = ctx.config.simulation.max_search_radius

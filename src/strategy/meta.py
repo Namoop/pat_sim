@@ -4,16 +4,16 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from satellite.sim.config import ScenarioConfig
-from satellite.strategy.actions import StrategyScript
-from satellite.strategy.base import (
+from scenario.types import ScenarioConfig
+from strategy.actions import StrategyScript
+from strategy.base import (
     STRATEGY_REGISTRY,
     SearchStrategy,
     StrategyContext,
     StrategyResult,
 )
-from satellite.strategy.schedule import LegSchedule, compile_trace
-import satellite.strategy.strategies  # Ensure registration
+from strategy.schedule import LegSchedule, compile_trace
+import strategy.strategies  # Ensure registration
 
 
 @dataclass
@@ -44,7 +44,7 @@ class MetaStrategy:
                 chain.append(strat_cls.from_config(config))
             elif name == "comprehensive":
                 # Special case or stub
-                from satellite.strategy.strategies.comprehensive import (
+                from strategy.strategies.comprehensive import (
                     ComprehensiveStrategy,
                 )
 

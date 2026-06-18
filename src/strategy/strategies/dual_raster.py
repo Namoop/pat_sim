@@ -5,11 +5,11 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from satellite.strategy.actions import beam, receiver, strategy
-from satellite.strategy.base import SearchStrategy, StrategyContext, register_strategy
+from strategy.actions import beam, receiver, strategy
+from strategy.base import SearchStrategy, StrategyContext, register_strategy
 
 if TYPE_CHECKING:
-    from satellite.sim.config import ScenarioConfig
+    from scenario.types import ScenarioConfig
 
 
 @dataclass(frozen=True)
@@ -39,8 +39,8 @@ class DualRasterStrategy(SearchStrategy):
         return cls(config=config.strategy.params.get("dual_raster", DualRasterConfig()))
 
     def build_script(self, ctx: StrategyContext):
-        from satellite.strategy.actions import hold
-        from satellite.strategy.movements import SerpentineRaster
+        from strategy.actions import hold
+        from strategy.movements import SerpentineRaster
 
         max_radius = ctx.config.simulation.max_search_radius
         speed_a = self.config.speed_a

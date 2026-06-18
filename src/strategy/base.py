@@ -6,11 +6,11 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Callable, TypeVar
 
-from satellite.sim.config import ScenarioConfig, default_beam_length
-from satellite.sim.detection import beam_hits_dish
-from satellite.sim.detection_fast import beam_hits_dish_fast
+from scenario.types import ScenarioConfig, default_beam_length
+from satellite.detection import beam_hits_dish
+from satellite.detection_fast import beam_hits_dish_fast
 from satellite.math.math3d import Vec3
-from satellite.strategy.actions import StrategyScript, validate_movement_durations
+from strategy.actions import StrategyScript, validate_movement_durations
 
 if TYPE_CHECKING:
     from satellite.physics.satellite import Satellite
@@ -124,7 +124,7 @@ class SearchStrategy(ABC):
         """Return independent per-satellite timelines."""
 
     def try_run(self, ctx: StrategyContext, global_t_start: float) -> StrategyResult:
-        from satellite.strategy.runner import FrameRunner
+        from strategy.runner import FrameRunner
 
         script = self.build_script(ctx)
         

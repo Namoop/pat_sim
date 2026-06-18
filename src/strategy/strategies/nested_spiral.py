@@ -9,11 +9,11 @@ from __future__ import annotations
 import math
 from typing import TYPE_CHECKING
 
-from satellite.strategy.actions import beam, hold, receiver, spiral, strategy
-from satellite.strategy.base import SearchStrategy, StrategyContext, register_strategy
+from strategy.actions import beam, hold, receiver, spiral, strategy
+from strategy.base import SearchStrategy, StrategyContext, register_strategy
 
 if TYPE_CHECKING:
-    from satellite.sim.config import ScenarioConfig
+    from scenario.types import ScenarioConfig
 
 
 def parse_nested_spiral_config(_data: dict) -> None:
@@ -35,7 +35,7 @@ class NestedSpiralStrategy(SearchStrategy):
         )
 
     def build_script(self, ctx: StrategyContext):
-        from satellite.strategy.movements import DiscretePattern
+        from strategy.movements import DiscretePattern
 
         sat_cfg = ctx.config.satellite
         sim_cfg = ctx.config.simulation

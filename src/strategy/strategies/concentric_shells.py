@@ -5,11 +5,11 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from satellite.strategy.actions import beam, receiver, spiral, strategy
-from satellite.strategy.base import SearchStrategy, StrategyContext, register_strategy
+from strategy.actions import beam, receiver, spiral, strategy
+from strategy.base import SearchStrategy, StrategyContext, register_strategy
 
 if TYPE_CHECKING:
-    from satellite.sim.config import ScenarioConfig
+    from scenario.types import ScenarioConfig
 
 
 @dataclass(frozen=True)
@@ -43,7 +43,7 @@ class ConcentricShellsStrategy(SearchStrategy):
         )
 
     def build_script(self, ctx: StrategyContext):
-        from satellite.strategy.actions import hold
+        from strategy.actions import hold
 
         max_radius = ctx.config.simulation.max_search_radius
         max_beam_speed = ctx.config.satellite.max_beam_speed

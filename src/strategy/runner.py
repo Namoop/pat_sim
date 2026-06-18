@@ -5,14 +5,14 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import TypedDict
 
-from satellite.strategy.actions import (
+from strategy.actions import (
     HardwareStep,
     MovementStep,
     SatelliteTimeline,
     StrategyScript,
 )
-from satellite.strategy.base import StrategyContext, link_established
-from satellite.strategy.movements import AimContext, Reset, build_aim_context
+from strategy.base import StrategyContext, link_established
+from strategy.movements import AimContext, Reset, build_aim_context
 
 
 class HardwareSnapshot(TypedDict):

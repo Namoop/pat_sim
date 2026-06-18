@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from satellite.strategy.actions import hold, strategy
-from satellite.strategy.base import (
+from strategy.actions import hold, strategy
+from strategy.base import (
     SearchStrategy,
     StrategyContext,
     StrategyResult,
@@ -13,7 +13,7 @@ from satellite.strategy.base import (
 )
 
 if TYPE_CHECKING:
-    from satellite.sim.config import ScenarioConfig
+    from scenario.types import ScenarioConfig
 
 
 @register_strategy("comprehensive")

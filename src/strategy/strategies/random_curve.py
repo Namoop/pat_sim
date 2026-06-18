@@ -8,12 +8,12 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
 from satellite.math.math3d import Vec3, normalize
-from satellite.strategy.actions import beam, receiver, strategy
-from satellite.strategy.base import SearchStrategy, StrategyContext, register_strategy
-from satellite.strategy.movements import AimContext, MovementPattern
+from strategy.actions import beam, receiver, strategy
+from strategy.base import SearchStrategy, StrategyContext, register_strategy
+from strategy.movements import AimContext, MovementPattern
 
 if TYPE_CHECKING:
-    from satellite.sim.config import ScenarioConfig
+    from scenario.types import ScenarioConfig
 
 
 @dataclass(frozen=True)

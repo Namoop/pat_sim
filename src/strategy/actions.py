@@ -9,7 +9,7 @@ import math
 from typing import TYPE_CHECKING, Iterator, Literal
 
 from satellite.math.math3d import angle_between
-from satellite.strategy.movements import (
+from strategy.movements import (
     Circle,
     Grid,
     Hold,
@@ -21,7 +21,7 @@ from satellite.strategy.movements import (
 )
 
 if TYPE_CHECKING:
-    from satellite.strategy.base import StrategyContext
+    from strategy.base import StrategyContext
 
 SatelliteName = Literal["S1", "S2"]
 HardwareTarget = Literal["beam", "receiver"]

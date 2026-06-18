@@ -6,11 +6,11 @@ import random
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from satellite.strategy.actions import beam, receiver, strategy
-from satellite.strategy.base import SearchStrategy, StrategyContext, register_strategy
+from strategy.actions import beam, receiver, strategy
+from strategy.base import SearchStrategy, StrategyContext, register_strategy
 
 if TYPE_CHECKING:
-    from satellite.sim.config import ScenarioConfig
+    from scenario.types import ScenarioConfig
 
 
 @dataclass(frozen=True)
@@ -38,7 +38,7 @@ class RandomWalkStrategy(SearchStrategy):
         return cls(config=config.strategy.params.get("random_walk", RandomWalkConfig()))
 
     def build_script(self, ctx: StrategyContext):
-        from satellite.strategy.movements import DiscretePattern
+        from strategy.movements import DiscretePattern
 
         max_radius = ctx.config.simulation.max_search_radius
         beam_width = ctx.config.satellite.alpha
