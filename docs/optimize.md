@@ -84,8 +84,8 @@ Run the optimization script from the root repository directory:
 # Basic Random Search optimization for random_curve (20 trials)
 python -m optimize --strategy random_curve --method random --trials 20
 
-# Optuna Bayesian optimization for center_rebias (50 trials)
-python -m optimize --strategy center_rebias --method optuna --trials 50
+# Explicit config file
+python -m optimize config/Optimize.toml --strategy lissajous_scan --method optuna --trials 50
 
 # Grid Search optimization for random_walk (10 grid points)
 python -m optimize --strategy random_walk --method grid --grid-points 10
@@ -94,9 +94,9 @@ python -m optimize --strategy random_walk --method grid --grid-points 10
 ### Command-Line Options
 
 
-| Flag            | Type  | Default                | Description                                                                                                                                                                   |
+| Argument / flag | Type  | Default                | Description                                                                                                                                                                   |
 | --------------- | ----- | ---------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `--config`      | `str` | `config/Optimize.toml` | Path to the TOML configuration file.                                                                                                                                          |
+| `config`        | `path` | `config/Optimize.toml` | Optional positional path to the optimize TOML.                                                                                                                                |
 | `--strategy`    | `str` | Loaded from config     | Name of the strategy to optimize (e.g., `random_curve`, `lissajous_scan`, `rosette_scan`, `center_rebias`, `random_walk`, `dual_spiral`, `dual_raster`, `concentric_shells`). |
 | `--method`      | `str` | Loaded from config     | Optimization algorithm: `random`, `grid`, or `optuna`.                                                                                                                        |
 | `--trials`      | `int` | Loaded from config     | Number of iterations for `random` or `optuna` search.                                                                                                                         |

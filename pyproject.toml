@@ -37,6 +37,8 @@ all = [
 ]
 
 [project.scripts]
+scenario = "scenario.__main__:main"
+montecarlo = "montecarlo.__main__:main"
 satellite = "satellite.__main__:main"
 
 [tool.setuptools.packages.find]

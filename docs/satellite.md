@@ -20,42 +20,51 @@ For a detailed walkthrough of the physical system model (satellites, optical ben
 
 This section provides a detailed reference for running the satellite simulation and related command-line utilities.
 
-### Main Command
+### Scenario Command
 
 ```bash
-python -m satellite [options]
+python -m scenario [config] [options]
 ```
 
-Runs a satellite SDA communication scenario.
+Runs a single satellite SDA communication scenario. Optional positional `config` defaults to `config/Scenario.toml`.
 
-### Command-line Options
+#### Scenario Options
 
 - `**--visualize [{3d,eye,mag}]**`  
-Opens the unified visualization window after the run. The optional choice `3d`, `eye`, or `mag` picks the **initial tab** (3D PyVista view, angular θ/φ eye map, or 2D magnitude alignment). `--visualize` alone is equivalent to `--visualize 3d`. If omitted, the window opens when `[scenario].visualize` is specified as `"3d"`, `"eye"`, or `"mag"` in the scenario config. With `--monte-carlo`, opens an interactive step-through mode: **Next** runs the next sampled scenario (or closes on the last run / single scenario). On successful runs the timeline ends at mutual lock — replay cache, slider, and playback cannot scrub past that point. Playback controls sit above the view; the **event log** (system, S1, S2) is in a three-column strip at the bottom.
+Opens the unified visualization window after the run. The optional choice `3d`, `eye`, or `mag` picks the **initial tab** (3D PyVista view, angular θ/φ eye map, or 2D magnitude alignment). `--visualize` alone is equivalent to `--visualize 3d`. If omitted, the window opens when `[scenario].visualize` is specified as `"3d"`, `"eye"`, or `"mag"` in the scenario config.
 
-> [!NOTE]
 > - **Eye View (`eye`)**: Named "eye" because you are seeing the "eye" of each satellite, and since there are two satellites total, it looks kind of like eyes.
 > - **Mag View (`mag`)**: Short for "magnitude" since all you see is in 2D representing the total magnitude offset.
-- `**--monte-carlo [MONTE_CARLO]`** (default if flag present but path omitted: `config/MonteCarlo.toml`)  
-Runs a Monte Carlo batch from the specified TOML file. Without `--visualize`, runs the full batch headlessly and prints a summary. With visualization enabled (via `--visualize`), runs one scenario at a time in the visualizer; use **Next** to advance.
-- `**--scenario [SCENARIO]`** (default: `config/Scenario.toml`)  
-Path to the Scenario instance TOML containing bench offsets, strategy chain, and optional overrides. (Also defaults to `config/Scenario.toml` if the flag is provided without a path).
-- `**--environment ENVIRONMENT**` (default: `config/Environment.toml`)  
+- `**--environment ENVIRONMENT**`  
 Path to the Environment base TOML containing hardware, timing, distance, `t_step`, and visualization defaults.
 - `**--t T**` (default: `0`)  
 Starting time `t` when opening a visualizer.
+
+### Monte Carlo Command
+
+```bash
+python -m montecarlo [config] [options]
+```
+
+Runs a Monte Carlo batch from the specified TOML file (default: `config/MonteCarlo.toml`). Without `--visualize`, runs the full batch headlessly and prints a summary. With visualization enabled (via `--visualize`), runs one scenario at a time in the visualizer; use **Next** to advance. On successful runs the timeline ends at mutual lock — replay cache, slider, and playback cannot scrub past that point. Playback controls sit above the view; the **event log** (system, S1, S2) is in a three-column strip at the bottom.
+
+#### Monte Carlo Options
+
+- `**--visualize [{3d,eye,mag}]**` — same as scenario; opens interactive step-through mode.
+- `**--t T**` (default: `0`) — starting time when opening a visualizer.
+- `**--autoplay [SPEED]**` — auto-scrub visualization; advance to the next run when each finishes.
 
 ### Examples
 
 ```bash
 # Run the default scenario
-python -m satellite
+python -m scenario
 
 # Visualize with specific starting time and eye tab initially active
-python -m satellite --visualize eye --t 2.5
+python -m scenario --visualize eye --t 2.5
 
 # Run Monte Carlo simulation batch
-python -m satellite --monte-carlo config/MonteCarlo.toml
+python -m montecarlo config/MonteCarlo.toml
 ```
 
 ---
@@ -86,7 +95,8 @@ RNG seed for sample times.
 On Linux with Wayland, Qt windows (map visualizer) may fail to open or render incorrectly. Force the X11 backend via `QT_QPA_PLATFORM=xcb`:
 
 ```bash
-QT_QPA_PLATFORM=xcb python -m satellite [...]
+QT_QPA_PLATFORM=xcb python -m scenario [...]
+QT_QPA_PLATFORM=xcb python -m montecarlo [...]
 ```
 
 ---

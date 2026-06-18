@@ -6,19 +6,14 @@ from pathlib import Path
 
 import pytest
 
-from satellite.__main__ import main
+from montecarlo.__main__ import main
 
 FIXTURES = Path(__file__).parent / "fixtures"
 
 
-def test_autoplay_requires_monte_carlo():
-    with pytest.raises(SystemExit):
-        main(["--autoplay", "2"])
-
-
 def test_autoplay_requires_positive_speed():
     with pytest.raises(SystemExit):
-        main(["--monte-carlo", "config/_montecarlo_minor.toml", "--autoplay", "0"])
+        main(["config/_montecarlo_minor.toml", "--autoplay", "0"])
 
 
 def test_autoplay_without_speed_defaults_to_one(monkeypatch):
@@ -30,7 +25,7 @@ def test_autoplay_without_speed_defaults_to_one(monkeypatch):
         return 0
 
     monkeypatch.setattr("satellite.visualize.run_visualizer", fake_run_visualizer)
-    main(["--monte-carlo", str(repo / "config/_montecarlo_minor.toml"), "--visualize", "--autoplay"])
+    main([str(repo / "config/_montecarlo_minor.toml"), "--visualize", "--autoplay"])
     assert captured["autoplay_speed"] == 1.0
 
 
@@ -45,4 +40,4 @@ def test_autoplay_requires_visualization(tmp_path):
         .replace('environment = "Environment.toml"', f'environment = "{sim.name}"')
     )
     with pytest.raises(SystemExit):
-        main(["--monte-carlo", str(mc), "--autoplay", "1"])
+        main([str(mc), "--autoplay", "1"])

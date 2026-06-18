@@ -97,8 +97,15 @@ echo
 # ---------------------------------------------------------------------------
 
 FAILED=()
+INTERRUPTED=0
+
+trap 'INTERRUPTED=1; echo "Interrupted — stopping after current strategy..." >&2' INT
 
 for i in "${!STRATEGIES[@]}"; do
+    if [[ $INTERRUPTED -eq 1 ]]; then
+        break
+    fi
+
     STRATEGY="${STRATEGIES[$i]}"
     IDX=$((i + 1))
     LOG_FILE="${LOG_DIR}/${STRATEGY}.log"
@@ -111,7 +118,7 @@ for i in "${!STRATEGIES[@]}"; do
     STRATEGY_START=$(date +%s)
 
     if PYTHONPATH=src python -m optimize \
-            --config     "$CONFIG_FILE" \
+            "$CONFIG_FILE" \
             --strategy   "$STRATEGY" \
             --method     "$METHOD" \
             --trials     "$TRIALS" \
@@ -144,7 +151,9 @@ echo " Summary"
 echo "========================================================"
 printf " Total time : %dm %ds\n" $(( TOTAL_ELAPSED / 60 )) $(( TOTAL_ELAPSED % 60 ))
 
-if [[ ${#FAILED[@]} -eq 0 ]]; then
+if [[ $INTERRUPTED -eq 1 ]]; then
+    echo " Run stopped early by user (Ctrl+C)."
+elif [[ ${#FAILED[@]} -eq 0 ]]; then
     echo " All ${TOTAL} strategies completed successfully."
 else
     echo " ${#FAILED[@]}/${TOTAL} strategies FAILED:"
@@ -157,5 +166,5 @@ echo
 echo " Individual logs saved to: ${LOG_DIR}/"
 echo "========================================================"
 
-# Exit non-zero if any strategy failed
-[[ ${#FAILED[@]} -eq 0 ]]
+# Exit non-zero if interrupted or any strategy failed
+[[ $INTERRUPTED -eq 0 && ${#FAILED[@]} -eq 0 ]]

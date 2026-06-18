@@ -36,9 +36,52 @@ import argparse
 import concurrent.futures
 import math
 import multiprocessing
+import signal
 import sys
 import time
 import numpy as np
+
+# Set by the first Ctrl+C; a second Ctrl+C restores default handling and exits.
+_interrupt_requested = False
+
+
+def _handle_sigint(signum, frame) -> None:
+    global _interrupt_requested
+    if not _interrupt_requested:
+        _interrupt_requested = True
+        print(
+            "\nInterrupt received — stopping after current work...",
+            file=sys.stderr,
+            flush=True,
+        )
+    else:
+        signal.signal(signal.SIGINT, signal.SIG_DFL)
+        raise KeyboardInterrupt
+
+
+signal.signal(signal.SIGINT, _handle_sigint)
+
+
+class OptimizationInterrupted(Exception):
+    """User requested early termination (Ctrl+C)."""
+
+
+def _check_interrupt() -> None:
+    if _interrupt_requested:
+        raise OptimizationInterrupted()
+
+
+def _note_interrupt() -> None:
+    if not _interrupt_requested:
+        print(
+            "\nInterrupted. Cleaning up workers...",
+            file=sys.stderr,
+            flush=True,
+        )
+
+
+# SearchResult: best_params, best_cost, interrupted, completed_trials
+SearchResult = tuple[dict, float, bool, int]
 
 from satellite.config import (
     load_simulation_config,
@@ -295,14 +338,22 @@ def evaluate_candidate(
     successes = 0
     hit_times: list[float] = []
 
-    with concurrent.futures.ProcessPoolExecutor(max_workers=max_workers) as executor:
-        futures = [executor.submit(evaluate_single_instance, *task) for task in tasks]
-        for fut in concurrent.futures.as_completed(futures):
-            success, hit_at_t = fut.result()
-            if success:
-                successes += 1
-                if hit_at_t is not None:
-                    hit_times.append(hit_at_t)
+    try:
+        with concurrent.futures.ProcessPoolExecutor(max_workers=max_workers) as executor:
+            futures = [executor.submit(evaluate_single_instance, *task) for task in tasks]
+            for fut in concurrent.futures.as_completed(futures):
+                _check_interrupt()
+                try:
+                    success, hit_at_t = fut.result()
+                except concurrent.futures.CancelledError:
+                    continue
+                if success:
+                    successes += 1
+                    if hit_at_t is not None:
+                        hit_times.append(hit_at_t)
+    except (KeyboardInterrupt, OptimizationInterrupted):
+        _note_interrupt()
+        raise OptimizationInterrupted() from None
 
     success_rate = successes / len(fixed_offsets)
     timeout = sim_cfg.simulation.timeout
@@ -363,7 +414,7 @@ def run_random_search(
     trials: int,
     max_workers: int,
     seed: int | None = None,
-) -> tuple[dict, float]:
+) -> SearchResult:
     """Basic Random Search optimization.
 
     Unphysical candidates are resampled in place — the trial counter only
@@ -377,31 +428,37 @@ def run_random_search(
     print(f"Starting Random Search ({trials} trials, max_beam_speed={max_speed:.4f} rad/s)...")
 
     resampled = 0
-    t = 0  # number of valid trials completed
-    while t < trials:
-        candidate = _sample_candidate(space, rng)
-        peak = peak_speed_for_strategy(strategy_name, candidate, sim_cfg, mc_cfg)
+    interrupted = False
+    completed_trials = 0
+    try:
+        while completed_trials < trials:
+            _check_interrupt()
+            candidate = _sample_candidate(space, rng)
+            peak = peak_speed_for_strategy(strategy_name, candidate, sim_cfg, mc_cfg)
 
-        if peak > max_speed:
-            resampled += 1
-            continue  # draw again — does NOT advance t
+            if peak > max_speed:
+                resampled += 1
+                continue  # draw again — does NOT advance completed_trials
 
-        t += 1
-        cost, success_rate, mean_t = evaluate_candidate(
-            candidate, strategy_name, sim_cfg, mc_cfg, fixed_offsets, max_workers
-        )
-        print(
-            f"Trial {t}/{trials}: params={candidate} -> "
-            f"Cost: {cost:.4f} (SR: {success_rate * 100:.1f}%, Mean T: {mean_t:.2f}s)"
-        )
+            cost, success_rate, mean_t = evaluate_candidate(
+                candidate, strategy_name, sim_cfg, mc_cfg, fixed_offsets, max_workers
+            )
+            completed_trials += 1
+            print(
+                f"Trial {completed_trials}/{trials}: params={candidate} -> "
+                f"Cost: {cost:.4f} (SR: {success_rate * 100:.1f}%, Mean T: {mean_t:.2f}s)"
+            )
 
-        if cost < best_cost:
-            best_cost = cost
-            best_params = candidate
+            if cost < best_cost:
+                best_cost = cost
+                best_params = candidate
+    except (KeyboardInterrupt, OptimizationInterrupted):
+        _note_interrupt()
+        interrupted = True
 
     if resampled:
         print(f"  ({resampled} unphysical candidate(s) resampled during search)")
-    return best_params, best_cost
+    return best_params, best_cost, interrupted, completed_trials
 
 
 def run_grid_search(
@@ -412,13 +469,14 @@ def run_grid_search(
     fixed_offsets: list,
     grid_points: int,
     max_workers: int,
-) -> tuple[dict, float]:
+) -> SearchResult:
     """Grid Search optimization. Best for 1–2 parameters.
 
     Grid points that exceed the speed limit are skipped (the grid is fixed so
     there is no notion of resampling — the skipped points are simply omitted).
     """
     print("Starting Grid Search...")
+    interrupted = False
     keys = list(space.keys())
 
     if len(keys) > 3:
@@ -444,41 +502,46 @@ def run_grid_search(
     best_cost = float("inf")
     max_speed = sim_cfg.satellite.max_beam_speed
     skipped = 0
-    run_idx = 0  # count of grid points actually evaluated
+    completed_trials = 0
 
-    for idx in range(num_runs):
-        candidate: dict = {}
-        for i, k in enumerate(keys):
-            ptype = space[k][0]
-            val = flat_coords[i][idx]
-            candidate[k] = int(val) if ptype == "int" else float(val)
+    try:
+        for idx in range(num_runs):
+            _check_interrupt()
+            candidate: dict = {}
+            for i, k in enumerate(keys):
+                ptype = space[k][0]
+                val = flat_coords[i][idx]
+                candidate[k] = int(val) if ptype == "int" else float(val)
 
-        # Fill non-grid keys with their minimum bound as default
-        for k in space:
-            if k not in candidate:
-                candidate[k] = space[k][1]
+            # Fill non-grid keys with their minimum bound as default
+            for k in space:
+                if k not in candidate:
+                    candidate[k] = space[k][1]
 
-        peak = peak_speed_for_strategy(strategy_name, candidate, sim_cfg, mc_cfg)
-        if peak > max_speed:
-            skipped += 1
-            continue  # skip this grid point entirely
+            peak = peak_speed_for_strategy(strategy_name, candidate, sim_cfg, mc_cfg)
+            if peak > max_speed:
+                skipped += 1
+                continue  # skip this grid point entirely
 
-        run_idx += 1
-        cost, success_rate, mean_t = evaluate_candidate(
-            candidate, strategy_name, sim_cfg, mc_cfg, fixed_offsets, max_workers
-        )
-        print(
-            f"Grid point {run_idx} (of {num_runs - skipped} valid): params={candidate} -> "
-            f"Cost: {cost:.4f} (SR: {success_rate * 100:.1f}%, Mean T: {mean_t:.2f}s)"
-        )
+            cost, success_rate, mean_t = evaluate_candidate(
+                candidate, strategy_name, sim_cfg, mc_cfg, fixed_offsets, max_workers
+            )
+            completed_trials += 1
+            print(
+                f"Grid point {completed_trials} (of {num_runs - skipped} valid): params={candidate} -> "
+                f"Cost: {cost:.4f} (SR: {success_rate * 100:.1f}%, Mean T: {mean_t:.2f}s)"
+            )
 
-        if cost < best_cost:
-            best_cost = cost
-            best_params = candidate
+            if cost < best_cost:
+                best_cost = cost
+                best_params = candidate
+    except (KeyboardInterrupt, OptimizationInterrupted):
+        _note_interrupt()
+        interrupted = True
 
     if skipped:
         print(f"  ({skipped}/{num_runs} grid points skipped — exceeded max_beam_speed)")
-    return best_params, best_cost
+    return best_params, best_cost, interrupted, completed_trials
 
 
 def run_optuna_search(
@@ -490,7 +553,7 @@ def run_optuna_search(
     trials: int,
     max_workers: int,
     seed: int | None = None,
-) -> tuple[dict, float]:
+) -> SearchResult:
     """Optuna study optimization. Intelligent Bayesian Search."""
     try:
         import optuna
@@ -504,6 +567,8 @@ def run_optuna_search(
         return run_random_search(
             strategy_name, space, sim_cfg, mc_cfg, fixed_offsets, trials, max_workers, seed=seed
         )
+
+    interrupted = False
 
     max_speed = sim_cfg.satellite.max_beam_speed
     print(f"Starting Optuna Search ({trials} trials, max_beam_speed={max_speed:.4f} rad/s)...")
@@ -559,91 +624,96 @@ def run_optuna_search(
         BATCH_SIZE = max_workers if max_workers > 1 else 8
         MAX_PRUNE_ATTEMPTS = BATCH_SIZE * 200  # give up filling a batch after this many consecutive pruned candidates
         print(f"Using GPU batch execution (batch size {BATCH_SIZE})...")
-        while completed_trials < trials:
-            batch_trials = []
-            batch_configs = []
-            consecutive_prunes = 0
+        try:
+            while completed_trials < trials:
+                _check_interrupt()
+                batch_trials = []
+                batch_configs = []
+                consecutive_prunes = 0
 
-            while len(batch_trials) < BATCH_SIZE and completed_trials + len(batch_trials) < trials:
-                if consecutive_prunes >= MAX_PRUNE_ATTEMPTS:
-                    print(
-                        f"ERROR: {MAX_PRUNE_ATTEMPTS} consecutive candidates rejected by speed check. "
-                        "The entire search space may exceed max_beam_speed. Aborting."
+                while len(batch_trials) < BATCH_SIZE and completed_trials + len(batch_trials) < trials:
+                    if consecutive_prunes >= MAX_PRUNE_ATTEMPTS:
+                        print(
+                            f"ERROR: {MAX_PRUNE_ATTEMPTS} consecutive candidates rejected by speed check. "
+                            "The entire search space may exceed max_beam_speed. Aborting."
+                        )
+                        batch_trials = []  # trigger the break below
+                        break
+
+                    trial = study.ask()
+                    candidate = {}
+                    for param, spec in space.items():
+                        ptype, start, end = spec
+                        if ptype == "float":
+                            candidate[param] = trial.suggest_float(param, start, end)
+                        elif ptype == "int":
+                            candidate[param] = trial.suggest_int(param, start, end)
+
+                    cand_eval = dict(candidate)
+                    if strategy_name == "lissajous_scan":
+                        cand_eval["s1_delta"] = 1.570796
+                        cand_eval["s2_delta"] = 1.570796
+
+                    peak = peak_speed_for_strategy(strategy_name, cand_eval, sim_cfg, mc_cfg)
+                    if peak > max_speed:
+                        study.tell(trial, state=optuna.trial.TrialState.PRUNED)
+                        resampled += 1
+                        consecutive_prunes += 1
+                        continue
+
+                    consecutive_prunes = 0
+                    batch_trials.append(trial)
+
+                    from satellite.strategy.base import CONFIG_PARSERS
+                    parsed_params = cand_eval
+                    if strategy_name in CONFIG_PARSERS:
+                        parsed_params = CONFIG_PARSERS[strategy_name](cand_eval)
+
+                    run_strat = StrategyConfig(
+                        k=mc_cfg.strategy.k,
+                        chain=(strategy_name,),
+                        params={strategy_name: parsed_params},
                     )
-                    batch_trials = []  # trigger the break below
+                    mc = MonteCarloConfig(
+                        simulation_path=mc_cfg.simulation_path,
+                        seed=mc_cfg.seed,
+                        runs=len(fixed_offsets),
+                        chain=(strategy_name,),
+                        error=mc_cfg.error,
+                        strategy=run_strat,
+                    )
+                    batch_configs.append(mc)
+
+                if not batch_trials:
                     break
 
-                trial = study.ask()
-                candidate = {}
-                for param, spec in space.items():
-                    ptype, start, end = spec
-                    if ptype == "float":
-                        candidate[param] = trial.suggest_float(param, start, end)
-                    elif ptype == "int":
-                        candidate[param] = trial.suggest_int(param, start, end)
+                try:
+                    summaries = run_monte_carlo_cuda_batch(batch_configs)
+                    for trial, summary, mc_c in zip(batch_trials, summaries, batch_configs):
+                        success_rate = summary.success_rate
+                        timeout = sim_cfg.simulation.timeout
+                        mean_t = summary.mean_t if summary.mean_t is not None else timeout
+                        penalty = timeout * 2.0
+                        cost = ((1.0 - success_rate) * penalty) + mean_t
 
-                cand_eval = dict(candidate)
-                if strategy_name == "lissajous_scan":
-                    cand_eval["s1_delta"] = 1.570796
-                    cand_eval["s2_delta"] = 1.570796
-
-                peak = peak_speed_for_strategy(strategy_name, cand_eval, sim_cfg, mc_cfg)
-                if peak > max_speed:
-                    study.tell(trial, state=optuna.trial.TrialState.PRUNED)
-                    resampled += 1
-                    consecutive_prunes += 1
-                    continue
-
-                consecutive_prunes = 0
-                batch_trials.append(trial)
-
-                from satellite.strategy.base import CONFIG_PARSERS
-                parsed_params = cand_eval
-                if strategy_name in CONFIG_PARSERS:
-                    parsed_params = CONFIG_PARSERS[strategy_name](cand_eval)
-
-                run_strat = StrategyConfig(
-                    k=mc_cfg.strategy.k,
-                    chain=(strategy_name,),
-                    params={strategy_name: parsed_params},
-                )
-                mc = MonteCarloConfig(
-                    simulation_path=mc_cfg.simulation_path,
-                    seed=mc_cfg.seed,
-                    runs=len(fixed_offsets),
-                    chain=(strategy_name,),
-                    error=mc_cfg.error,
-                    strategy=run_strat,
-                )
-                batch_configs.append(mc)
-
-            if not batch_trials:
-                break
-                
-            try:
-                summaries = run_monte_carlo_cuda_batch(batch_configs)
-                for trial, summary, mc_c in zip(batch_trials, summaries, batch_configs):
-                    success_rate = summary.success_rate
-                    timeout = sim_cfg.simulation.timeout
-                    mean_t = summary.mean_t if summary.mean_t is not None else timeout
-                    penalty = timeout * 2.0
-                    cost = ((1.0 - success_rate) * penalty) + mean_t
-                    
-                    study.tell(trial, cost)
-                    completed_trials += 1
-                    
-                    from dataclasses import asdict
-                    log_params = asdict(mc_c.strategy.params[strategy_name])
-                    print(f"Trial {completed_trials}/{trials}: params={log_params} -> Cost: {cost:.4f}")
-            except Exception as e:
-                for trial in batch_trials:
-                    try:
-                        study.tell(trial, state=optuna.trial.TrialState.FAIL)
+                        study.tell(trial, cost)
                         completed_trials += 1
-                    except ValueError:
-                        pass
-                print(f"Batch execution FAILED — {e}")
-                
+
+                        from dataclasses import asdict
+                        log_params = asdict(mc_c.strategy.params[strategy_name])
+                        print(f"Trial {completed_trials}/{trials}: params={log_params} -> Cost: {cost:.4f}")
+                except Exception as e:
+                    for trial in batch_trials:
+                        try:
+                            study.tell(trial, state=optuna.trial.TrialState.FAIL)
+                            completed_trials += 1
+                        except ValueError:
+                            pass
+                    print(f"Batch execution FAILED — {e}")
+        except (KeyboardInterrupt, OptimizationInterrupted):
+            _note_interrupt()
+            interrupted = True
+
     else:
         # Fallback to multi-threaded CPU parallel execution
         lock = threading.Lock()
@@ -652,7 +722,7 @@ def run_optuna_search(
             nonlocal completed_trials, resampled
             while True:
                 with lock:
-                    if completed_trials >= trials:
+                    if completed_trials >= trials or _interrupt_requested:
                         break
                     trial = study.ask()
 
@@ -679,24 +749,33 @@ def run_optuna_search(
                         study.tell(trial, cost)
                         completed_trials += 1
                         print(f"Trial {completed_trials}/{trials}: params={candidate} -> Cost: {cost:.4f}")
+                except OptimizationInterrupted:
+                    return
                 except Exception as e:
                     with lock:
                         study.tell(trial, state=optuna.trial.TrialState.FAIL)
                         completed_trials += 1
                         print(f"Trial {completed_trials}/{trials}: FAILED — {e}")
 
-        with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
-            futures = [executor.submit(worker) for _ in range(max_workers)]
-            concurrent.futures.wait(futures)
+        try:
+            with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
+                futures = [executor.submit(worker) for _ in range(max_workers)]
+                concurrent.futures.wait(futures)
+        except (KeyboardInterrupt, OptimizationInterrupted):
+            _note_interrupt()
+            interrupted = True
+        if _interrupt_requested:
+            interrupted = True
 
     if resampled:
         print(f"  ({resampled} unphysical candidate(s) resampled during search)")
 
     if study.best_trial is None:
-        print("WARNING: no valid parameters found.")
-        return {}, float("inf")
+        if not interrupted:
+            print("WARNING: no valid parameters found.")
+        return {}, float("inf"), interrupted, completed_trials
 
-    return study.best_params, study.best_value
+    return study.best_params, study.best_value, interrupted, completed_trials
 
 
 # ---------------------------------------------------------------------------
@@ -712,10 +791,11 @@ def main():
         description="Optimize parameters for pointing acquisition strategies."
     )
     parser.add_argument(
-        "--config",
-        type=str,
-        default="config/Optimize.toml",
-        help="Path to the TOML configuration file.",
+        "config",
+        nargs="?",
+        type=Path,
+        default=Path("config/Optimize.toml"),
+        help="Optimize TOML (default: config/Optimize.toml)",
     )
     parser.add_argument(
         "--strategy",
@@ -771,7 +851,8 @@ def main():
     args = parser.parse_args()
 
     # Locate and resolve the config file path
-    config_path = Path(args.config)
+    requested_config = args.config
+    config_path = requested_config
     if not config_path.exists():
         # Fallback to look in config folder or current folder
         for candidate in [Path("config") / config_path.name, Path(config_path.name)]:
@@ -786,11 +867,11 @@ def main():
             toml_data = tomllib.load(f)
     else:
         # If user explicitly passed a custom config that doesn't exist, raise error
-        if args.config != "config/Optimize.toml":
-            print(f"ERROR: Configuration file not found at {args.config}", file=sys.stderr)
+        if requested_config != Path("config/Optimize.toml"):
+            print(f"ERROR: Configuration file not found at {requested_config}", file=sys.stderr)
             sys.exit(1)
         else:
-            print(f"Warning: Default configuration file '{args.config}' not found. Using defaults.")
+            print(f"Warning: Default configuration file '{requested_config}' not found. Using defaults.")
 
     opt_sec = toml_data.get("optimize", {})
     mc_sec = toml_data.get("monte_carlo", {})
@@ -905,34 +986,55 @@ def main():
         sys.exit(1)
 
     start_time = time.time()
+    best_params: dict = {}
+    best_cost = float("inf")
+    interrupted = False
+    completed_trials = 0
 
-    if method == "grid":
-        best_params, best_cost = run_grid_search(
-            strategy, space, sim_cfg, mc_cfg, fixed_offsets, grid_points, max_workers
-        )
-    elif method == "optuna":
-        best_params, best_cost = run_optuna_search(
-            strategy, space, sim_cfg, mc_cfg, fixed_offsets, trials, max_workers, seed=trial_seed
-        )
-    else:
-        best_params, best_cost = run_random_search(
-            strategy, space, sim_cfg, mc_cfg, fixed_offsets, trials, max_workers, seed=trial_seed
-        )
+    try:
+        if method == "grid":
+            best_params, best_cost, interrupted, completed_trials = run_grid_search(
+                strategy, space, sim_cfg, mc_cfg, fixed_offsets, grid_points, max_workers
+            )
+        elif method == "optuna":
+            best_params, best_cost, interrupted, completed_trials = run_optuna_search(
+                strategy, space, sim_cfg, mc_cfg, fixed_offsets, trials, max_workers, seed=trial_seed
+            )
+        else:
+            best_params, best_cost, interrupted, completed_trials = run_random_search(
+                strategy, space, sim_cfg, mc_cfg, fixed_offsets, trials, max_workers, seed=trial_seed
+            )
+    except (KeyboardInterrupt, OptimizationInterrupted):
+        _note_interrupt()
+        interrupted = True
 
     elapsed = time.time() - start_time
-    print(f"\n--- Optimization completed in {elapsed:.1f}s ---")
-    print(f"Best objective cost score: {best_cost:.4f}")
+    if interrupted:
+        print(
+            f"\n--- Optimization interrupted after {elapsed:.1f}s "
+            f"({completed_trials} trial(s) completed) ---"
+        )
+    else:
+        print(f"\n--- Optimization completed in {elapsed:.1f}s ---")
 
-    if strategy == "lissajous_scan":
-        best_params["s1_delta"] = 1.570796
-        best_params["s2_delta"] = 1.570796
+    if best_params:
+        print(f"Best objective cost score: {best_cost:.4f}")
 
-    print("Optimal Parameters:")
-    for k, v in best_params.items():
-        if isinstance(v, float):
-            print(f"  {k} = {v:.6f}")
-        else:
-            print(f"  {k} = {v}")
+        if strategy == "lissajous_scan":
+            best_params["s1_delta"] = 1.570796
+            best_params["s2_delta"] = 1.570796
+
+        print("Optimal Parameters:")
+        for k, v in best_params.items():
+            if isinstance(v, float):
+                print(f"  {k} = {v:.6f}")
+            else:
+                print(f"  {k} = {v}")
+    elif interrupted and completed_trials == 0:
+        print("Stopped before any trials finished.")
+
+    if interrupted:
+        raise SystemExit(130)
 
 
 if __name__ == "__main__":

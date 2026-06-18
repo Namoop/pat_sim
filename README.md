@@ -82,13 +82,13 @@ pip install -e ".[all]"      # install everything (viz, gpu, opt, dev)
 
 ```bash
 # Run the default scenario
-python -m satellite
+python -m scenario
 
 # Visualize with specific starting time and eye tab initially active
-python -m satellite --visualize eye --t 2.5
+python -m scenario --visualize eye --t 2.5
 
 # Run Monte Carlo simulation batch (defaults to config/MonteCarlo.toml)
-python -m satellite --monte-carlo
+python -m montecarlo
 ```
 
 ---
