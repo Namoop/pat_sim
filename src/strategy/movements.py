@@ -28,6 +28,7 @@ class AimContext:
     u_y: Vec3
     u_z: Vec3
     max_beam_speed: float = 0.0
+    scan_envelope_ramp: float = 0.0
 
 
 class MovementPattern(ABC):
@@ -135,6 +136,7 @@ class Circle(MovementPattern):
             u_x=ctx.u_x,
             u_y=ctx.u_y,
             u_z=ctx.u_z,
+            envelope_ramp=ctx.scan_envelope_ramp,
         )
 
 
@@ -152,6 +154,7 @@ class Line(MovementPattern):
             u_x=ctx.u_x,
             u_y=ctx.u_y,
             u_z=ctx.u_z,
+            envelope_ramp=ctx.scan_envelope_ramp,
         )
 
 
@@ -169,6 +172,7 @@ class Grid(MovementPattern):
             u_x=ctx.u_x,
             u_y=ctx.u_y,
             u_z=ctx.u_z,
+            envelope_ramp=ctx.scan_envelope_ramp,
         )
 
 
@@ -187,6 +191,7 @@ class Rosette(MovementPattern):
             u_x=ctx.u_x,
             u_y=ctx.u_y,
             u_z=ctx.u_z,
+            envelope_ramp=ctx.scan_envelope_ramp,
         )
 
 
@@ -207,6 +212,7 @@ class Lissajous(MovementPattern):
             u_x=ctx.u_x,
             u_y=ctx.u_y,
             u_z=ctx.u_z,
+            envelope_ramp=ctx.scan_envelope_ramp,
         )
 
 
@@ -227,6 +233,7 @@ class SerpentineRaster(MovementPattern):
             u_x=ctx.u_x,
             u_y=ctx.u_y,
             u_z=ctx.u_z,
+            envelope_ramp=ctx.scan_envelope_ramp,
         )
 
 
@@ -238,6 +245,10 @@ class DiscretePattern(MovementPattern):
     def aim_at(self, local_t: float, duration: float, ctx: AimContext) -> Vec3:
         idx = min(int(local_t / self.step_duration), len(self.points) - 1)
         u_off, v_off = self.points[idx]
+        from strategy.patterns import scan_envelope_scale
+        scale = scan_envelope_scale(local_t, ctx.scan_envelope_ramp)
+        u_off *= scale
+        v_off *= scale
         # patterns.py normalize unrolled is faster but we need it here
         from satellite.math.math3d import normalize as norm3d
         return norm3d(ctx.u_z + u_off * ctx.u_x + v_off * ctx.u_y)
@@ -259,4 +270,5 @@ def build_aim_context(satellite, *, reset: bool = False) -> AimContext:
         u_y=u_y,
         u_z=u_z,
         max_beam_speed=sat.bench.max_beam_speed,
+        scan_envelope_ramp=sat.bench.scan_envelope_ramp,
     )

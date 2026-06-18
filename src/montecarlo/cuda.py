@@ -303,7 +303,18 @@ if CUDA_AVAILABLE:
     # ==============================================================================
 
     @cuda.jit(device=True)
-    def get_aim_device(leg_type, leg_params, local_t, duration, step_start_aim, u_x, u_y, u_z, out_aim):
+    def scan_envelope_scale_device(local_t, ramp_duration):
+        if ramp_duration <= 0.0:
+            return 1.0
+        if local_t <= 0.0:
+            return 0.0
+        if local_t >= ramp_duration:
+            return 1.0
+        t = local_t / ramp_duration
+        return t * t * (3.0 - 2.0 * t)
+
+    @cuda.jit(device=True)
+    def get_aim_device(leg_type, leg_params, local_t, duration, step_start_aim, u_x, u_y, u_z, envelope_ramp, out_aim):
         if leg_type == 0: # Hold
             out_aim[0] = step_start_aim[0]
             out_aim[1] = step_start_aim[1]
@@ -412,6 +423,9 @@ if CUDA_AVAILABLE:
             else:
                 u_off = line_offset
                 v_off = scan_offset
+            scale = scan_envelope_scale_device(local_t, envelope_ramp)
+            u_off *= scale
+            v_off *= scale
             v_x = u_z[0] + u_off * u_x[0] + v_off * u_y[0]
             v_y = u_z[1] + u_off * u_x[1] + v_off * u_y[1]
             v_z = u_z[2] + u_off * u_x[2] + v_off * u_y[2]
@@ -420,7 +434,8 @@ if CUDA_AVAILABLE:
             A = leg_params[0]
             w1 = leg_params[1]
             w2 = leg_params[2]
-            r = A * math.cos(w2 * local_t)
+            scale = scan_envelope_scale_device(local_t, envelope_ramp)
+            r = scale * A * math.cos(w2 * local_t)
             u_off = r * math.cos(w1 * local_t)
             v_off = r * math.sin(w1 * local_t)
             v_x = u_z[0] + u_off * u_x[0] + v_off * u_y[0]
@@ -432,8 +447,9 @@ if CUDA_AVAILABLE:
             wx = leg_params[1]
             wy = leg_params[2]
             delta = leg_params[3]
-            u_off = A * math.sin(wx * local_t + delta)
-            v_off = A * math.sin(wy * local_t)
+            scale = scan_envelope_scale_device(local_t, envelope_ramp)
+            u_off = scale * A * math.sin(wx * local_t + delta)
+            v_off = scale * A * math.sin(wy * local_t)
             v_x = u_z[0] + u_off * u_x[0] + v_off * u_y[0]
             v_y = u_z[1] + u_off * u_x[1] + v_off * u_y[1]
             v_z = u_z[2] + u_off * u_x[2] + v_off * u_y[2]
@@ -450,7 +466,7 @@ if CUDA_AVAILABLE:
         legs_s2,        # (B, M, 8)
         hw_steps_s1,    # (B, H, 3) -> time, target_type (0=beam, 1=rx), enabled (0 or 1)
         hw_steps_s2,    # (B, H, 3)
-        sim_params,     # (B, 10) -> [t_step, timeout, beam_length, body_radius, dish_fov, cos_dish_fov, max_beam_speed, max_fsm_speed, alpha, cos_alpha]
+        sim_params,     # (B, 12) -> [t_step, timeout, beam_length, body_radius, dish_fov, cos_dish_fov, max_beam_speed, max_fsm_speed, alpha, cos_alpha, max_fsm_radius, scan_envelope_ramp]
         positions,      # (B, 6) -> [s1_x, s1_y, s1_z, s2_x, s2_y, s2_z]
         results,        # Output: (B * N, 2) -> locked (1.0 or 0.0), hit_at_t
         runs_per_trial  # scalar int (N)
@@ -477,6 +493,7 @@ if CUDA_AVAILABLE:
         alpha = sim_params[trial_idx, 8]
         cos_alpha = sim_params[trial_idx, 9]
         max_fsm_radius = sim_params[trial_idx, 10]
+        scan_envelope_ramp = sim_params[trial_idx, 11]
 
 
         # Scenario initial error offsets
@@ -636,7 +653,7 @@ if CUDA_AVAILABLE:
                 leg_type = int(legs_s1[trial_idx, leg_idx, 2])
                 leg_params = (legs_s1[trial_idx, leg_idx, 3], legs_s1[trial_idx, leg_idx, 4], legs_s1[trial_idx, leg_idx, 5], legs_s1[trial_idx, leg_idx, 6], legs_s1[trial_idx, leg_idx, 7])
                 
-                get_aim_device(leg_type, leg_params, local_t - leg_start, leg_duration, s1_step_start_aim, s1_u_x, s1_u_y, s1_u_z, aim_temp)
+                get_aim_device(leg_type, leg_params, local_t - leg_start, leg_duration, s1_step_start_aim, s1_u_x, s1_u_y, s1_u_z, scan_envelope_ramp, aim_temp)
                 s1_bench_boresight[0] = aim_temp[0]
                 s1_bench_boresight[1] = aim_temp[1]
                 s1_bench_boresight[2] = aim_temp[2]
@@ -664,7 +681,7 @@ if CUDA_AVAILABLE:
                 leg_type = int(legs_s2[trial_idx, leg_idx, 2])
                 leg_params = (legs_s2[trial_idx, leg_idx, 3], legs_s2[trial_idx, leg_idx, 4], legs_s2[trial_idx, leg_idx, 5], legs_s2[trial_idx, leg_idx, 6], legs_s2[trial_idx, leg_idx, 7])
                 
-                get_aim_device(leg_type, leg_params, local_t - leg_start, leg_duration, s2_step_start_aim, s2_u_x, s2_u_y, s2_u_z, aim_temp)
+                get_aim_device(leg_type, leg_params, local_t - leg_start, leg_duration, s2_step_start_aim, s2_u_x, s2_u_y, s2_u_z, scan_envelope_ramp, aim_temp)
                 s2_bench_boresight[0] = aim_temp[0]
                 s2_bench_boresight[1] = aim_temp[1]
                 s2_bench_boresight[2] = aim_temp[2]
@@ -1157,7 +1174,7 @@ def run_monte_carlo_cuda_batch(configs: list[MonteCarloConfig]) -> list[MonteCar
         hw_s1_arr[b] = hw_s1_arr[b, np.argsort(hw_s1_arr[b, :, 0])]
         hw_s2_arr[b] = hw_s2_arr[b, np.argsort(hw_s2_arr[b, :, 0])]
 
-    sim_params_arr = np.zeros((B, 11), dtype=FLOAT_DTYPE)
+    sim_params_arr = np.zeros((B, 12), dtype=FLOAT_DTYPE)
     positions_arr = np.zeros((B, 6), dtype=FLOAT_DTYPE)
     
     runs_per_config = configs[0].runs
@@ -1191,6 +1208,7 @@ def run_monte_carlo_cuda_batch(configs: list[MonteCarloConfig]) -> list[MonteCar
             mock_config.satellite.alpha,
             float(np.cos(mock_config.satellite.alpha)),
             mock_config.satellite.max_fsm_radius,
+            mock_config.satellite.scan_envelope_ramp,
         ]
         positions_arr[b] = [
             s1.position[0], s1.position[1], s1.position[2],

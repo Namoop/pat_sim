@@ -18,6 +18,7 @@ class SharedSatelliteConfig:
     max_fsm_radius: float
     beam_width_mrad: float
     k: float
+    scan_envelope_ramp: float
 
     @property
     def alpha(self) -> float:
@@ -83,6 +84,7 @@ def _load_shared_satellite(data: dict) -> SharedSatelliteConfig:
         max_fsm_radius=float(data.get("max_fsm_radius", 1.0)) * 1e-3,
         beam_width_mrad=float(data["beam_width"]),
         k=float(data.get("k", 10.0)),
+        scan_envelope_ramp=float(data.get("scan_envelope_ramp", 2.0)),
     )
 
 

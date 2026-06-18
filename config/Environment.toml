@@ -6,6 +6,7 @@ max_fsm_speed = 1000.0 # !!not exact!!
 max_fsm_radius = 1.0
 beam_width = 0.5
 k = 10.0
+scan_envelope_ramp = 0.5 # seconds; smooth amplitude ramp from center at scan start (0 = off)
 
 [simulation]
 distance = 1000.0

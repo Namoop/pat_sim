@@ -28,6 +28,33 @@ def basis_at_direction(center: Vec3) -> tuple[Vec3, Vec3, Vec3]:
 
 
 @njit(cache=True)
+def scan_envelope_scale(local_t: float, ramp_duration: float) -> float:
+    """Smoothstep amplitude scale: 0 at t=0, 1 after ramp_duration."""
+    if ramp_duration <= 0.0:
+        return 1.0
+    if local_t <= 0.0:
+        return 0.0
+    if local_t >= ramp_duration:
+        return 1.0
+    t = local_t / ramp_duration
+    return t * t * (3.0 - 2.0 * t)
+
+
+@njit(cache=True)
+def aim_from_offsets(
+    u_off: float,
+    v_off: float,
+    u_x: Vec3,
+    u_y: Vec3,
+    u_z: Vec3,
+) -> Vec3:
+    v_x = u_z[0] + u_off * u_x[0] + v_off * u_y[0]
+    v_y = u_z[1] + u_off * u_x[1] + v_off * u_y[1]
+    v_z = u_z[2] + u_off * u_x[2] + v_off * u_y[2]
+    return normalize(np.array([v_x, v_y, v_z], dtype=np.float64))
+
+
+@njit(cache=True)
 def spiral_aim_at(
     local_t: float,
     *,
@@ -92,11 +119,13 @@ def circle_aim_at(
     u_x: Vec3,
     u_y: Vec3,
     u_z: Vec3,
+    envelope_ramp: float = 0.0,
 ) -> Vec3:
     if duration <= 0.0:
         return normalize(u_z)
     angle = 2.0 * math.pi * local_t / duration
-    offset = radius * (math.cos(angle) * u_x + math.sin(angle) * u_y)
+    scale = scan_envelope_scale(local_t, envelope_ramp)
+    offset = scale * radius * (math.cos(angle) * u_x + math.sin(angle) * u_y)
     return normalize(u_z + offset)
 
 
@@ -110,12 +139,14 @@ def line_aim_at(
     u_x: Vec3,
     u_y: Vec3,
     u_z: Vec3,
+    envelope_ramp: float = 0.0,
 ) -> Vec3:
     if duration <= 0.0:
         return normalize(u_z)
     t = local_t / duration
     axis = math.cos(axis_angle) * u_x + math.sin(axis_angle) * u_y
-    offset = extent * (2.0 * t - 1.0) * axis
+    scale = scan_envelope_scale(local_t, envelope_ramp)
+    offset = scale * extent * (2.0 * t - 1.0) * axis
     return normalize(u_z + offset)
 
 
@@ -129,6 +160,7 @@ def grid_aim_at(
     u_x: Vec3,
     u_y: Vec3,
     u_z: Vec3,
+    envelope_ramp: float = 0.0,
 ) -> Vec3:
     if duration <= 0.0 or spacing <= 0.0:
         return normalize(u_z)
@@ -141,9 +173,10 @@ def grid_aim_at(
     col = idx % n
     if row % 2 == 1:
         col = n - 1 - col
-    u_off = (col - (n - 1) / 2.0) * spacing
-    v_off = (row - (n - 1) / 2.0) * spacing
-    return normalize(u_z + u_off * u_x + v_off * u_y)
+    scale = scan_envelope_scale(local_t, envelope_ramp)
+    u_off = scale * (col - (n - 1) / 2.0) * spacing
+    v_off = scale * (row - (n - 1) / 2.0) * spacing
+    return aim_from_offsets(u_off, v_off, u_x, u_y, u_z)
 
 
 @njit(cache=True)
@@ -156,11 +189,13 @@ def rosette_aim_at(
     u_x: Vec3,
     u_y: Vec3,
     u_z: Vec3,
+    envelope_ramp: float = 0.0,
 ) -> Vec3:
-    r = A * math.cos(w2 * local_t)
+    scale = scan_envelope_scale(local_t, envelope_ramp)
+    r = scale * A * math.cos(w2 * local_t)
     u_off = r * math.cos(w1 * local_t)
     v_off = r * math.sin(w1 * local_t)
-    return normalize(u_z + u_off * u_x + v_off * u_y)
+    return aim_from_offsets(u_off, v_off, u_x, u_y, u_z)
 
 
 @njit(cache=True)
@@ -174,10 +209,12 @@ def lissajous_aim_at(
     u_x: Vec3,
     u_y: Vec3,
     u_z: Vec3,
+    envelope_ramp: float = 0.0,
 ) -> Vec3:
-    u_off = A * math.sin(wx * local_t + delta)
-    v_off = A * math.sin(wy * local_t)
-    return normalize(u_z + u_off * u_x + v_off * u_y)
+    scale = scan_envelope_scale(local_t, envelope_ramp)
+    u_off = scale * A * math.sin(wx * local_t + delta)
+    v_off = scale * A * math.sin(wy * local_t)
+    return aim_from_offsets(u_off, v_off, u_x, u_y, u_z)
 
 
 @njit(cache=True)
@@ -192,6 +229,7 @@ def raster_aim_at(
     u_x: Vec3,
     u_y: Vec3,
     u_z: Vec3,
+    envelope_ramp: float = 0.0,
 ) -> Vec3:
     if duration <= 0.0 or steps <= 1:
         return normalize(u_z)
@@ -215,5 +253,9 @@ def raster_aim_at(
     else:
         u_off = line_offset
         v_off = scan_offset
+
+    scale = scan_envelope_scale(local_t, envelope_ramp)
+    u_off *= scale
+    v_off *= scale
         
-    return normalize(u_z + u_off * u_x + v_off * u_y)
+    return aim_from_offsets(u_off, v_off, u_x, u_y, u_z)

@@ -46,6 +46,7 @@ class Satellite:
             max_beam_speed=hw.max_beam_speed,
             max_fsm_speed=hw.max_fsm_speed,
             max_fsm_radius=hw.max_fsm_radius,
+            scan_envelope_ramp=hw.scan_envelope_ramp,
         )
         fsm = FastSteeringMirror()
         beam_length = default_beam_length(position, partner_actual, config.simulation)
