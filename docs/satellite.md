@@ -30,14 +30,14 @@ Runs a single satellite SDA communication scenario. Optional positional `config`
 
 #### Scenario Options
 
-- `**--visualize [{3d,eye,mag}]**`  
+- `--visualize [{3d,eye,mag}]`  
 Opens the unified visualization window after the run. The optional choice `3d`, `eye`, or `mag` picks the **initial tab** (3D PyVista view, angular θ/φ eye map, or 2D magnitude alignment). `--visualize` alone is equivalent to `--visualize 3d`. If omitted, the window opens when `[scenario].visualize` is specified as `"3d"`, `"eye"`, or `"mag"` in the scenario config.
 
 > - **Eye View (`eye`)**: Named "eye" because you are seeing the "eye" of each satellite, and since there are two satellites total, it looks kind of like eyes.
 > - **Mag View (`mag`)**: Short for "magnitude" since all you see is in 2D representing the total magnitude offset.
-- `**--environment ENVIRONMENT**`  
+- `--environment ENVIRONMENT`  
 Path to the Environment base TOML containing hardware, timing, distance, `t_step`, and visualization defaults.
-- `**--t T**` (default: `0`)  
+- `--t T` (default: `0`)  
 Starting time `t` when opening a visualizer.
 
 ### Monte Carlo Command
@@ -50,9 +50,9 @@ Runs a Monte Carlo batch from the specified TOML file (default: `config/MonteCar
 
 #### Monte Carlo Options
 
-- `**--visualize [{3d,eye,mag}]**` — same as scenario; opens interactive step-through mode.
-- `**--t T**` (default: `0`) — starting time when opening a visualizer.
-- `**--autoplay [SPEED]**` — auto-scrub visualization; advance to the next run when each finishes.
+- `--visualize [{3d,eye,mag}]` — same as scenario; opens interactive step-through mode.
+- `--t T` (default: `0`) — starting time when opening a visualizer.
+- `--autoplay [SPEED]` — auto-scrub visualization; advance to the next run when each finishes.
 
 ### Examples
 
@@ -79,13 +79,13 @@ Benchmark the mapviz QPainter render path (headless Qt). Requires the `[viz]` ex
 
 ### Benchmark Options
 
-- `**--scenario SCENARIO**` (default: `config/Scenario.toml`)  
+- `--scenario SCENARIO` (default: `config/Scenario.toml`)  
 Scenario instance TOML.
-- `**--environment ENVIRONMENT**` (default: `config/Environment.toml`)  
+- `--environment ENVIRONMENT` (default: `config/Environment.toml`)  
 Environment base TOML.
-- `**--samples N**` (default: `1000`)  
+- `--samples N` (default: `1000`)  
 Number of random `t` samples.
-- `**--seed N**` (default: `0`)  
+- `--seed N` (default: `0`)  
 RNG seed for sample times.
 
 ---

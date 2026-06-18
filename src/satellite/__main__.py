@@ -7,7 +7,7 @@ import sys
 
 def main(argv: list[str] | None = None) -> int:
     print(
-        "The satellite CLI was split into separate entry points:\n"
+        "The satellite CLI is split into separate entry points:\n"
         "  python -m scenario   — single scenario run\n"
         "  python -m montecarlo — Monte Carlo batch\n",
         file=sys.stderr,
