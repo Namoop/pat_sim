@@ -76,6 +76,11 @@ class _BlobCacheKey:
     plot_h: int
 
 
+def _enable_smooth_painting(painter: QPainter) -> None:
+    painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+    painter.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform, True)
+
+
 def _render_correlation_blob(
     plot: QRectF,
     fov_centers: np.ndarray,
@@ -93,7 +98,7 @@ def _render_correlation_blob(
     mask.fill(0)
 
     painter = QPainter(mask)
-    painter.setRenderHint(QPainter.RenderHint.Antialiasing, False)
+    _enable_smooth_painting(painter)
     painter.setPen(Qt.PenStyle.NoPen)
     painter.setBrush(QBrush(QColor(255, 255, 255, 255)))
 
@@ -290,7 +295,7 @@ class EyeCanvas(QWidget):
         del event
         t0 = time.perf_counter()
         painter = QPainter(self)
-        painter.setRenderHint(QPainter.RenderHint.Antialiasing, False)
+        _enable_smooth_painting(painter)
 
         plot = self._plot_rect()
         limit = self._axis_limit

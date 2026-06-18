@@ -42,8 +42,8 @@ def run_benchmark(
     eye_cfg = config.eye_viz
 
     app = QApplication.instance() or QApplication([])
-    canvas_s1 = _EyeCanvas(axis_limit=eye_cfg.axis_limit)
-    canvas_s2 = _EyeCanvas(axis_limit=eye_cfg.axis_limit)
+    canvas_s1 = EyeCanvas(axis_limit=eye_cfg.axis_limit)
+    canvas_s2 = EyeCanvas(axis_limit=eye_cfg.axis_limit)
     for canvas in (canvas_s1, canvas_s2):
         canvas.setAttribute(Qt.WidgetAttribute.WA_DontShowOnScreen, True)
         canvas.resize(520, 480)
