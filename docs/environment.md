@@ -16,6 +16,11 @@ The configuration file is loaded by [`load_simulation_config`](../src/satellite/
 - `max_fsm_speed` (float, milliradians/second): Maximum Fast Steering Mirror deflection speed.
 - `beam_width` (float, milliradians): Full spread of the transmitter beam.
 - `k` (float): Density multiplier for spiral strategies.
+- `scan_envelope_ramp` (float, seconds): Duration over which offset-based scan patterns (Lissajous, rosette, raster, etc.) ramp amplitude from zero at nominal boresight to full strength. Set to `0` to disable (patterns begin at full amplitude immediately, which may start off-center). Default: `2.0`.
+- `scan_envelope_profile` (string): Shape of the amplitude ramp. One of:
+  - `smooth` (default): Smoothstep \(f(t) = 3(t/T)^2 - 2(t/T)^3\) — zero slope at start and end of the ramp.
+  - `linear`: \(f(t) = t/T\) — constant growth rate.
+  - `cosine`: \(f(t) = \tfrac{1}{2}(1 - \cos(\pi t/T))\) — cosine ease-in/out with zero slope at endpoints.
 
 ### `[simulation]` (Environment Constants & Solvers)
 

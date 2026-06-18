@@ -34,6 +34,7 @@ class OpticalBench:
         max_fsm_speed: float,
         max_fsm_radius: float,
         scan_envelope_ramp: float = 2.0,
+        scan_envelope_profile_id: int = 0,
     ) -> None:
         self.position = position
         self.partner_position = partner_position
@@ -43,6 +44,7 @@ class OpticalBench:
         self.max_fsm_speed = max_fsm_speed
         self.max_fsm_radius = max_fsm_radius
         self.scan_envelope_ramp = scan_envelope_ramp
+        self.scan_envelope_profile_id = scan_envelope_profile_id
 
 
         self.toward_partner = normalize(partner_position - position)

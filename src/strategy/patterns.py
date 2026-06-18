@@ -15,6 +15,7 @@ except ImportError:
             return f
         return decorator
 
+from satellite.envelope import ENVELOPE_COSINE, ENVELOPE_LINEAR, ENVELOPE_SMOOTH
 from satellite.math.geometry import (
     spherical_angles_from_direction,
     transmitter_basis,
@@ -28,8 +29,12 @@ def basis_at_direction(center: Vec3) -> tuple[Vec3, Vec3, Vec3]:
 
 
 @njit(cache=True)
-def scan_envelope_scale(local_t: float, ramp_duration: float) -> float:
-    """Smoothstep amplitude scale: 0 at t=0, 1 after ramp_duration."""
+def scan_envelope_scale(
+    local_t: float,
+    ramp_duration: float,
+    profile_id: int = ENVELOPE_SMOOTH,
+) -> float:
+    """Amplitude scale: 0 at t=0, 1 after ramp_duration."""
     if ramp_duration <= 0.0:
         return 1.0
     if local_t <= 0.0:
@@ -37,6 +42,11 @@ def scan_envelope_scale(local_t: float, ramp_duration: float) -> float:
     if local_t >= ramp_duration:
         return 1.0
     t = local_t / ramp_duration
+    if profile_id == ENVELOPE_LINEAR:
+        return t
+    if profile_id == ENVELOPE_COSINE:
+        return 0.5 * (1.0 - math.cos(math.pi * t))
+    # smoothstep (default)
     return t * t * (3.0 - 2.0 * t)
 
 
@@ -120,11 +130,12 @@ def circle_aim_at(
     u_y: Vec3,
     u_z: Vec3,
     envelope_ramp: float = 0.0,
+    envelope_profile: int = ENVELOPE_SMOOTH,
 ) -> Vec3:
     if duration <= 0.0:
         return normalize(u_z)
     angle = 2.0 * math.pi * local_t / duration
-    scale = scan_envelope_scale(local_t, envelope_ramp)
+    scale = scan_envelope_scale(local_t, envelope_ramp, envelope_profile)
     offset = scale * radius * (math.cos(angle) * u_x + math.sin(angle) * u_y)
     return normalize(u_z + offset)
 
@@ -140,12 +151,13 @@ def line_aim_at(
     u_y: Vec3,
     u_z: Vec3,
     envelope_ramp: float = 0.0,
+    envelope_profile: int = ENVELOPE_SMOOTH,
 ) -> Vec3:
     if duration <= 0.0:
         return normalize(u_z)
     t = local_t / duration
     axis = math.cos(axis_angle) * u_x + math.sin(axis_angle) * u_y
-    scale = scan_envelope_scale(local_t, envelope_ramp)
+    scale = scan_envelope_scale(local_t, envelope_ramp, envelope_profile)
     offset = scale * extent * (2.0 * t - 1.0) * axis
     return normalize(u_z + offset)
 
@@ -161,6 +173,7 @@ def grid_aim_at(
     u_y: Vec3,
     u_z: Vec3,
     envelope_ramp: float = 0.0,
+    envelope_profile: int = ENVELOPE_SMOOTH,
 ) -> Vec3:
     if duration <= 0.0 or spacing <= 0.0:
         return normalize(u_z)
@@ -173,7 +186,7 @@ def grid_aim_at(
     col = idx % n
     if row % 2 == 1:
         col = n - 1 - col
-    scale = scan_envelope_scale(local_t, envelope_ramp)
+    scale = scan_envelope_scale(local_t, envelope_ramp, envelope_profile)
     u_off = scale * (col - (n - 1) / 2.0) * spacing
     v_off = scale * (row - (n - 1) / 2.0) * spacing
     return aim_from_offsets(u_off, v_off, u_x, u_y, u_z)
@@ -190,8 +203,9 @@ def rosette_aim_at(
     u_y: Vec3,
     u_z: Vec3,
     envelope_ramp: float = 0.0,
+    envelope_profile: int = ENVELOPE_SMOOTH,
 ) -> Vec3:
-    scale = scan_envelope_scale(local_t, envelope_ramp)
+    scale = scan_envelope_scale(local_t, envelope_ramp, envelope_profile)
     r = scale * A * math.cos(w2 * local_t)
     u_off = r * math.cos(w1 * local_t)
     v_off = r * math.sin(w1 * local_t)
@@ -210,8 +224,9 @@ def lissajous_aim_at(
     u_y: Vec3,
     u_z: Vec3,
     envelope_ramp: float = 0.0,
+    envelope_profile: int = ENVELOPE_SMOOTH,
 ) -> Vec3:
-    scale = scan_envelope_scale(local_t, envelope_ramp)
+    scale = scan_envelope_scale(local_t, envelope_ramp, envelope_profile)
     u_off = scale * A * math.sin(wx * local_t + delta)
     v_off = scale * A * math.sin(wy * local_t)
     return aim_from_offsets(u_off, v_off, u_x, u_y, u_z)
@@ -230,6 +245,7 @@ def raster_aim_at(
     u_y: Vec3,
     u_z: Vec3,
     envelope_ramp: float = 0.0,
+    envelope_profile: int = ENVELOPE_SMOOTH,
 ) -> Vec3:
     if duration <= 0.0 or steps <= 1:
         return normalize(u_z)
@@ -254,7 +270,7 @@ def raster_aim_at(
         u_off = line_offset
         v_off = scan_offset
 
-    scale = scan_envelope_scale(local_t, envelope_ramp)
+    scale = scan_envelope_scale(local_t, envelope_ramp, envelope_profile)
     u_off *= scale
     v_off *= scale
         

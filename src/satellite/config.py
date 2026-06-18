@@ -6,6 +6,8 @@ import tomllib
 from dataclasses import dataclass
 from pathlib import Path
 
+from satellite.envelope import parse_scan_envelope_profile
+
 
 @dataclass(frozen=True)
 class SharedSatelliteConfig:
@@ -19,6 +21,11 @@ class SharedSatelliteConfig:
     beam_width_mrad: float
     k: float
     scan_envelope_ramp: float
+    scan_envelope_profile: str = "smooth"
+
+    @property
+    def scan_envelope_profile_id(self) -> int:
+        return parse_scan_envelope_profile(self.scan_envelope_profile)
 
     @property
     def alpha(self) -> float:
@@ -76,6 +83,8 @@ class SimulationBundle:
 
 
 def _load_shared_satellite(data: dict) -> SharedSatelliteConfig:
+    profile = str(data.get("scan_envelope_profile", "smooth")).strip().lower()
+    parse_scan_envelope_profile(profile)
     return SharedSatelliteConfig(
         body_radius=float(data.get("body_radius", 0.5)),
         dish_fov=float(data.get("dish_fov", 0.002)) * 1e-3,
@@ -85,6 +94,7 @@ def _load_shared_satellite(data: dict) -> SharedSatelliteConfig:
         beam_width_mrad=float(data["beam_width"]),
         k=float(data.get("k", 10.0)),
         scan_envelope_ramp=float(data.get("scan_envelope_ramp", 2.0)),
+        scan_envelope_profile=profile,
     )
 
 

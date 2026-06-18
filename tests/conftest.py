@@ -53,6 +53,7 @@ def base_config(
             beam_width_mrad=5.0,
             k=10.0,
             scan_envelope_ramp=2.0,
+            scan_envelope_profile="smooth",
         ),
         simulation=SimulationConfig(
             distance=1000.0,

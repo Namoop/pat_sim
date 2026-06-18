@@ -29,6 +29,7 @@ class AimContext:
     u_z: Vec3
     max_beam_speed: float = 0.0
     scan_envelope_ramp: float = 0.0
+    scan_envelope_profile_id: int = 0
 
 
 class MovementPattern(ABC):
@@ -137,6 +138,7 @@ class Circle(MovementPattern):
             u_y=ctx.u_y,
             u_z=ctx.u_z,
             envelope_ramp=ctx.scan_envelope_ramp,
+            envelope_profile=ctx.scan_envelope_profile_id,
         )
 
 
@@ -155,6 +157,7 @@ class Line(MovementPattern):
             u_y=ctx.u_y,
             u_z=ctx.u_z,
             envelope_ramp=ctx.scan_envelope_ramp,
+            envelope_profile=ctx.scan_envelope_profile_id,
         )
 
 
@@ -173,6 +176,7 @@ class Grid(MovementPattern):
             u_y=ctx.u_y,
             u_z=ctx.u_z,
             envelope_ramp=ctx.scan_envelope_ramp,
+            envelope_profile=ctx.scan_envelope_profile_id,
         )
 
 
@@ -192,6 +196,7 @@ class Rosette(MovementPattern):
             u_y=ctx.u_y,
             u_z=ctx.u_z,
             envelope_ramp=ctx.scan_envelope_ramp,
+            envelope_profile=ctx.scan_envelope_profile_id,
         )
 
 
@@ -213,6 +218,7 @@ class Lissajous(MovementPattern):
             u_y=ctx.u_y,
             u_z=ctx.u_z,
             envelope_ramp=ctx.scan_envelope_ramp,
+            envelope_profile=ctx.scan_envelope_profile_id,
         )
 
 
@@ -234,6 +240,7 @@ class SerpentineRaster(MovementPattern):
             u_y=ctx.u_y,
             u_z=ctx.u_z,
             envelope_ramp=ctx.scan_envelope_ramp,
+            envelope_profile=ctx.scan_envelope_profile_id,
         )
 
 
@@ -246,7 +253,9 @@ class DiscretePattern(MovementPattern):
         idx = min(int(local_t / self.step_duration), len(self.points) - 1)
         u_off, v_off = self.points[idx]
         from strategy.patterns import scan_envelope_scale
-        scale = scan_envelope_scale(local_t, ctx.scan_envelope_ramp)
+        scale = scan_envelope_scale(
+            local_t, ctx.scan_envelope_ramp, ctx.scan_envelope_profile_id
+        )
         u_off *= scale
         v_off *= scale
         # patterns.py normalize unrolled is faster but we need it here
@@ -271,4 +280,5 @@ def build_aim_context(satellite, *, reset: bool = False) -> AimContext:
         u_z=u_z,
         max_beam_speed=sat.bench.max_beam_speed,
         scan_envelope_ramp=sat.bench.scan_envelope_ramp,
+        scan_envelope_profile_id=sat.bench.scan_envelope_profile_id,
     )

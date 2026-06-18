@@ -27,9 +27,11 @@ Custom strategies are implemented using the Python DSL in `src/strategy/actions.
 Several strategies reference a global bounding volume for the search. This is typically configured in `Environment.toml`.
 
 
-| Parameter           | Default  | Description                                                                                                   |
-| ------------------- | -------- | ------------------------------------------------------------------------------------------------------------- |
-| `max_search_radius` | 0.07 rad | The hard angular limit for any search pattern. Boresights will not exceed this radius from the initial guess. |
+| Parameter             | Default  | Description                                                                                                   |
+| --------------------- | -------- | ------------------------------------------------------------------------------------------------------------- |
+| `max_search_radius`   | 0.07 rad | The hard angular limit for any search pattern. Boresights will not exceed this radius from the initial guess. |
+| `scan_envelope_ramp`  | 2.0 s    | Amplitude ramp duration so offset-based scans start at nominal boresight. `0` disables. See [environment.md](environment.md). |
+| `scan_envelope_profile` | `smooth` | Ramp shape: `smooth`, `linear`, or `cosine`. See [environment.md](environment.md). |
 
 
 ---
