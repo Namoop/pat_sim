@@ -187,6 +187,9 @@ def run_visualizer(
                 self._stack.setCurrentIndex(1)
             else:
                 self._stack.setCurrentIndex(2)
+            self._panel_3d.set_overlay_visible(tab == "3d")
+            self._panel_eye.set_overlay_visible(tab == "eye")
+            self._panel_mag.set_overlay_visible(tab == "mag")
 
         def _switch_tab(self, tab: Literal["3d", "eye", "mag"]) -> None:
             if tab == self._active_tab:

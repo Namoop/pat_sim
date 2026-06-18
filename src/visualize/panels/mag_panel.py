@@ -310,6 +310,11 @@ class MagPanelWidget(QWidget):
         super().resizeEvent(event)
         self._position_buttons()
 
+    def set_overlay_visible(self, visible: bool) -> None:
+        self._btn_bar.setVisible(visible)
+        if visible:
+            self._position_buttons()
+
     def set_scene(self, scene: EyeScene, result: ScenarioResult) -> None:
         result_changed = result is not self._result
         self._scene = scene
@@ -622,6 +627,9 @@ class MagPanel:
 
     def close_panel(self) -> None:
         pass
+
+    def set_overlay_visible(self, visible: bool) -> None:
+        self._canvas.set_overlay_visible(visible)
 
     def _emit_profile(self) -> None:
         if self._profile_callback is None:
