@@ -3,9 +3,9 @@
 
 from __future__ import annotations
 
-from satellite.sim.scenario import run_scenario
+from scenario.run import run_scenario
 from satellite.physics.satellite import Satellite
-from satellite.strategy.base import StrategyContext
+from strategy.base import StrategyContext
 from tests.conftest import base_config
 
 

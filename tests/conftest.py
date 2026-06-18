@@ -3,23 +3,25 @@
 
 from __future__ import annotations
 
-from satellite.sim.config import (
+from satellite.config import (
     EyeVizConfig,
+    MagVizConfig,
+    SimulationConfig,
+    SharedSatelliteConfig,
+    ThreeDVizConfig,
+)
+from scenario.types import (
     SatelliteInstanceConfig,
     ScenarioConfig,
-    SharedSatelliteConfig,
-    SimulationConfig,
-    StrategyConfig,
-    ThreeDVizConfig,
-    MagVizConfig,
 )
+from strategy.config import StrategyConfig
 from satellite.math.math3d import as_vec3
-from satellite.strategy.strategies.asymmetric_swap import AsymmetricSwapConfig
-from satellite.strategy.strategies.minor_offset import MinorOffsetConfig
-from satellite.strategy.strategies.single_miss import SingleMissConfig
-from satellite.strategy.strategies.dual_spiral import DualSpiralConfig
-from satellite.strategy.strategies.dual_raster import DualRasterConfig
-from satellite.strategy.strategies.concentric_shells import ConcentricShellsConfig
+from strategy.strategies.asymmetric_swap import AsymmetricSwapConfig
+from strategy.strategies.minor_offset import MinorOffsetConfig
+from strategy.strategies.single_miss import SingleMissConfig
+from strategy.strategies.dual_spiral import DualSpiralConfig
+from strategy.strategies.dual_raster import DualRasterConfig
+from strategy.strategies.concentric_shells import ConcentricShellsConfig
 
 
 def base_config(

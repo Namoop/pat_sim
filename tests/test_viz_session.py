@@ -7,10 +7,10 @@ from pathlib import Path
 
 import numpy as np
 
-from satellite.sim.config import load_monte_carlo_config, load_simulation_config, load_single_scenario
-from satellite.sim.monte_carlo import run_monte_carlo_single
-from satellite.sim.scenario import run_scenario
-from satellite.visualize.session import MonteCarloVizSession, SingleResultSession
+from montecarlo.run import load_monte_carlo_config, run_monte_carlo_single
+from scenario.run import load_single_scenario, run_scenario
+from satellite.config import load_simulation_config
+from visualize.session import MonteCarloVizSession, SingleResultSession
 
 FIXTURES = Path(__file__).parent / "fixtures"
 REPO_ROOT = Path(__file__).resolve().parents[1]

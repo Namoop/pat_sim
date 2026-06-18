@@ -6,7 +6,7 @@ from __future__ import annotations
 import pytest
 
 from satellite.physics.satellite import Satellite
-from satellite.strategy.actions import (
+from strategy.actions import (
     beam,
     hold,
     receiver,
@@ -15,7 +15,7 @@ from satellite.strategy.actions import (
     strategy,
     validate_movement_durations,
 )
-from satellite.strategy.base import StrategyContext
+from strategy.base import StrategyContext
 from tests.conftest import base_config
 
 
@@ -108,7 +108,7 @@ def test_same_time_hardware_toggles():
 
 def test_validate_slew_speed_invoked_from_try_run():
     from dataclasses import replace
-    from satellite.strategy.strategies.minor_offset import (
+    from strategy.strategies.minor_offset import (
         MinorOffsetConfig,
         MinorOffsetStrategy,
     )

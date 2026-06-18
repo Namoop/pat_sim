@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from satellite.visualize.panels.view3d import center_camera_pose
+from visualize.panels.panel_3d import center_camera_pose
 
 
 def test_center_camera_focal_point_is_midpoint():

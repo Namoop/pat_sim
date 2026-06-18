@@ -3,7 +3,7 @@
 
 from __future__ import annotations
 
-from satellite.visualize.panels.event_log_panel import split_event_log
+from visualize.panels.event_log_panel import split_event_log
 
 
 def test_split_event_log_partitions_by_satellite():

@@ -8,22 +8,19 @@ from dataclasses import replace
 
 import numpy as np
 
-from satellite.sim.config import (
-    build_scenario_config,
-    load_monte_carlo_config,
-    load_scenario_config,
-    load_simulation_config,
-    positions_for_distance,
-)
-from satellite.sim.monte_carlo import (
+from scenario.types import build_scenario_config, positions_for_distance
+from montecarlo.run import (
     format_monte_carlo_run_complete,
     format_monte_carlo_run_start,
     format_monte_carlo_summary,
+    load_monte_carlo_config,
     run_monte_carlo,
     run_monte_carlo_single,
     sample_offsets,
 )
-from satellite.sim.scenario import run_scenario
+from scenario.config import load_scenario_config
+from satellite.config import load_simulation_config
+from scenario.run import run_scenario
 
 FIXTURES = Path(__file__).parent / "fixtures"
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -79,7 +76,7 @@ def test_monte_carlo_failure_biased_fixture():
 
 
 def test_monte_carlo_run_progress_messages():
-    from satellite.sim.monte_carlo import MonteCarloRunResult
+    from montecarlo.run import MonteCarloRunResult
     from tests.conftest import base_config
 
     result = run_scenario(base_config())
@@ -109,7 +106,7 @@ def test_monte_carlo_run_progress_messages():
 
 
 def test_monte_carlo_summary_statistics_formatting():
-    from satellite.sim.monte_carlo import MonteCarloSummary
+    from montecarlo.run import MonteCarloSummary
     
     summary = MonteCarloSummary(
         runs=10,
@@ -151,7 +148,7 @@ def test_monte_carlo_graceful_interrupt(monkeypatch):
         return real_single(*args, **kwargs)
 
     monkeypatch.setattr(
-        "satellite.sim.monte_carlo.run_monte_carlo_single",
+        "montecarlo.run.run_monte_carlo_single",
         interrupt_after_first,
     )
     monkeypatch.setenv("SATELLITE_NO_GPU", "1")
@@ -215,9 +212,9 @@ uniform.max = 0.02
     assert mc.overrides["satellite"]["max_beam_speed"] == 99.0
 
     sim = load_simulation_config(sim_file)
-    from satellite.sim.config import ScenarioInstance, BenchOffsetConfig, build_scenario_config
+    from scenario.types import BenchOffsetConfig, ScenarioInstance, build_scenario_config
     dummy = BenchOffsetConfig(0.0, 0.0)
-    instance = ScenarioInstance("test", dummy, dummy, overrides=mc.overrides)
+    instance = ScenarioInstance("test", dummy, dummy, chain=mc.chain, overrides=mc.overrides)
     cfg = build_scenario_config(sim, instance, strategy=mc.strategy)
 
     assert cfg.simulation.distance == 750.0

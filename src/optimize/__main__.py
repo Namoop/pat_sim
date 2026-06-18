@@ -83,15 +83,14 @@ def _note_interrupt() -> None:
 # SearchResult: best_params, best_cost, interrupted, completed_trials
 SearchResult = tuple[dict, float, bool, int]
 
-from satellite.sim.config import (
-    load_simulation_config,
-    load_monte_carlo_config,
-    ScenarioInstance,
-    build_scenario_config,
-    StrategyConfig,
-)
-from satellite.sim.monte_carlo import sample_offsets
-from satellite.sim.scenario import run_scenario
+from config import load_toml
+from montecarlo.run import load_monte_carlo_config, sample_offsets
+from montecarlo.types import GaussianErrorConfig, MonteCarloConfig
+from optimize.config import parse as parse_optimize
+from satellite.config import load_simulation_config
+from scenario.run import run_scenario
+from scenario.types import ScenarioInstance, build_scenario_config
+from strategy.config import StrategyConfig
 
 # ---------------------------------------------------------------------------
 # Search spaces
@@ -289,7 +288,7 @@ def evaluate_candidate(
     fixed_offsets: list,
     max_workers: int,
 ) -> tuple[float, float, float]:
-    from satellite.strategy.base import CONFIG_PARSERS
+    from strategy.base import CONFIG_PARSERS
 
     params = dict(params)
     if strategy_name == "lissajous_scan":
@@ -308,8 +307,7 @@ def evaluate_candidate(
 
     # If the strategy is GPU-compatible, perform evaluation in a single batch on the GPU
     import os
-    from satellite.sim.cuda_monte_carlo import is_strategy_chain_supported_on_gpu, run_monte_carlo_cuda
-    from satellite.sim.config import MonteCarloConfig
+    from montecarlo.cuda import is_strategy_chain_supported_on_gpu, run_monte_carlo_cuda
 
     mc = MonteCarloConfig(
         simulation_path=mc_cfg.simulation_path,
@@ -331,7 +329,7 @@ def evaluate_candidate(
 
     # Fallback to CPU parallel execution
     tasks = [
-        (sim_cfg, ScenarioInstance(name=f"eval_{idx}", s1=s1_off, s2=s2_off), strategy)
+        (sim_cfg, ScenarioInstance(name=f"eval_{idx}", s1=s1_off, s2=s2_off, chain=(strategy_name,)), strategy)
         for idx, (s1_off, s2_off) in enumerate(fixed_offsets)
     ]
 
@@ -576,10 +574,9 @@ def run_optuna_search(
     import os
     import concurrent.futures
     import threading
-    from satellite.sim.config import MonteCarloConfig, StrategyConfig
     
     # Check if GPU batching is supported
-    from satellite.sim.cuda_monte_carlo import is_strategy_chain_supported_on_gpu, run_monte_carlo_cuda_batch, CUDA_AVAILABLE
+    from montecarlo.cuda import is_strategy_chain_supported_on_gpu, run_monte_carlo_cuda_batch, CUDA_AVAILABLE
     
     # Construct a valid dummy parameters object using midpoints of the search space
     dummy_params = {}
@@ -591,7 +588,7 @@ def run_optuna_search(
         dummy_params["s1_delta"] = 1.570796
         dummy_params["s2_delta"] = 1.570796
         
-    from satellite.strategy.base import CONFIG_PARSERS
+    from strategy.base import CONFIG_PARSERS
     if strategy_name in CONFIG_PARSERS:
         dummy_params = CONFIG_PARSERS[strategy_name](dummy_params)
         
@@ -664,7 +661,7 @@ def run_optuna_search(
                     consecutive_prunes = 0
                     batch_trials.append(trial)
 
-                    from satellite.strategy.base import CONFIG_PARSERS
+                    from strategy.base import CONFIG_PARSERS
                     parsed_params = cand_eval
                     if strategy_name in CONFIG_PARSERS:
                         parsed_params = CONFIG_PARSERS[strategy_name](cand_eval)
@@ -873,28 +870,24 @@ def main():
         else:
             print(f"Warning: Default configuration file '{requested_config}' not found. Using defaults.")
 
-    opt_sec = toml_data.get("optimize", {})
+    opt_cfg = parse_optimize(toml_data) if toml_data else parse_optimize({})
     mc_sec = toml_data.get("monte_carlo", {})
 
-    # Resolve strategy
-    strategy = args.strategy or opt_sec.get("strategy")
+    strategy = args.strategy or opt_cfg.strategy
     if not strategy:
         print("ERROR: Strategy must be specified either in the config file or via --strategy", file=sys.stderr)
         sys.exit(1)
 
-    # Resolve optimization parameters
-    method = args.method or opt_sec.get("method") or "random"
-    trials = args.trials if args.trials is not None else opt_sec.get("trials", 20)
+    method = args.method or opt_cfg.method
+    trials = args.trials if args.trials is not None else opt_cfg.trials
     grid_points = args.grid_points
-    trial_seed = args.trial_seed if args.trial_seed is not None else opt_sec.get("trial_seed")
+    trial_seed = args.trial_seed if args.trial_seed is not None else opt_cfg.trial_seed
 
     # Load / resolve Monte Carlo configuration
     if config_path.exists() and "monte_carlo" in toml_data:
         mc_cfg = load_monte_carlo_config(config_path)
     else:
         # Construct a default MonteCarloConfig
-        from satellite.sim.config import StrategyConfig, GaussianErrorConfig, MonteCarloConfig
-        
         env_path = args.env_config or mc_sec.get("environment") or "config/Environment.toml"
         env_path_obj = Path(env_path)
         if not env_path_obj.exists():
@@ -940,7 +933,6 @@ def main():
     sim_cfg = load_simulation_config(mc_cfg.simulation_path)
 
     # Update mc_cfg's strategy to match the resolved strategy
-    from satellite.sim.config import StrategyConfig
     mc_cfg = replace(
         mc_cfg,
         chain=(strategy,),

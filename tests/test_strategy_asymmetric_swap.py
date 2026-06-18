@@ -3,7 +3,7 @@
 
 from __future__ import annotations
 
-from satellite.sim.scenario import run_scenario
+from scenario.run import run_scenario
 from tests.conftest import base_config
 
 
@@ -25,8 +25,8 @@ def test_asymmetric_swap_succeeds_with_small_offsets():
 
 def test_asymmetric_swap_script_includes_reset_after_spiral():
     from satellite.physics.satellite import Satellite
-    from satellite.strategy.base import StrategyContext
-    from satellite.strategy.strategies.asymmetric_swap import AsymmetricSwapStrategy, AsymmetricSwapConfig
+    from strategy.base import StrategyContext
+    from strategy.strategies.asymmetric_swap import AsymmetricSwapStrategy, AsymmetricSwapConfig
 
     cfg = base_config(chain=("asymmetric_swap",))
     s1 = Satellite.build("S1", cfg.s1, cfg.s2.position, cfg)

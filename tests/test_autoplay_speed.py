@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from satellite.visualize.app import play_step_delta
+from visualize.app import play_step_delta
 
 
 def test_play_step_delta_normal_play():

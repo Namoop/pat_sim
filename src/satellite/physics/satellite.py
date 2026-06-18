@@ -5,7 +5,7 @@ from __future__ import annotations
 import numpy as np
 from dataclasses import dataclass, field
 
-from satellite.sim.config import ScenarioConfig, SatelliteInstanceConfig, default_beam_length
+from scenario.types import ScenarioConfig, SatelliteInstanceConfig, default_beam_length
 from satellite.math.math3d import Vec3
 from satellite.physics.bench import OpticalBench
 from satellite.physics.fsm import FastSteeringMirror

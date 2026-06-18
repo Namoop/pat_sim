@@ -4,9 +4,9 @@
 from __future__ import annotations
 
 from satellite.physics.satellite import Satellite
-from satellite.strategy.actions import beam, hold, receiver, strategy
-from satellite.strategy.base import StrategyContext
-from satellite.strategy.runner import FrameRunner
+from strategy.actions import beam, hold, receiver, strategy
+from strategy.base import StrategyContext
+from strategy.runner import FrameRunner
 from tests.conftest import base_config
 
 
@@ -110,7 +110,7 @@ def test_later_hardware_toggle_applies():
 
 
 def test_reset_slew_motion():
-    from satellite.strategy.actions import reset, spiral, receiver
+    from strategy.actions import reset, spiral, receiver
     from satellite.math.math3d import angle_between
     import math
 
@@ -153,7 +153,7 @@ def test_reset_slew_motion():
 
 
 def test_inward_spiral_motion():
-    from satellite.strategy.actions import hold, spiral, receiver
+    from strategy.actions import hold, spiral, receiver
     from satellite.math.math3d import angle_between
 
     ctx = _ctx()

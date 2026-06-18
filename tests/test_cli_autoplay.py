@@ -24,7 +24,7 @@ def test_autoplay_without_speed_defaults_to_one(monkeypatch):
         captured.update(kwargs)
         return 0
 
-    monkeypatch.setattr("satellite.visualize.run_visualizer", fake_run_visualizer)
+    monkeypatch.setattr("visualize.run_visualizer", fake_run_visualizer)
     main([str(repo / "config/_montecarlo_minor.toml"), "--visualize", "--autoplay"])
     assert captured["autoplay_speed"] == 1.0
 
