@@ -6,6 +6,7 @@ import time
 from dataclasses import dataclass
 
 import numpy as np
+from PyQt6.QtWidgets import QWidget
 
 from satellite.math.geometry import axis_perpendicular_basis
 from satellite.math.math3d import normalize
@@ -103,13 +104,50 @@ _CAMERA_PRESETS: dict[str, _CameraPreset] = {
 }
 
 
+_OVERLAY_BTN_STYLE = (
+    "QPushButton {"
+    "  background-color: #f5f5f7;"
+    "  border: 1px solid #d2d2d7;"
+    "  border-radius: 4px;"
+    "  padding: 4px 12px;"
+    "  color: #1d1d1f;"
+    "  font-family: 'Sans';"
+    "  font-size: 11px;"
+    "  font-weight: bold;"
+    "}"
+    "QPushButton:hover {"
+    "  background-color: #e8e8ed;"
+    "}"
+    "QPushButton:checked {"
+    "  background-color: #0071e3;"
+    "  color: white;"
+    "  border-color: #0071e3;"
+    "}"
+)
+
+
+class _PlotOverlayHost(QWidget):
+    """Plot host that repositions floating camera controls on resize."""
+
+    def __init__(self, panel: "ThreeDPanel", parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self._panel = panel
+
+    def resizeEvent(self, event) -> None:  # noqa: N802
+        super().resizeEvent(event)
+        self._panel._position_overlay()
+
+
 class ThreeDPanel:
     """Embedded 3D PyVista view; caller owns timeline scrubbing."""
 
     def __init__(self, parent) -> None:
         import pyvista as pv
         from PyQt6.QtWidgets import (
+            QButtonGroup,
+            QGridLayout,
             QPushButton,
+            QSizePolicy,
             QVBoxLayout,
             QWidget,
         )
@@ -118,39 +156,96 @@ class ThreeDPanel:
         self._pv = pv
         self._result: ScenarioResult | None = None
         self._current_t = 0.0
-        self._active_camera_preset = "center"
+        self._active_camera_preset = "s1_close"
         self._pending_camera_restore: dict | None = None
 
         self._widget = QWidget(parent)
         layout = QVBoxLayout(self._widget)
         layout.setContentsMargins(0, 0, 0, 0)
 
-        self._plot_host = QWidget(self._widget)
+        self._plot_host = _PlotOverlayHost(self, self._widget)
         plot_host_layout = QVBoxLayout(self._plot_host)
         plot_host_layout.setContentsMargins(0, 0, 0, 0)
 
         self.plotter = QtInteractor(self._plot_host)
-        plot_host_layout.addWidget(self.plotter.interactor)
+        plot_host_layout.addWidget(self.plotter.interactor, stretch=1)
 
+        self._btn_bar = QWidget(self._plot_host)
+        self._btn_bar.setAutoFillBackground(True)
+        self._btn_bar.setStyleSheet("background-color: #ffffff;")
+        btn_bar_layout = QGridLayout(self._btn_bar)
+        btn_bar_layout.setContentsMargins(0, 0, 0, 0)
+        btn_bar_layout.setHorizontalSpacing(6)
+        btn_bar_layout.setVerticalSpacing(6)
+
+        self._camera_btn_group = QButtonGroup(self._btn_bar)
+        self._camera_btn_group.setExclusive(True)
         self._camera_preset_buttons: dict[str, QPushButton] = {}
-        for key, label in (
-            ("center", "Center"),
-            ("s1_close", "S1 close"),
-            ("s1_far", "S1 far"),
-            ("s2_close", "S2 close"),
-            ("s2_far", "S2 far"),
-        ):
-            btn = QPushButton(label, self._plot_host)
-            if key == "center":
-                btn.setToolTip(
-                    "Frame both satellites from the midpoint between them"
-                )
-            else:
-                btn.setToolTip(f"Jump to {label} camera preset")
-            btn.clicked.connect(lambda _checked=False, k=key: self._on_camera_button(k))
-            self._style_camera_button(btn)
-            btn.raise_()
+
+        def _add_camera_button(
+            key: str,
+            label: str,
+            row: int,
+            col: int,
+            *,
+            row_span: int = 1,
+            col_span: int = 1,
+            tooltip: str,
+        ) -> None:
+            btn = QPushButton(label, self._btn_bar)
+            btn.setCheckable(True)
+            btn.setToolTip(tooltip)
+            btn.setStyleSheet(_OVERLAY_BTN_STYLE)
+            btn.setSizePolicy(
+                QSizePolicy.Policy.Expanding,
+                QSizePolicy.Policy.Fixed,
+            )
+            self._camera_btn_group.addButton(btn)
             self._camera_preset_buttons[key] = btn
+            btn.clicked.connect(lambda _checked=False, k=key: self._on_camera_button(k))
+            btn_bar_layout.addWidget(btn, row, col, row_span, col_span)
+
+        _add_camera_button(
+            "center",
+            "Center",
+            0,
+            0,
+            col_span=2,
+            tooltip="Frame both satellites from the midpoint between them",
+        )
+        _add_camera_button(
+            "s1_close",
+            "S1 close",
+            1,
+            0,
+            tooltip="Jump to S1 close camera preset",
+        )
+        _add_camera_button(
+            "s1_far",
+            "S1 far",
+            1,
+            1,
+            tooltip="Jump to S1 far camera preset",
+        )
+        _add_camera_button(
+            "s2_close",
+            "S2 close",
+            2,
+            0,
+            tooltip="Jump to S2 close camera preset",
+        )
+        _add_camera_button(
+            "s2_far",
+            "S2 far",
+            2,
+            1,
+            tooltip="Jump to S2 far camera preset",
+        )
+        for col in range(2):
+            btn_bar_layout.setColumnStretch(col, 1)
+
+        self._camera_preset_buttons["s1_close"].setChecked(True)
+        self._position_overlay()
 
         layout.addWidget(self._plot_host, stretch=1)
 
@@ -176,45 +271,24 @@ class ThreeDPanel:
         self._replay_step_count = 0
         self._profile_callback = None
 
-        from PyQt6.QtCore import QObject, QEvent
-
-        class _ResizeForwarder(QObject):
-            def __init__(self, panel: ThreeDPanel) -> None:
-                super().__init__()
-                self._panel = panel
-
-            def eventFilter(self, obj, event):  # noqa: N802
-                if event.type() == QEvent.Type.Resize:
-                    self._panel._position_camera_overlay()
-                return False
-
-        self._resize_forwarder = _ResizeForwarder(self)
-        self._widget.installEventFilter(self._resize_forwarder)
-
     @property
     def widget(self):
         return self._widget
 
-    @staticmethod
-    def _style_camera_button(btn) -> None:
-        """Square opaque buttons — avoids dark parent bleeding at rounded corners over VTK."""
-        btn.setAutoFillBackground(False)
-        btn.setFlat(True)
-        btn.setStyleSheet(
-            "QPushButton {"
-            "  background-color: rgb(55, 55, 68);"
-            "  color: #f0f0f8;"
-            "  border: 1px solid rgb(140, 140, 160);"
-            "  border-radius: 0px;"
-            "  padding: 4px 10px;"
-            "}"
-            "QPushButton:hover {"
-            "  background-color: rgb(70, 70, 85);"
-            "}"
-            "QPushButton:pressed {"
-            "  background-color: rgb(40, 40, 52);"
-            "}"
+    def _position_overlay(self) -> None:
+        margin = 12
+        self._btn_bar.adjustSize()
+        bar_w = self._btn_bar.sizeHint().width()
+        bar_h = self._btn_bar.sizeHint().height()
+        host = self._plot_host
+        self._btn_bar.setGeometry(
+            host.width() - margin - bar_w,
+            margin,
+            bar_w,
+            bar_h,
         )
+        if self._btn_bar.isVisible():
+            self._btn_bar.raise_()
 
     def set_profile_callback(self, callback) -> None:
         self._profile_callback = callback
@@ -388,24 +462,11 @@ class ThreeDPanel:
         self._active_camera_preset = key
         self._apply_camera_for_preset(key)
 
-    def _position_camera_overlay(self) -> None:
-        margin = 12
-        gap = 6
-        x = margin
-        y = margin
-        for key in ("center", "s1_close", "s1_far", "s2_close", "s2_far"):
-            btn = self._camera_preset_buttons[key]
-            btn.adjustSize()
-            btn.setGeometry(x, y, btn.sizeHint().width(), btn.sizeHint().height())
-            btn.raise_()
-            x += btn.width() + gap
-
     def _replay_to(self, t_end: float) -> list[str]:
         result = self._result
         assert result is not None
         log_lines: list[str] = []
         result.replay_to(t_end, event_log=log_lines)
-        self._position_camera_overlay()
         if result.last_sim_profiler is not None:
             self._replay_step_count = result.last_sim_profiler.step_count
         return log_lines
@@ -709,7 +770,16 @@ class ThreeDPanel:
         if self._widget.isVisible():
             with self._profiler.measure("render"):
                 self.plotter.render()
+            if self._btn_bar.isVisible():
+                self._position_overlay()
 
     def on_tab_shown(self) -> None:
+        if self._btn_bar.isVisible():
+            self._position_overlay()
         if self._scene_built and self.plotter is not None:
             self.plotter.render()
+
+    def set_overlay_visible(self, visible: bool) -> None:
+        self._btn_bar.setVisible(visible)
+        if visible:
+            self._position_overlay()
