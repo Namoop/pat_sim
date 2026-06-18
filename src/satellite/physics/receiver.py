@@ -4,10 +4,10 @@ from __future__ import annotations
 
 import numpy as np
 
-from satellite.geometry import dish_aperture_radius, dish_disc_mesh
-from satellite.math3d import Vec3
-from satellite.sda.bench import BenchGeometry, OpticalBench
-from satellite.sda.fsm import FastSteeringMirror
+from satellite.math.geometry import dish_aperture_radius, dish_disc_mesh
+from satellite.math.math3d import Vec3
+from satellite.physics.bench import BenchGeometry, OpticalBench
+from satellite.physics.fsm import FastSteeringMirror
 
 
 class ReceiverSDA:
@@ -93,7 +93,7 @@ class ReceiverSDA:
         return self.bench.geometry_snapshot(self.body_radius)
 
     def dish_range_from_partner(self) -> float:
-        from satellite.math3d import distance
+        from satellite.math.math3d import distance
 
         return distance(self.partner_position, self.dish_mount)
 

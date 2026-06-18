@@ -5,10 +5,10 @@ from __future__ import annotations
 
 import pytest
 
-from satellite.detection import beam_hits_dish
-from satellite.math3d import as_vec3
-from satellite.scenario import run_scenario
-from satellite.sda.satellite import Satellite
+from satellite.sim.detection import beam_hits_dish
+from satellite.math.math3d import as_vec3
+from satellite.sim.scenario import run_scenario
+from satellite.physics.satellite import Satellite
 from satellite.strategy.base import link_established
 from tests.conftest import base_config
 

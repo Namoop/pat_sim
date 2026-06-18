@@ -6,7 +6,7 @@ import tomllib
 from dataclasses import dataclass, field, replace, is_dataclass
 from pathlib import Path
 
-from satellite.math3d import Vec3, as_vec3
+from satellite.math.math3d import Vec3, as_vec3
 
 
 @dataclass(frozen=True)
@@ -550,7 +550,7 @@ def default_beam_length(
     simulation: SimulationConfig,
 ) -> float:
     """Default TX cone length: link range plus boresight extension."""
-    from satellite.math3d import distance
+    from satellite.math.math3d import distance
 
     if simulation.beam_length is not None:
         return simulation.beam_length

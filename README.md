@@ -45,18 +45,17 @@ The repository is structured as a Python package containing the following module
 ```
 src/
   satellite/
-    config.py       — Simulation / scenario / MC loaders
-    monte_carlo.py  — error sampling and batch runner
+    sim/            — config loaders, scenario/MC runners, detection, replay
+    physics/        — bench, transmitter, receiver, FSM
+    math/           — vector math and geometric constructions
     strategy/
       actions.py    — timeline DSL and StrategyScript
       runner.py     — frame runner
       schedule.py   — compiled timeline for replay
       meta.py       — strategy chain orchestrator
       strategies/   — built-in strategy implementations
-    sda/            — bench, transmitter, receiver
-    scenario.py     — orchestration and replay
     visualize/      — unified 3D + eye + mag visualizer
-    mapviz/         — QPainter angular map panels
+    mapviz/           — QPainter angular map panels
   optimize/
     __main__.py     — parameter optimizer entrypoint
     run_all.sh      — batch script to run optimization

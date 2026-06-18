@@ -7,10 +7,10 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from satellite.geometry import axis_perpendicular_basis
-from satellite.math3d import normalize
-from satellite.scenario import ScenarioResult
-from satellite.viz_geometry import cone_mesh_for_aim
+from satellite.math.geometry import axis_perpendicular_basis
+from satellite.math.math3d import normalize
+from satellite.sim.scenario import ScenarioResult
+from satellite.visualize.viz_geometry import cone_mesh_for_aim
 from satellite.visualize.diagnostics import FrameProfiler
 
 

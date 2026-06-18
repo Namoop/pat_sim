@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from satellite.math3d import Vec3
+from satellite.math.math3d import Vec3
 
 
 @dataclass

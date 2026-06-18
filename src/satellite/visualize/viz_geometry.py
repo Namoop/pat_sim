@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import numpy as np
 
-from satellite.geometry import axis_perpendicular_basis, cone_surface_mesh
-from satellite.math3d import Vec3, normalize
+from satellite.math.geometry import axis_perpendicular_basis, cone_surface_mesh
+from satellite.math.math3d import Vec3, normalize
 
 
 def cone_mesh_for_aim(

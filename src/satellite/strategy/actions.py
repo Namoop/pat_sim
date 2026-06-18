@@ -8,7 +8,7 @@ from dataclasses import dataclass
 import math
 from typing import TYPE_CHECKING, Iterator, Literal
 
-from satellite.math3d import angle_between
+from satellite.math.math3d import angle_between
 from satellite.strategy.movements import (
     Circle,
     Grid,

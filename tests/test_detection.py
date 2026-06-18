@@ -6,7 +6,7 @@ from dataclasses import replace
 
 import numpy as np
 
-from satellite.config import (
+from satellite.sim.config import (
     BenchOffsetConfig,
     build_scenario_config,
     load_monte_carlo_config,
@@ -14,13 +14,13 @@ from satellite.config import (
     load_simulation_config,
     positions_for_distance,
 )
-from satellite.detection import (
+from satellite.sim.detection import (
     beam_hits_dish,
     incoming_from_source,
     is_within_dish_fov,
 )
-from satellite.math3d import angle_between, normalize
-from satellite.scenario import run_scenario
+from satellite.math.math3d import angle_between, normalize
+from satellite.sim.scenario import run_scenario
 from satellite.strategy.base import beam_length_for, link_established
 
 
@@ -157,7 +157,7 @@ slider_debounce_ms = 16
     (tmp_path / "Environment.toml").write_text(sim_content)
     
     # Load and build config
-    from satellite.config import load_single_scenario
+    from satellite.sim.config import load_single_scenario
     cfg = load_single_scenario(p)
     
     # Check that simulation_path was resolved correctly and overrides were applied

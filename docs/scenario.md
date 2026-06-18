@@ -2,7 +2,7 @@
 
 This document describes the parameters defined in `Scenario.toml` (e.g. `config/Scenario.toml`), which configures a single execution run with fixed pointing offsets.
 
-The configuration file is loaded by [load_scenario_config](file:///home/theodore/Documents/satellite/src/satellite/config.py). All angular values in scenario configurations are defined in **milliradians**.
+The configuration file is loaded by [load_scenario_config](file:///home/theodore/Documents/satellite/src/satellite/sim/config.py). All angular values in scenario configurations are defined in **milliradians**.
 
 ---
 

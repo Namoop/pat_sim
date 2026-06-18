@@ -9,7 +9,7 @@ from satellite.strategy.actions import beam, receiver, spiral, strategy
 from satellite.strategy.base import SearchStrategy, StrategyContext, register_strategy
 
 if TYPE_CHECKING:
-    from satellite.config import ScenarioConfig
+    from satellite.sim.config import ScenarioConfig
 
 
 @dataclass(frozen=True)

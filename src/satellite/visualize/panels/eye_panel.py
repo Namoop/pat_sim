@@ -9,7 +9,7 @@ import numpy as np
 
 from satellite.mapviz.panel_widget import AngularMapPanel
 from satellite.mapviz.scene import MapScene, build_scene
-from satellite.scenario import ScenarioResult
+from satellite.sim.scenario import ScenarioResult
 from satellite.visualize.diagnostics import FrameProfiler
 
 

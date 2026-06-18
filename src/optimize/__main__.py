@@ -83,15 +83,15 @@ def _note_interrupt() -> None:
 # SearchResult: best_params, best_cost, interrupted, completed_trials
 SearchResult = tuple[dict, float, bool, int]
 
-from satellite.config import (
+from satellite.sim.config import (
     load_simulation_config,
     load_monte_carlo_config,
     ScenarioInstance,
     build_scenario_config,
     StrategyConfig,
 )
-from satellite.monte_carlo import sample_offsets
-from satellite.scenario import run_scenario
+from satellite.sim.monte_carlo import sample_offsets
+from satellite.sim.scenario import run_scenario
 
 # ---------------------------------------------------------------------------
 # Search spaces
@@ -308,8 +308,8 @@ def evaluate_candidate(
 
     # If the strategy is GPU-compatible, perform evaluation in a single batch on the GPU
     import os
-    from satellite.cuda_monte_carlo import is_strategy_chain_supported_on_gpu, run_monte_carlo_cuda
-    from satellite.config import MonteCarloConfig
+    from satellite.sim.cuda_monte_carlo import is_strategy_chain_supported_on_gpu, run_monte_carlo_cuda
+    from satellite.sim.config import MonteCarloConfig
 
     mc = MonteCarloConfig(
         simulation_path=mc_cfg.simulation_path,
@@ -576,10 +576,10 @@ def run_optuna_search(
     import os
     import concurrent.futures
     import threading
-    from satellite.config import MonteCarloConfig, StrategyConfig
+    from satellite.sim.config import MonteCarloConfig, StrategyConfig
     
     # Check if GPU batching is supported
-    from satellite.cuda_monte_carlo import is_strategy_chain_supported_on_gpu, run_monte_carlo_cuda_batch, CUDA_AVAILABLE
+    from satellite.sim.cuda_monte_carlo import is_strategy_chain_supported_on_gpu, run_monte_carlo_cuda_batch, CUDA_AVAILABLE
     
     # Construct a valid dummy parameters object using midpoints of the search space
     dummy_params = {}
@@ -893,7 +893,7 @@ def main():
         mc_cfg = load_monte_carlo_config(config_path)
     else:
         # Construct a default MonteCarloConfig
-        from satellite.config import StrategyConfig, GaussianErrorConfig, MonteCarloConfig
+        from satellite.sim.config import StrategyConfig, GaussianErrorConfig, MonteCarloConfig
         
         env_path = args.env_config or mc_sec.get("environment") or "config/Environment.toml"
         env_path_obj = Path(env_path)
@@ -940,7 +940,7 @@ def main():
     sim_cfg = load_simulation_config(mc_cfg.simulation_path)
 
     # Update mc_cfg's strategy to match the resolved strategy
-    from satellite.config import StrategyConfig
+    from satellite.sim.config import StrategyConfig
     mc_cfg = replace(
         mc_cfg,
         chain=(strategy,),

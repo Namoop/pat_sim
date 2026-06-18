@@ -7,9 +7,9 @@ from pathlib import Path
 
 import numpy as np
 
-from satellite.config import load_monte_carlo_config, load_simulation_config, load_single_scenario
-from satellite.monte_carlo import run_monte_carlo_single
-from satellite.scenario import run_scenario
+from satellite.sim.config import load_monte_carlo_config, load_simulation_config, load_single_scenario
+from satellite.sim.monte_carlo import run_monte_carlo_single
+from satellite.sim.scenario import run_scenario
 from satellite.visualize.session import MonteCarloVizSession, SingleResultSession
 
 FIXTURES = Path(__file__).parent / "fixtures"

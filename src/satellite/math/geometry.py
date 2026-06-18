@@ -6,7 +6,7 @@ from collections.abc import Callable
 
 import numpy as np
 
-from satellite.math3d import (
+from satellite.math.math3d import (
     Vec3,
     cross,
     distance,

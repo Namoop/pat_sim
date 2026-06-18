@@ -5,12 +5,12 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from satellite.config import StrategyConfig
+from satellite.sim.config import StrategyConfig
 from satellite.strategy.actions import beam, hold, receiver, spiral, strategy
 from satellite.strategy.base import SearchStrategy, StrategyContext, register_strategy
 
 if TYPE_CHECKING:
-    from satellite.config import ScenarioConfig
+    from satellite.sim.config import ScenarioConfig
 
 
 @dataclass(frozen=True)

@@ -8,8 +8,8 @@ from pathlib import Path
 
 import satellite  # noqa: F401 — CUDA bootstrap
 
-from satellite.config import load_single_scenario
-from satellite.scenario import format_summary, run_scenario
+from satellite.sim.config import load_single_scenario
+from satellite.sim.scenario import format_summary, run_scenario
 
 
 def _normalize_viz_mode(viz_mode: str | None) -> str | None:

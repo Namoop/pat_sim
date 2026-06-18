@@ -6,11 +6,11 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Literal
 
 from satellite.mapviz.frames import direction_to_tangent_angles, point_in_disc
-from satellite.math3d import normalize
-from satellite.sda.satellite import Satellite
+from satellite.math.math3d import normalize
+from satellite.physics.satellite import Satellite
 
 if TYPE_CHECKING:
-    from satellite.scenario import ScenarioResult
+    from satellite.sim.scenario import ScenarioResult
 
 
 SatelliteName = Literal["S1", "S2"]

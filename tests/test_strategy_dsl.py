@@ -5,7 +5,7 @@ from __future__ import annotations
 
 import pytest
 
-from satellite.sda.satellite import Satellite
+from satellite.physics.satellite import Satellite
 from satellite.strategy.actions import (
     beam,
     hold,

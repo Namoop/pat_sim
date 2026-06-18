@@ -11,7 +11,7 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from satellite.config import (
+from satellite.sim.config import (
     BenchOffsetConfig,
     ErrorDistributionConfig,
     GaussianErrorConfig,
@@ -23,7 +23,7 @@ from satellite.config import (
     load_monte_carlo_config,
     load_simulation_config,
 )
-from satellite.scenario import ScenarioResult, run_scenario
+from satellite.sim.scenario import ScenarioResult, run_scenario
 
 
 @dataclass(frozen=True)
@@ -251,7 +251,7 @@ def run_monte_carlo(
     if not mc.chain:
         raise ValueError("monte_carlo.chain is required to run a Monte Carlo simulation")
 
-    from satellite.cuda_monte_carlo import is_strategy_chain_supported_on_gpu, run_monte_carlo_cuda
+    from satellite.sim.cuda_monte_carlo import is_strategy_chain_supported_on_gpu, run_monte_carlo_cuda
     if is_strategy_chain_supported_on_gpu(mc):
         print("Running Monte Carlo simulation on GPU...", flush=True)
         return run_monte_carlo_cuda(mc)

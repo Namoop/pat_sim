@@ -55,15 +55,15 @@ class _MockScenarioResult:
     schedule: _MockSchedule
     config: object
 
-from satellite.config import (
+from satellite.sim.config import (
     MonteCarloConfig,
     ScenarioInstance,
     build_scenario_config,
     load_simulation_config,
     load_monte_carlo_config,
 )
-from satellite.math3d import Vec3
-from satellite.monte_carlo import MonteCarloRunResult, MonteCarloSummary, _build_monte_carlo_summary, sample_offsets
+from satellite.math.math3d import Vec3
+from satellite.sim.monte_carlo import MonteCarloRunResult, MonteCarloSummary, _build_monte_carlo_summary, sample_offsets
 from satellite.strategy.movements import Hold, Reset, Spiral, SerpentineRaster, Rosette, Lissajous
 from satellite.strategy.base import StrategyContext, StrategyResult
 from satellite.strategy.meta import MetaStrategy
@@ -949,11 +949,11 @@ def is_strategy_chain_supported_on_gpu(mc: MonteCarloConfig) -> bool:
         return _gpu_compat_cache[cache_key]
 
     sim = load_simulation_config(mc.simulation_path)
-    from satellite.sda.satellite import Satellite
+    from satellite.physics.satellite import Satellite
     dummy_pos = np.array([0.0, 0.0, 0.0], dtype=FLOAT_DTYPE)
     partner_pos = np.array([1000.0, 0.0, 0.0], dtype=FLOAT_DTYPE)
     
-    from satellite.config import BenchOffsetConfig
+    from satellite.sim.config import BenchOffsetConfig
     dummy_offset = BenchOffsetConfig(0.0, 0.0)
     mock_config = build_scenario_config(sim, ScenarioInstance("dummy_s", dummy_offset, dummy_offset, overrides=getattr(mc, "overrides", {})), strategy=mc.strategy)
     
@@ -999,8 +999,8 @@ def run_monte_carlo_cuda_batch(configs: list[MonteCarloConfig]) -> list[MonteCar
     mc = configs[0]
     sim = load_simulation_config(mc.simulation_path)
     
-    from satellite.sda.satellite import Satellite
-    from satellite.config import BenchOffsetConfig
+    from satellite.physics.satellite import Satellite
+    from satellite.sim.config import BenchOffsetConfig
     
     dummy_pos = np.array([0.0, 0.0, 0.0], dtype=FLOAT_DTYPE)
     partner_pos = np.array([sim.simulation.distance, 0.0, 0.0], dtype=FLOAT_DTYPE)
@@ -1195,7 +1195,7 @@ def run_monte_carlo_cuda_batch(configs: list[MonteCarloConfig]) -> list[MonteCar
 
     results_arr = d_results.copy_to_host()
 
-    from satellite.config import positions_for_distance, ScenarioConfig, SatelliteInstanceConfig, StrategyConfig
+    from satellite.sim.config import positions_for_distance, ScenarioConfig, SatelliteInstanceConfig, StrategyConfig
     s1_pos, s2_pos = positions_for_distance(sim.simulation.distance)
     
     summaries = []

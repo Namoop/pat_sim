@@ -8,8 +8,8 @@ from pathlib import Path
 
 import satellite  # noqa: F401 — CUDA bootstrap
 
-from satellite.config import load_monte_carlo_config
-from satellite.monte_carlo import format_monte_carlo_summary, run_monte_carlo
+from satellite.sim.config import load_monte_carlo_config
+from satellite.sim.monte_carlo import format_monte_carlo_summary, run_monte_carlo
 
 
 def _normalize_viz_mode(viz_mode: str | None) -> str | None:

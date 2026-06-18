@@ -6,14 +6,14 @@ import math
 
 import numpy as np
 
-from satellite.geometry import (
+from satellite.math.geometry import (
     cone_surface_mesh,
     global_spiral_frame,
     ribbon_swept_mesh,
     spiral_path_on_target_plane,
     transmitter_basis,
 )
-from satellite.math3d import Vec3, distance, normalize, spherical_angles_from_direction
+from satellite.math.math3d import Vec3, distance, normalize, spherical_angles_from_direction
 
 
 class TransmitterSDA:

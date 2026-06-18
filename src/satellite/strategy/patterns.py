@@ -15,11 +15,11 @@ except ImportError:
             return f
         return decorator
 
-from satellite.geometry import (
+from satellite.math.geometry import (
     spherical_angles_from_direction,
     transmitter_basis,
 )
-from satellite.math3d import Vec3, normalize
+from satellite.math.math3d import Vec3, normalize
 
 
 def basis_at_direction(center: Vec3) -> tuple[Vec3, Vec3, Vec3]:

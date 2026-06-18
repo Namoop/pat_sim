@@ -6,9 +6,9 @@ from collections.abc import Callable
 
 import numpy as np
 
-from satellite.math3d import Vec3, angle_between, dot, norm, normalize
+from satellite.math.math3d import Vec3, angle_between, dot, norm, normalize
 
-from satellite import detection_fast as _detection_fast
+from satellite.sim import detection_fast as _detection_fast
 
 _beam_hits_dish_fast = _detection_fast.beam_hits_dish_optimized
 

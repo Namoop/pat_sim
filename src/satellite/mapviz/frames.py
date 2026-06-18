@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import numpy as np
 
-from satellite.geometry import transmitter_basis
-from satellite.math3d import Vec3, cross, dot, norm, normalize, spherical_angles_from_direction
-from satellite.sda.transmitter import TransmitterSDA
+from satellite.math.geometry import transmitter_basis
+from satellite.math.math3d import Vec3, cross, dot, norm, normalize, spherical_angles_from_direction
+from satellite.physics.transmitter import TransmitterSDA
 
 
 def direction_to_tangent_angles(origin: Vec3, direction: Vec3) -> tuple[float, float]:

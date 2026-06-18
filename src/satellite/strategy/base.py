@@ -6,14 +6,14 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Callable, TypeVar
 
-from satellite.config import ScenarioConfig, default_beam_length
-from satellite.detection import beam_hits_dish
-from satellite.detection_fast import beam_hits_dish_fast
-from satellite.math3d import Vec3
+from satellite.sim.config import ScenarioConfig, default_beam_length
+from satellite.sim.detection import beam_hits_dish
+from satellite.sim.detection_fast import beam_hits_dish_fast
+from satellite.math.math3d import Vec3
 from satellite.strategy.actions import StrategyScript, validate_movement_durations
 
 if TYPE_CHECKING:
-    from satellite.sda.satellite import Satellite
+    from satellite.physics.satellite import Satellite
 
 T = TypeVar("T", bound="SearchStrategy")
 ConfigParser = Callable[[dict[str, Any]], Any]
@@ -53,7 +53,7 @@ class StrategyContext:
         self.s2.receiver.reset_dish_tracking()
 
     def clone_fresh(self) -> StrategyContext:
-        from satellite.sda.satellite import Satellite
+        from satellite.physics.satellite import Satellite
 
         s1 = Satellite.build("S1", self.config.s1, self.config.s2.position, self.config)
         s2 = Satellite.build("S2", self.config.s2, self.config.s1.position, self.config)
@@ -65,7 +65,7 @@ class StrategyContext:
         end_hardware: dict[str, bool] | None = None,
     ) -> StrategyContext:
         """Fresh satellites for naive sides; preserve acquired satellites and hardware."""
-        from satellite.sda.satellite import Satellite
+        from satellite.physics.satellite import Satellite
 
         s1 = (
             self.s1

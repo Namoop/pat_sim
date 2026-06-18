@@ -5,7 +5,7 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 
-from satellite.math3d import Vec3
+from satellite.math.math3d import Vec3
 from satellite.strategy.patterns import (
     basis_at_direction,
     circle_aim_at,
@@ -50,7 +50,7 @@ class Reset(MovementPattern):
         if duration <= 0:
             return ctx.center
         progress = min(local_t / duration, 1.0)
-        from satellite.math3d import slerp
+        from satellite.math.math3d import slerp
         return slerp(ctx.step_start_aim, ctx.center, progress)
 
 
@@ -63,7 +63,7 @@ class Spiral(MovementPattern):
 
     def aim_at(self, local_t: float, duration: float, ctx: AimContext) -> Vec3:
         if self.max_radius == 0.0:
-            from satellite.math3d import angle_between, normalize
+            from satellite.math.math3d import angle_between, normalize
             import math
             R_start = angle_between(ctx.step_start_aim, ctx.center)
             if R_start <= 0.0 or duration <= 0.0:
@@ -239,12 +239,12 @@ class DiscretePattern(MovementPattern):
         idx = min(int(local_t / self.step_duration), len(self.points) - 1)
         u_off, v_off = self.points[idx]
         # patterns.py normalize unrolled is faster but we need it here
-        from satellite.math3d import normalize as norm3d
+        from satellite.math.math3d import normalize as norm3d
         return norm3d(ctx.u_z + u_off * ctx.u_x + v_off * ctx.u_y)
 
 
 def build_aim_context(satellite, *, reset: bool = False) -> AimContext:
-    from satellite.sda.satellite import Satellite
+    from satellite.physics.satellite import Satellite
 
     sat: Satellite = satellite
     step_start_aim = sat.bench.bench_boresight.copy()

@@ -3,7 +3,7 @@
 
 from __future__ import annotations
 
-from satellite.config import (
+from satellite.sim.config import (
     EyeVizConfig,
     SatelliteInstanceConfig,
     ScenarioConfig,
@@ -13,7 +13,7 @@ from satellite.config import (
     ThreeDVizConfig,
     MagVizConfig,
 )
-from satellite.math3d import as_vec3
+from satellite.math.math3d import as_vec3
 from satellite.strategy.strategies.asymmetric_swap import AsymmetricSwapConfig
 from satellite.strategy.strategies.minor_offset import MinorOffsetConfig
 from satellite.strategy.strategies.single_miss import SingleMissConfig

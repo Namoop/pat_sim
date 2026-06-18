@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from satellite.config import ScenarioConfig
+from satellite.sim.config import ScenarioConfig
 from satellite.strategy.actions import StrategyScript
 from satellite.strategy.base import (
     STRATEGY_REGISTRY,

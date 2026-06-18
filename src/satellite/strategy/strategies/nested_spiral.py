@@ -13,7 +13,7 @@ from satellite.strategy.actions import beam, hold, receiver, spiral, strategy
 from satellite.strategy.base import SearchStrategy, StrategyContext, register_strategy
 
 if TYPE_CHECKING:
-    from satellite.config import ScenarioConfig
+    from satellite.sim.config import ScenarioConfig
 
 
 def parse_nested_spiral_config(_data: dict) -> None:

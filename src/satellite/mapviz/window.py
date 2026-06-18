@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from satellite.scenario import ScenarioResult
+from satellite.sim.scenario import ScenarioResult
 from satellite.visualize.app import run_visualizer as _run_unified
 from satellite.visualize.session import SingleResultSession
 

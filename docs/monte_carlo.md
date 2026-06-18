@@ -2,7 +2,7 @@
 
 This document describes the parameters defined in `MonteCarlo.toml` (e.g., `config/MonteCarlo.toml`), which configures batch trials over randomized pointing error distributions.
 
-The configuration file is loaded by [load_monte_carlo_config](file:///home/theodore/Documents/satellite/src/satellite/config.py). All angular values are defined in **milliradians**.
+The configuration file is loaded by [load_monte_carlo_config](file:///home/theodore/Documents/satellite/src/satellite/sim/config.py). All angular values are defined in **milliradians**.
 
 ---
 

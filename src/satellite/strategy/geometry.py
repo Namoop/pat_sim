@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from satellite.math3d import angle_between
-from satellite.sda.satellite import Satellite
+from satellite.math.math3d import angle_between
+from satellite.physics.satellite import Satellite
 
 
 def partner_in_fov(satellite: Satellite) -> bool:

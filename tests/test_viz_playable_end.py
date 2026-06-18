@@ -7,7 +7,7 @@ import math
 
 import pytest
 
-from satellite.scenario import run_scenario
+from satellite.sim.scenario import run_scenario
 from satellite.visualize.app import clamp_playable_t, play_reaches_end
 from tests.conftest import base_config
 

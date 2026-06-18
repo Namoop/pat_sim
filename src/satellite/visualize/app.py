@@ -6,7 +6,7 @@ from typing import Literal
 
 import numpy as np
 
-from satellite.scenario import format_summary
+from satellite.sim.scenario import format_summary
 from satellite.visualize.panels.mag_panel import MagPanel
 from satellite.visualize.panels.event_log_panel import EventLogPanel
 from satellite.visualize.panels.eye_panel import EyePanel

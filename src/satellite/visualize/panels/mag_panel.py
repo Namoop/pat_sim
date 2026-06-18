@@ -14,8 +14,8 @@ from PyQt6.QtWidgets import QButtonGroup, QGridLayout, QPushButton, QSizePolicy,
 
 from satellite.mapviz.frames import direction_to_tangent_angles
 from satellite.mapviz.scene import MapScene, build_scene
-from satellite.math3d import angle_between
-from satellite.scenario import ScenarioResult
+from satellite.math.math3d import angle_between
+from satellite.sim.scenario import ScenarioResult
 from satellite.visualize.diagnostics import FrameProfiler
 
 ViewMode = Literal["center", "s1", "s2", "follow_s1", "follow_s2", "balance"]

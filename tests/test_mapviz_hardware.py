@@ -4,7 +4,7 @@
 from __future__ import annotations
 
 from satellite.mapviz.scene import build_panel
-from satellite.scenario import run_scenario
+from satellite.sim.scenario import run_scenario
 from tests.conftest import base_config
 
 

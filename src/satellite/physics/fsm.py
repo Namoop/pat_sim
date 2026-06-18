@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import numpy as np
 
-from satellite.geometry import direction_with_tangent_offset, transmitter_basis
-from satellite.math3d import Vec3, angle_between, cross, dot, norm, normalize, spherical_angles_from_direction
+from satellite.math.geometry import direction_with_tangent_offset, transmitter_basis
+from satellite.math.math3d import Vec3, angle_between, cross, dot, norm, normalize, spherical_angles_from_direction
 
 
 def _offsets_to_target(bench_boresight: Vec3, target: Vec3) -> tuple[float, float]:

@@ -13,7 +13,7 @@ from satellite.strategy.base import (
 )
 
 if TYPE_CHECKING:
-    from satellite.config import ScenarioConfig
+    from satellite.sim.config import ScenarioConfig
 
 
 @register_strategy("comprehensive")

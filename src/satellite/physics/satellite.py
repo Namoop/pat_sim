@@ -5,12 +5,12 @@ from __future__ import annotations
 import numpy as np
 from dataclasses import dataclass, field
 
-from satellite.config import ScenarioConfig, SatelliteInstanceConfig, default_beam_length
-from satellite.math3d import Vec3
-from satellite.sda.bench import OpticalBench
-from satellite.sda.fsm import FastSteeringMirror
-from satellite.sda.receiver import ReceiverSDA
-from satellite.sda.transmitter import TransmitterSDA
+from satellite.sim.config import ScenarioConfig, SatelliteInstanceConfig, default_beam_length
+from satellite.math.math3d import Vec3
+from satellite.physics.bench import OpticalBench
+from satellite.physics.fsm import FastSteeringMirror
+from satellite.physics.receiver import ReceiverSDA
+from satellite.physics.transmitter import TransmitterSDA
 
 
 @dataclass

@@ -6,10 +6,10 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from satellite.geometry import direction_with_local_offset, transmitter_basis
-from satellite.math3d import Vec3, angle_between, normalize, rotate_toward, spherical_angles_from_direction, add_scaled_vector
-from satellite.sda.acquisition import AcquisitionState
-from satellite.sda.fsm import FastSteeringMirror
+from satellite.math.geometry import direction_with_local_offset, transmitter_basis
+from satellite.math.math3d import Vec3, angle_between, normalize, rotate_toward, spherical_angles_from_direction, add_scaled_vector
+from satellite.physics.acquisition import AcquisitionState
+from satellite.physics.fsm import FastSteeringMirror
 
 
 @dataclass(frozen=True)

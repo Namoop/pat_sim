@@ -8,10 +8,10 @@ import time
 
 import numpy as np
 
-from satellite.config import load_single_scenario
+from satellite.sim.config import load_single_scenario
 from satellite.mapviz.panel_widget import AngularMapPanel
 from satellite.mapviz.scene import build_scene
-from satellite.scenario import run_scenario
+from satellite.sim.scenario import run_scenario
 
 
 def _percentile(sorted_vals: list[float], p: float) -> float:

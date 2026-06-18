@@ -12,8 +12,8 @@ from satellite.strategy.runner import FrameRunner
 from satellite.strategy.schedule import ScheduledScript
 
 if TYPE_CHECKING:
-    from satellite.scenario import ScenarioResult
-    from satellite.sda.receiver import ReceiverSDA
+    from satellite.sim.scenario import ScenarioResult
+    from satellite.physics.receiver import ReceiverSDA
 
 
 @dataclass
@@ -199,7 +199,7 @@ def _append_initial_conditions(timeline: ReplayTimeline, result: ScenarioResult)
 
 
 def _fresh_context(result: ScenarioResult) -> StrategyContext:
-    from satellite.sda.satellite import Satellite
+    from satellite.physics.satellite import Satellite
 
     cfg = result.config
     s1 = Satellite.build("S1", cfg.s1, cfg.s2.position, cfg)

@@ -2,7 +2,7 @@
 
 This document describes the parameters defined in `Environment.toml`, which represent the spacecraft hardware constraints, simulation environment constants, and default visualizer settings. 
 
-The configuration file is loaded by [load_simulation_config](file:///home/theodore/Documents/satellite/src/satellite/config.py). All angular values, pointing offsets, and angular speeds in the environment file are defined in **milliradians** or **milliradians per second** (except where explicitly marked as physical meters or counts).
+The configuration file is loaded by [load_simulation_config](file:///home/theodore/Documents/satellite/src/satellite/sim/config.py). All angular values, pointing offsets, and angular speeds in the environment file are defined in **milliradians** or **milliradians per second** (except where explicitly marked as physical meters or counts).
 
 ---
 

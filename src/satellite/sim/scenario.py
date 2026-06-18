@@ -8,9 +8,9 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 
-from satellite.config import ScenarioConfig, default_beam_length
-from satellite.geometry import actual_target_direction
-from satellite.math3d import Vec3, angle_between, distance, normalize
+from satellite.sim.config import ScenarioConfig, default_beam_length
+from satellite.math.geometry import actual_target_direction
+from satellite.math.math3d import Vec3, angle_between, distance, normalize
 from satellite.strategy.base import StrategyContext, link_established
 from satellite.strategy.meta import MetaStrategy, MetaStrategyResult
 from satellite.strategy.movements import Reset, build_aim_context
@@ -18,9 +18,9 @@ from satellite.strategy.runner import FrameRunner
 from satellite.strategy.schedule import LegSchedule
 
 if TYPE_CHECKING:
-    from satellite.diagnostics import SimReplayProfiler
-    from satellite.sda.receiver import ReceiverSDA
-    from satellite.sda.transmitter import TransmitterSDA
+    from satellite.sim.diagnostics import SimReplayProfiler
+    from satellite.physics.receiver import ReceiverSDA
+    from satellite.physics.transmitter import TransmitterSDA
 
 
 @dataclass
@@ -161,7 +161,7 @@ class ScenarioResult:
 
     def ensure_replay_timeline(self):
         if self._replay_timeline is None:
-            from satellite.replay_timeline import build_replay_timeline
+            from satellite.sim.replay_timeline import build_replay_timeline
 
             self._replay_timeline = build_replay_timeline(self)
         return self._replay_timeline
@@ -172,13 +172,13 @@ class ScenarioResult:
         *,
         event_log: list[str] | None = None,
     ) -> None:
-        from satellite.replay_timeline import replay_to_t
+        from satellite.sim.replay_timeline import replay_to_t
 
         replay_to_t(self, t_end, event_log=event_log)
 
 
 # Late import to avoid circular dependency
-from satellite.sda.satellite import Satellite  # noqa: E402
+from satellite.physics.satellite import Satellite  # noqa: E402
 
 
 def run_scenario(config: ScenarioConfig) -> ScenarioResult:
