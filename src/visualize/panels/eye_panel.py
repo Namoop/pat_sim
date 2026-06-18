@@ -24,7 +24,9 @@ from scenario.run import ScenarioResult
 from visualize.diagnostics import FrameProfiler
 from visualize.eye_history import (
     EyeHistoryCache,
+    HeatmapAccumulator,
     build_eye_history,
+    default_heatmap_area_ceiling,
     query_correlated_fov,
 )
 from visualize.frames import pixel_to_tangent
@@ -76,6 +78,25 @@ class _BlobCacheKey:
     plot_h: int
 
 
+@dataclass(frozen=True)
+class _HeatmapSetupKey:
+    grid_res: int
+    axis_limit: float
+    alpha: float
+    fov_radius: float
+    diversity_floor: float
+    step_count: int
+
+
+@dataclass(frozen=True)
+class _HeatmapDisplayKey:
+    source: str
+    plot_w: int
+    plot_h: int
+    overlay_alpha: int
+    idx_end: int
+
+
 def _enable_smooth_painting(painter: QPainter) -> None:
     painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
     painter.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform, True)
@@ -124,6 +145,51 @@ def _render_correlation_blob(
     return tinted
 
 
+def _heatmap_to_qimage(
+    heat: np.ndarray,
+    axis_limit: float,
+    width: int,
+    height: int,
+    overlay_alpha: int,
+) -> QImage | None:
+    """Map coarse heat grid to a plot-sized warm-orange overlay."""
+    g = heat.shape[0]
+    if g == 0 or heat.max() <= 0.0:
+        return None
+
+    coords = np.linspace(-axis_limit, axis_limit, g, dtype=np.float64)
+    theta, phi = np.meshgrid(coords, coords, indexing="ij")
+    inside = (theta * theta + phi * phi) <= axis_limit * axis_limit
+
+    alpha_channel = np.zeros((g, g), dtype=np.uint8)
+    # Gamma lifts mid-range values for visibility; raw heat stays monotonic.
+    scaled = np.power(np.clip(heat, 0.0, 1.0), 0.55)
+    mask = inside & (scaled > 0.0)
+    alpha_channel[mask] = np.round(overlay_alpha * scaled[mask]).astype(np.uint8)
+
+    # QImage Format_ARGB32 on little-endian: bytes B, G, R, A per pixel.
+    argb = np.zeros((g, g, 4), dtype=np.uint8)
+    argb[..., 0] = 0
+    argb[..., 1] = 136
+    argb[..., 2] = 255
+    argb[..., 3] = np.flipud(alpha_channel)
+
+    low = QImage(
+        argb.tobytes(),
+        g,
+        g,
+        4 * g,
+        QImage.Format.Format_ARGB32,
+    ).copy()
+
+    return low.scaled(
+        max(1, width),
+        max(1, height),
+        Qt.AspectRatioMode.IgnoreAspectRatio,
+        Qt.TransformationMode.FastTransformation,
+    )
+
+
 class EyeCanvas(QWidget):
     """Single satellite θ/φ eye plot drawn with QPainter."""
 
@@ -141,6 +207,7 @@ class EyeCanvas(QWidget):
         self._last_paint_seconds = 0.0
         self._on_paint_complete: Callable[[float], None] | None = None
         self._on_hover: Callable[[tuple[float, float] | None], None] | None = None
+        self._on_resize: Callable[[], None] | None = None
 
         self._hover_beam_center: tuple[float, float] | None = None
         self._hover_beam_radius: float = 0.0
@@ -150,6 +217,8 @@ class EyeCanvas(QWidget):
         self._correlation_blob_alpha: int = 100
         self._blob_cache_key: _BlobCacheKey | None = None
         self._blob_cache_image: QImage | None = None
+
+        self._heatmap_image: QImage | None = None
 
         self.setSizePolicy(
             QSizePolicy.Policy.Expanding,
@@ -182,6 +251,9 @@ class EyeCanvas(QWidget):
         callback: Callable[[tuple[float, float] | None], None] | None,
     ) -> None:
         self._on_hover = callback
+
+    def set_resize_callback(self, callback: Callable[[], None] | None) -> None:
+        self._on_resize = callback
 
     def set_view(self, view: EyeView, *, partner_label: str) -> bool:
         """Update view state. Returns True if a repaint was requested."""
@@ -238,6 +310,15 @@ class EyeCanvas(QWidget):
             cache_key=None,
         )
 
+    def set_heatmap(self, image: QImage | None) -> None:
+        if image is self._heatmap_image:
+            return
+        self._heatmap_image = image
+        self.update()
+
+    def clear_heatmap(self) -> None:
+        self.set_heatmap(None)
+
     def _plot_rect(self) -> QRectF:
         margin = 36.0
         title_h = 22.0
@@ -290,6 +371,11 @@ class EyeCanvas(QWidget):
         if self._hover_source and self._on_hover is not None:
             self._on_hover(None)
         super().leaveEvent(event)
+
+    def resizeEvent(self, event) -> None:  # noqa: N802
+        super().resizeEvent(event)
+        if self._on_resize is not None:
+            self._on_resize()
 
     def paintEvent(self, event) -> None:  # noqa: N802
         del event
@@ -381,6 +467,9 @@ class EyeCanvas(QWidget):
 
         if self._blob_cache_image is not None:
             painter.drawImage(int(plot.left()), int(plot.top()), self._blob_cache_image)
+
+        if self._heatmap_image is not None:
+            painter.drawImage(int(plot.left()), int(plot.top()), self._heatmap_image)
 
         partner_color = QColor(34, 170, 34) if partner_label == "S2" else QColor(204, 34, 34)
         pt = self._to_pixel(plot, view.partner[0], view.partner[1])
@@ -507,10 +596,25 @@ class EyePanel:
         self._correlation_mode: CorrelationMode = "target"
         self._hover_correlation_enabled = True
         self._correlation_blob_alpha = 100
+        self._heatmap_grid_resolution = 96
+        self._heatmap_diversity_floor = 0.15
         self._last_scene: EyeScene | None = None
+
+        self._heatmap_active_setup: _HeatmapSetupKey | None = None
+        self._heatmap_s1_acc: HeatmapAccumulator | None = None
+        self._heatmap_s2_acc: HeatmapAccumulator | None = None
+        self._heatmap_s1_grid: np.ndarray | None = None
+        self._heatmap_s2_grid: np.ndarray | None = None
+        self._heatmap_s1_display_key: _HeatmapDisplayKey | None = None
+        self._heatmap_s2_display_key: _HeatmapDisplayKey | None = None
+        self._heatmap_s1_image: QImage | None = None
+        self._heatmap_s2_image: QImage | None = None
+        self._heatmap_area_ceiling: float | None = None
 
         self._canvas_s1.set_hover_callback(self._on_s1_hover)
         self._canvas_s2.set_hover_callback(self._on_s2_hover)
+        self._canvas_s1.set_resize_callback(self._on_canvas_resize)
+        self._canvas_s2.set_resize_callback(self._on_canvas_resize)
         self._update_hover_tracking()
 
     @property
@@ -551,11 +655,14 @@ class EyePanel:
         )
         self._hover_correlation_enabled = eye_cfg.hover_correlation_enabled
         self._correlation_blob_alpha = eye_cfg.correlation_blob_alpha
+        self._heatmap_grid_resolution = eye_cfg.heatmap_grid_resolution
+        self._heatmap_diversity_floor = eye_cfg.heatmap_diversity_floor
         self._history = None
         self._s1_hover_center = None
         self._s2_hover_center = None
         self._last_scene = None
         self._initialized = False
+        self._clear_heatmap_state()
         self._update_hover_tracking()
         self._clear_all_correlation_overlays()
 
@@ -627,6 +734,8 @@ class EyePanel:
         self._s1_hover_center = None
         self._s2_hover_center = None
         self._update_hover_tracking()
+        if mode == "heatmap":
+            self._clear_heatmap_state()
         self._apply_correlation_overlays(self._last_scene)
 
     def _update_hover_tracking(self) -> None:
@@ -641,15 +750,28 @@ class EyePanel:
         self._canvas_s2.set_hover_beam(None, radius=0.0)
         self._canvas_s1.clear_correlation_blob()
         self._canvas_s2.clear_correlation_blob()
+        self._canvas_s1.clear_heatmap()
+        self._canvas_s2.clear_heatmap()
 
     def _apply_correlation_overlays(self, scene: EyeScene | None) -> None:
         if not self._hover_correlation_enabled or self._history is None:
             self._clear_all_correlation_overlays()
             return
 
-        if self._correlation_mode in ("none", "heatmap"):
+        if self._correlation_mode == "none":
             self._clear_all_correlation_overlays()
             return
+
+        if self._correlation_mode == "heatmap":
+            self._canvas_s1.set_hover_beam(None, radius=0.0)
+            self._canvas_s2.set_hover_beam(None, radius=0.0)
+            self._canvas_s1.clear_correlation_blob()
+            self._canvas_s2.clear_correlation_blob()
+            self._refresh_heatmap_overlays()
+            return
+
+        self._canvas_s1.clear_heatmap()
+        self._canvas_s2.clear_heatmap()
 
         alpha = self._history.alpha
 
@@ -694,6 +816,176 @@ class EyePanel:
         if center is not None:
             self._s1_hover_center = None
         self._apply_correlation_overlays(self._last_scene)
+
+    def _on_canvas_resize(self) -> None:
+        if self._correlation_mode != "heatmap":
+            return
+        self._heatmap_s1_display_key = None
+        self._heatmap_s2_display_key = None
+        self._heatmap_s1_image = None
+        self._heatmap_s2_image = None
+        self._refresh_heatmap_overlays()
+
+    def _heatmap_setup_key(self) -> _HeatmapSetupKey | None:
+        if self._history is None:
+            return None
+        return _HeatmapSetupKey(
+            grid_res=self._heatmap_grid_resolution,
+            axis_limit=self._canvas_s1.axis_limit,
+            alpha=self._history.alpha,
+            fov_radius=self._history.fov_radius,
+            diversity_floor=self._heatmap_diversity_floor,
+            step_count=int(self._history.t_values.shape[0]),
+        )
+
+    def _clear_heatmap_state(self) -> None:
+        self._heatmap_active_setup = None
+        self._heatmap_s1_acc = None
+        self._heatmap_s2_acc = None
+        self._heatmap_s1_grid = None
+        self._heatmap_s2_grid = None
+        self._heatmap_s1_display_key = None
+        self._heatmap_s2_display_key = None
+        self._heatmap_s1_image = None
+        self._heatmap_s2_image = None
+        self._heatmap_area_ceiling = None
+
+    def _ensure_heatmap_accumulators(self) -> None:
+        if self._history is None:
+            return
+
+        setup_key = self._heatmap_setup_key()
+        if setup_key is None:
+            return
+        if (
+            self._heatmap_s1_acc is not None
+            and self._heatmap_s2_acc is not None
+            and setup_key == self._heatmap_active_setup
+        ):
+            return
+
+        axis_limit = self._canvas_s1.axis_limit
+        grid_res = self._heatmap_grid_resolution
+        if self._heatmap_area_ceiling is None:
+            self._heatmap_area_ceiling = default_heatmap_area_ceiling(
+                axis_limit,
+                self._history.fov_radius,
+            )
+        acc_kwargs = {
+            "cache": self._history,
+            "grid_res": grid_res,
+            "axis_limit": axis_limit,
+            "diversity_floor": self._heatmap_diversity_floor,
+            "area_ceiling": self._heatmap_area_ceiling,
+        }
+        self._heatmap_s1_acc = HeatmapAccumulator(source="S1", **acc_kwargs)
+        self._heatmap_s2_acc = HeatmapAccumulator(source="S2", **acc_kwargs)
+        self._heatmap_active_setup = setup_key
+        self._heatmap_s1_display_key = None
+        self._heatmap_s2_display_key = None
+        self._heatmap_s1_image = None
+        self._heatmap_s2_image = None
+
+    def _update_heatmap_grids(self, *, force_full: bool = False) -> None:
+        if self._history is None:
+            return
+
+        self._ensure_heatmap_accumulators()
+        if self._heatmap_s1_acc is None or self._heatmap_s2_acc is None:
+            return
+
+        idx_end = int(
+            np.searchsorted(self._history.t_values, self._current_t, side="right")
+        )
+        if (
+            not force_full
+            and self._heatmap_s1_grid is not None
+            and idx_end == self._heatmap_s1_acc.processed_idx
+        ):
+            return
+
+        if force_full or idx_end < self._heatmap_s1_acc.processed_idx:
+            self._heatmap_s1_acc.rebuild_to(idx_end)
+            self._heatmap_s2_acc.rebuild_to(idx_end)
+        else:
+            self._heatmap_s1_acc.extend_to(idx_end)
+            self._heatmap_s2_acc.extend_to(idx_end)
+
+        self._heatmap_s1_grid = self._heatmap_s1_acc.finalize()
+        self._heatmap_s2_grid = self._heatmap_s2_acc.finalize()
+
+    def _heatmap_image_for_canvas(
+        self,
+        *,
+        source: Literal["S1", "S2"],
+        canvas: EyeCanvas,
+        grid: np.ndarray | None,
+    ) -> QImage | None:
+        if grid is None:
+            return None
+        plot = canvas._plot_rect()
+        plot_w = max(1, int(plot.width()))
+        plot_h = max(1, int(plot.height()))
+        display_key = _HeatmapDisplayKey(
+            source=source,
+            plot_w=plot_w,
+            plot_h=plot_h,
+            overlay_alpha=self._correlation_blob_alpha,
+            idx_end=self._heatmap_s1_acc.processed_idx
+            if source == "S1" and self._heatmap_s1_acc is not None
+            else self._heatmap_s2_acc.processed_idx
+            if self._heatmap_s2_acc is not None
+            else 0,
+        )
+        if source == "S1":
+            if display_key == self._heatmap_s1_display_key and self._heatmap_s1_image is not None:
+                return self._heatmap_s1_image
+            image = _heatmap_to_qimage(
+                grid,
+                canvas.axis_limit,
+                plot_w,
+                plot_h,
+                self._correlation_blob_alpha,
+            )
+            self._heatmap_s1_display_key = display_key
+            self._heatmap_s1_image = image
+            return image
+
+        if display_key == self._heatmap_s2_display_key and self._heatmap_s2_image is not None:
+            return self._heatmap_s2_image
+        image = _heatmap_to_qimage(
+            grid,
+            canvas.axis_limit,
+            plot_w,
+            plot_h,
+            self._correlation_blob_alpha,
+        )
+        self._heatmap_s2_display_key = display_key
+        self._heatmap_s2_image = image
+        return image
+
+    def _refresh_heatmap_overlays(self) -> None:
+        if self._history is None:
+            self._canvas_s1.clear_heatmap()
+            self._canvas_s2.clear_heatmap()
+            return
+
+        force_full = self._heatmap_s1_acc is None
+        self._update_heatmap_grids(force_full=force_full)
+        self._canvas_s1.set_heatmap(
+            self._heatmap_image_for_canvas(
+                source="S1",
+                canvas=self._canvas_s1,
+                grid=self._heatmap_s1_grid,
+            )
+        )
+        self._canvas_s2.set_heatmap(
+            self._heatmap_image_for_canvas(
+                source="S2",
+                canvas=self._canvas_s2,
+                grid=self._heatmap_s2_grid,
+            )
+        )
 
     def _refresh_s1_to_s2_overlay(
         self,

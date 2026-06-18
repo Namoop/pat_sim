@@ -74,6 +74,8 @@ def base_config(
             slider_debounce_ms=16,
             hover_correlation_enabled=True,
             correlation_blob_alpha=100,
+            heatmap_grid_resolution=96,
+            heatmap_diversity_floor=0.15,
         ),
         mag_viz=MagVizConfig(
             visual_limit_deg=1.0,

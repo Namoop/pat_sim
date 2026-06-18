@@ -53,6 +53,8 @@ class EyeVizConfig:
     slider_debounce_ms: int
     hover_correlation_enabled: bool = True
     correlation_blob_alpha: int = 100
+    heatmap_grid_resolution: int = 96
+    heatmap_diversity_floor: float = 0.15
 
 
 @dataclass(frozen=True)
@@ -117,6 +119,8 @@ def _load_eye_viz(data: dict) -> EyeVizConfig:
         slider_debounce_ms=int(data.get("slider_debounce_ms", 16)),
         hover_correlation_enabled=bool(data.get("hover_correlation_enabled", True)),
         correlation_blob_alpha=int(data.get("correlation_blob_alpha", 100)),
+        heatmap_grid_resolution=int(data.get("heatmap_grid_resolution", 96)),
+        heatmap_diversity_floor=float(data.get("heatmap_diversity_floor", 0.15)),
     )
 
 

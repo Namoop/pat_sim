@@ -28,6 +28,8 @@ axis_limit = 10.0
 slider_debounce_ms = 1
 hover_correlation_enabled = true
 correlation_blob_alpha = 100
+heatmap_grid_resolution = 96
+heatmap_diversity_floor = 0.15
 
 [mag_viz]
 visual_limit_deg = 40.0
