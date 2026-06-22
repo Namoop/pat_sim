@@ -16,30 +16,6 @@ For a detailed walkthrough of the physical system model (satellites, optical ben
 
 ---
 
-## Configuration Architecture
-
-Configuration is split across per-module parsers; runners orchestrate loading and merging:
-
-| Module | Role |
-|--------|------|
-| [`config.py`](../src/config.py) | `load_toml`, path resolution, override merge helpers |
-| [`scenario/types.py`](../src/scenario/types.py) | `ScenarioConfig`, `ScenarioInstance`, `build_scenario_config` |
-| [`montecarlo/types.py`](../src/montecarlo/types.py) | `MonteCarloConfig`, error distribution types |
-| [`satellite/config.py`](../src/satellite/config.py) | `Environment.toml` types and `load_simulation_config` |
-| [`scenario/config.py`](../src/scenario/config.py) | Parses `[scenario]`, `[s1]`, `[s2]` → `ScenarioInstance` |
-| [`strategy/config.py`](../src/strategy/config.py) | Parses `[strategy]` and per-strategy sections → `StrategyConfig` |
-| [`montecarlo/config.py`](../src/montecarlo/config.py) | Parses `[monte_carlo]` and error distribution |
-| [`optimize/config.py`](../src/optimize/config.py) | Parses `[optimize]` |
-
-Orchestration entry points:
-
-- **Single scenario:** `load_single_scenario` in [`scenario/run.py`](../src/scenario/run.py)
-- **Monte Carlo batch:** `load_monte_carlo_config` in [`montecarlo/run.py`](../src/montecarlo/run.py)
-
-See [environment.md](environment.md), [scenario.md](scenario.md), and [monte_carlo.md](monte_carlo.md) for TOML field reference.
-
----
-
 ## CLI Usage Reference
 
 This section provides a detailed reference for running the satellite simulation and related command-line utilities.
@@ -59,6 +35,7 @@ Opens the unified visualization window after the run. The optional choice `3d`, 
 
 > - **Eye View (`eye`)**: Named "eye" because you are seeing the "eye" of each satellite, and since there are two satellites total, it looks kind of like eyes.
 > - **Mag View (`mag`)**: Short for "magnitude" since all you see is in 2D representing the total magnitude offset.
+
 - `--environment ENVIRONMENT`  
 Path to the Environment base TOML containing hardware, timing, distance, `t_step`, and visualization defaults.
 - `--t T` (default: `0`)  
@@ -76,6 +53,8 @@ Runs a Monte Carlo batch from the specified TOML file (default: `config/MonteCar
 
 - `--visualize [{3d,eye,mag}]` — same as scenario; opens interactive step-through mode.
 - `--t T` (default: `0`) — starting time when opening a visualizer.
+- `--run NUMBER` (default: `1`) — starting run number (1-based) when opening a visualizer.
+- `--export [NAME]` — export the selected run to `config/_scenario_NAME.toml` (default name: `run N`); does not run the simulation. Requires `monte_carlo.seed` in the config.
 - `--autoplay [SPEED]` — auto-scrub visualization; advance to the next run when each finishes.
 
 ### Examples
@@ -125,16 +104,26 @@ QT_QPA_PLATFORM=xcb python -m montecarlo [...]
 
 ---
 
-### Running Tests
+## Configuration Architecture
 
-To run the test suite, notably in automated environments:
+Configuration is split across per-module parsers; runners orchestrate loading and merging:
 
-1. **Install Test Dependencies**: If `pytest` is not already installed in your virtual environment:
-  ```bash
-   .venv/bin/pip install pytest
-  ```
-2. **Run Pytest with Environment Variables**: The project uses an auto-bootstrap mechanism in `src/satellite/__init__.py` that can cause issues or unexpected argument stripping if re-executed.
-  To bypass this auto-bootstrap and run the tests correctly, set `SATELLITE_NO_GPU=1` and ensure the project path is in your `PYTHONPATH`:
-  ```bash
-  PYTHONPATH=src:. SATELLITE_NO_GPU=1 .venv/bin/pytest
-  ```
+
+| Module                                                | Role                                                             |
+| ----------------------------------------------------- | ---------------------------------------------------------------- |
+| `[config.py](../src/config.py)`                       | `load_toml`, path resolution, override merge helpers             |
+| `[scenario/types.py](../src/scenario/types.py)`       | `ScenarioConfig`, `ScenarioInstance`, `build_scenario_config`    |
+| `[montecarlo/types.py](../src/montecarlo/types.py)`   | `MonteCarloConfig`, error distribution types                     |
+| `[satellite/config.py](../src/satellite/config.py)`   | `Environment.toml` types and `load_simulation_config`            |
+| `[scenario/config.py](../src/scenario/config.py)`     | Parses `[scenario]`, `[s1]`, `[s2]` → `ScenarioInstance`         |
+| `[strategy/config.py](../src/strategy/config.py)`     | Parses `[strategy]` and per-strategy sections → `StrategyConfig` |
+| `[montecarlo/config.py](../src/montecarlo/config.py)` | Parses `[monte_carlo]` and error distribution                    |
+| `[optimize/config.py](../src/optimize/config.py)`     | Parses `[optimize]`                                              |
+
+
+Orchestration entry points:
+
+- **Single scenario:** `load_single_scenario` in `[scenario/run.py](../src/scenario/run.py)`
+- **Monte Carlo batch:** `load_monte_carlo_config` in `[montecarlo/run.py](../src/montecarlo/run.py)`
+
+See [environment.md](environment.md), [scenario.md](scenario.md), and [monte_carlo.md](monte_carlo.md) for TOML field reference.
