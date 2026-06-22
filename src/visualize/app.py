@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import sys
+import threading
 from typing import Literal
 
 import numpy as np
@@ -12,6 +14,7 @@ from visualize.panels.event_log_panel import EventLogPanel
 from visualize.panels.eye_panel import EyePanel
 from visualize.panels.panel_3d import ThreeDPanel
 from visualize.qt_util import configure_qt_platform, install_sigint_handler
+from visualize.record import RecordingSampler
 from visualize.session import MonteCarloVizSession, SingleResultSession, VizSession
 
 
@@ -43,6 +46,7 @@ def run_visualizer(
     default_tab: Literal["3d", "eye", "mag"] = "3d",
     start_t: float = 0.0,
     autoplay_speed: float | None = None,
+    record_fps: float | None = None,
 ) -> int:
     """Open unified 3D + eye + mag visualizer. Returns process exit code."""
     configure_qt_platform()
@@ -88,6 +92,19 @@ def run_visualizer(
             self._autoplay_active = False
             self._pending_t: float | None = None
             self._shown_once = False
+            self._recorder: RecordingSampler | None = None
+            self._record_prev_t: float | None = None
+            self._recorder_finalize_thread: threading.Thread | None = None
+            self._recording_title = f"Satellite SDA — {session.status_label()}"
+
+            if record_fps is not None:
+                self._recorder = RecordingSampler(
+                    fps=record_fps,
+                    start_t=float(start_t),
+                    end_t=playable_t,
+                    scenario_name=config.name,
+                )
+                self._recording_title += " [rec]"
 
             self._play_timer = QTimer(self)
             self._play_timer.setInterval(PLAY_INTERVAL_MS)
@@ -97,7 +114,7 @@ def run_visualizer(
             self._debounce_timer.setSingleShot(True)
             self._debounce_timer.timeout.connect(self._on_debounced_q)
 
-            self.setWindowTitle(f"Satellite SDA — {session.status_label()}")
+            self.setWindowTitle(self._recording_title)
             self.resize(1300, 800)
 
             central = QWidget()
@@ -176,6 +193,52 @@ def run_visualizer(
             self._load_result(result)
             self._set_tab_ui(default_tab)
 
+        def _grab_record_frame(self):
+            if self._active_tab == "3d":
+                return self._panel_3d.capture_record_image()
+            if self._active_tab == "eye":
+                return self._panel_eye.capture_record_image()
+            if self._active_tab == "mag":
+                return self._panel_mag.capture_record_image()
+            raise RuntimeError(f"unknown active tab: {self._active_tab}")
+
+        def _on_recording_t_advanced(self, prev_t: float) -> None:
+            if self._recorder is None or self._recorder.finalized:
+                return
+            done = self._recorder.on_t_advanced(
+                prev_t,
+                self.current_t,
+                grab_fn=self._grab_record_frame,
+            )
+            if done:
+                self._finalize_recording()
+
+        def _finalize_recording(self) -> None:
+            if self._recorder is None or self._recorder.finalized:
+                return
+            self._recorder.begin_finalize()
+            recorder = self._recorder
+
+            def _complete() -> None:
+                try:
+                    path = recorder.complete_finalize()
+                    if path is not None:
+                        print(f"Recording saved to {path}")
+                except Exception as exc:
+                    print(f"Recording failed: {exc}", file=sys.stderr)
+
+            self._recorder_finalize_thread = threading.Thread(
+                target=_complete,
+                name="recording-finalize",
+                daemon=False,
+            )
+            self._recorder_finalize_thread.start()
+
+        def _wait_for_recording_finalize(self) -> None:
+            if self._recorder_finalize_thread is not None:
+                self._recorder_finalize_thread.join()
+                self._recorder_finalize_thread = None
+
         def _set_tab_ui(self, tab: Literal["3d", "eye", "mag"]) -> None:
             self._active_tab = tab
             self._tab_3d_btn.setChecked(tab == "3d")
@@ -238,8 +301,10 @@ def run_visualizer(
             playable = new_result.playable_t_end
             self.current_t = clamp_playable_t(self._start_t, playable)
             self.slider.setMaximum(max(0, int(playable / t_step)))
-            self.setWindowTitle(f"Satellite SDA — {self._session.status_label()}")
+            self.setWindowTitle(self._recording_title)
             self._sync_profile_label_visibility()
+            if self._recorder is not None and not self._recorder.finalized:
+                self._record_prev_t = self.current_t
 
         def _update_frame(self, info) -> None:
             playable = self._result.playable_t_end
@@ -251,6 +316,7 @@ def run_visualizer(
 
         def _apply_t_active(self, t: float) -> None:
             playable = self._result.playable_t_end
+            prev_t = self.current_t
             self.current_t = clamp_playable_t(t, playable)
             if self._active_tab == "3d":
                 self._panel_3d.ensure_initialized()
@@ -271,6 +337,14 @@ def run_visualizer(
                 self._3d_dirty = True
                 self._eye_dirty = True
                 self._update_frame(info)
+            if self._recorder is not None:
+                record_prev = (
+                    self._record_prev_t
+                    if self._record_prev_t is not None
+                    else prev_t
+                )
+                self._on_recording_t_advanced(record_prev)
+                self._record_prev_t = self.current_t
 
         def _on_slider_changed(self, value: int) -> None:
             self._pause()
@@ -368,6 +442,12 @@ def run_visualizer(
 
         def closeEvent(self, event) -> None:  # noqa: N802
             self._play_timer.stop()
+            if self._recorder is not None and not self._recorder.finalized:
+                if self._recorder.has_frames:
+                    self._finalize_recording()
+                else:
+                    self._recorder.begin_finalize()
+            self._wait_for_recording_finalize()
             self._panel_3d.close_panel()
             self._panel_eye.close_panel()
             self._panel_mag.close_panel()
