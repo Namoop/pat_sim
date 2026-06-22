@@ -80,6 +80,7 @@ src/
 pip install -e .
 pip install -e ".[gpu]"      # optional GPU-acceleration with Numba and CUDA
 pip install -e ".[viz]"      # interactive 3D + eye map (PyVista, PyQt6)
+                             # recording (--record) also requires ffmpeg on PATH
 pip install -e ".[opt]"      # optional Optuna strategy parameter optimizer
 pip install -e ".[all]"      # install everything (viz, gpu, opt, dev)
 ```
