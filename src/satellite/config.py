@@ -52,6 +52,7 @@ class ThreeDVizConfig:
     spiral_trail_steps: int
     ribbon_v_steps: int
     profile_frames: bool
+    squish: float = 1.0
 
 
 @dataclass(frozen=True)
@@ -121,6 +122,7 @@ def _load_three_d_viz(data: dict) -> ThreeDVizConfig:
         spiral_trail_steps=int(data.get("spiral_trail_steps", 80)),
         ribbon_v_steps=int(data.get("ribbon_v_steps", 4)),
         profile_frames=bool(data.get("profile_frames", False)),
+        squish=float(data.get("squish", 1.0)),
     )
 
 

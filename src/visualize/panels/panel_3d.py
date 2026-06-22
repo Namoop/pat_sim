@@ -12,6 +12,7 @@ from satellite.math.geometry import axis_perpendicular_basis
 from satellite.math.math3d import normalize
 from scenario.run import ScenarioResult
 from visualize.viz_geometry import cone_mesh_for_aim
+from visualize.viz_squish import SquishContext
 from visualize.diagnostics import FrameProfiler
 
 
@@ -402,12 +403,19 @@ class ThreeDPanel:
             parts.append(self._profiler.format_overlay())
         self._profile_callback("\n\n".join(parts))
 
+    def _squish_ctx(self) -> SquishContext:
+        result = self._result
+        assert result is not None
+        squish = result.config.three_d_viz.squish
+        return SquishContext.from_satellites(result.p1, result.pt, squish)
+
     def _focal_position(self, satellite: str) -> np.ndarray:
         result = self._result
         assert result is not None
+        ctx = self._squish_ctx()
         if satellite == "S1":
-            return np.asarray(result.p1, dtype=np.float64)
-        return np.asarray(result.pt, dtype=np.float64)
+            return ctx.position(result.p1)
+        return ctx.position(result.pt)
 
     def _apply_camera_pose(
         self,
@@ -427,11 +435,19 @@ class ThreeDPanel:
         self.plotter.render()
 
     def _apply_camera_preset(self, preset_key: str) -> None:
+        result = self._result
+        assert result is not None
         preset = _CAMERA_PRESETS[preset_key]
+        ctx = self._squish_ctx()
         focal = self._focal_position(preset.focal_satellite)
+        raw_focal = result.p1 if preset.focal_satellite == "S1" else result.pt
+        raw_cam = np.asarray(raw_focal, dtype=np.float64) + np.asarray(
+            preset.position_offset, dtype=np.float64
+        )
+        position = ctx.position(raw_cam)
         self._apply_camera_pose(
             focal_point=focal,
-            position=focal + np.asarray(preset.position_offset, dtype=np.float64),
+            position=position,
             up=np.asarray(preset.up, dtype=np.float64),
             view_angle=preset.view_angle,
         )
@@ -477,18 +493,19 @@ class ThreeDPanel:
         pv = self._pv
         config = result.config
         body_radius = config.satellite.body_radius
+        ctx = self._squish_ctx()
 
         p = self.plotter
         p.set_background("white")
         p.add_axes()
 
         self._s1_body_actor = p.add_mesh(
-            pv.Sphere(radius=body_radius, center=result.p1),
+            pv.Sphere(radius=body_radius, center=ctx.position(result.p1)),
             color="blue",
             label="S1",
         )
         self._s2_body_actor = p.add_mesh(
-            pv.Sphere(radius=body_radius, center=result.pt),
+            pv.Sphere(radius=body_radius, center=ctx.position(result.pt)),
             color="red",
             label="S2",
         )
@@ -497,10 +514,12 @@ class ThreeDPanel:
             (result.s1, "lightgray", "S1 believed aim"),
             (result.s2, "silver", "S2 believed aim"),
         ):
-            ray_len = result.boresight_ray_length(sat.name)
-            end = sat.position + sat.believed_boresight * ray_len
+            ray_len = ctx.length(result.boresight_ray_length(sat.name))
+            apex = ctx.position(sat.position)
+            aim = ctx.direction(sat.believed_boresight, toward_partner=sat.bench.toward_partner)
+            end = apex + aim * ray_len
             p.add_mesh(
-                pv.Line(sat.position, end),
+                pv.Line(apex, end),
                 color=color,
                 line_width=1,
                 opacity=0.5,
@@ -540,13 +559,15 @@ class ThreeDPanel:
         assert result is not None
         config = result.config
         viz = config.three_d_viz
+        ctx = self._squish_ctx()
         sat = result.s1 if satellite == "S1" else result.s2
-        aim = result.bench_aim(satellite, t)
-        beam_len = result.beam_length(satellite)
+        raw_aim = result.bench_aim(satellite, t)
+        aim = ctx.direction(raw_aim, toward_partner=sat.bench.toward_partner)
+        beam_len = ctx.length(result.beam_length(satellite))
         verts, faces = cone_mesh_for_aim(
-            sat.position,
+            ctx.position(sat.position),
             aim,
-            config.satellite.alpha,
+            ctx.angle(config.satellite.alpha),
             beam_len,
             viz.cone_u_steps,
             viz.cone_v_steps,
@@ -561,14 +582,17 @@ class ThreeDPanel:
         assert result is not None
         config = result.config
         viz = config.three_d_viz
-        dish_fov = config.satellite.dish_fov
+        ctx = self._squish_ctx()
+        dish_fov = ctx.angle(config.satellite.dish_fov)
         pv = self._pv
         sat = result.s1 if satellite == "S1" else result.s2
         rx = sat.receiver
-        aim = result.bench_aim(satellite, t)
-        mount = rx.dish_mount_for_boresight(aim)
+        raw_aim = result.bench_aim(satellite, t)
+        aim = ctx.direction(raw_aim, toward_partner=sat.bench.toward_partner)
+        mount = ctx.position(rx.dish_mount_for_boresight(raw_aim))
         axis = normalize(aim)
-        dist_along_aim = float(np.dot(sat.partner_actual - mount, axis))
+        partner = ctx.position(sat.partner_actual)
+        dist_along_aim = float(np.dot(partner - mount, axis))
         base_center = mount + axis * dist_along_aim
         base_radius = abs(dist_along_aim) * np.tan(dish_fov)
         u, v = axis_perpendicular_basis(axis)
@@ -592,9 +616,11 @@ class ThreeDPanel:
         result = self._result
         assert result is not None
         viz = result.config.three_d_viz
+        ctx = self._squish_ctx()
         rx = result.s1.receiver if satellite == "S1" else result.s2.receiver
         boresight = result.dish_boresight_for_display(satellite, t)
         verts, faces = rx.dish_mesh_at(viz.cone_v_steps, boresight=boresight)
+        verts = ctx.positions(verts)
         return self._to_polydata(verts, faces)
 
     def _update_line_actor(

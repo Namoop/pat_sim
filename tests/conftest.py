@@ -69,6 +69,7 @@ def base_config(
             spiral_trail_steps=20,
             ribbon_v_steps=4,
             profile_frames=False,
+            squish=1.0,
         ),
         eye_viz=EyeVizConfig(
             axis_limit=0.1,

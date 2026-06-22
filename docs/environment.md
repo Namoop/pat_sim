@@ -40,6 +40,7 @@ The configuration file is loaded by [`load_simulation_config`](../src/satellite/
 - `spiral_trail_steps` (int): Number of steps in the visual path trail.
 - `ribbon_v_steps` (int): Number of steps across the swept ribbon width.
 - `profile_frames` (bool): Enables profiling of visualization updates.
+- `squish` (float, default `1`): Compression along the inter-satellite axis. Values above `1` shorten apparent link range and scale beam/FOV angles. Simulation physics are unaffected.
 
 ### `[eye_viz]` (2D Eye Defaults)
 
