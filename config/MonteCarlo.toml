@@ -4,7 +4,7 @@ seed = 42
 runs = 500
 chain = ["lissajous_scan"]
 error.distribution = "gaussian"
-error.gaussian.std = 2.0
+error.gaussian.std = 1.5
 
 [strategy.dual_spiral]
 

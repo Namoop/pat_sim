@@ -1,12 +1,12 @@
 [optimize]
 strategy = "lissajous_scan"
 method = "optuna"
-trials = 50
-trial_seed = 101
+trials = 100
+trial_seed = 103
 
 [monte_carlo]
 environment = "Environment.toml"
 seed = 42
-runs = 30
+runs = 500
 error.distribution = "gaussian"
-error.gaussian.std = 2.0
+error.gaussian.std = 1.5
