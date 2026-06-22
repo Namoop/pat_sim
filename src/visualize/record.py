@@ -16,7 +16,31 @@ RECORDINGS_DIR = Path("recordings")
 FINAL_SLOT_KEY = -1
 FIRST_CAPTURE_SLOT = 1
 _TIME_EPS = 1e-9
-RECORD_PLAYBACK_SLOWDOWN = 4.0  # MP4 plays this many times slower than capture fps
+RECORD_REFERENCE_T_STEP = 0.01
+RECORD_REFERENCE_PLAYBACK_SLOWDOWN = 4.0
+
+
+def recording_capture_fps(stride: float, t_step: float) -> float:
+    """Sim-time frames per second when capturing every ``stride`` sim steps."""
+    if stride <= 0:
+        raise ValueError("record stride must be positive")
+    if t_step <= 0:
+        raise ValueError("t_step must be positive")
+    return 1.0 / (stride * t_step)
+
+
+def recording_playback_slowdown(t_step: float) -> float:
+    """Encode-time slowdown vs capture rate; 4× at ``RECORD_REFERENCE_T_STEP``."""
+    return (
+        RECORD_REFERENCE_PLAYBACK_SLOWDOWN
+        * RECORD_REFERENCE_T_STEP
+        / t_step
+    )
+
+
+def recording_encode_fps(stride: float, t_step: float) -> float:
+    """MP4 frame rate so playback duration tracks visualizer scrub speed."""
+    return recording_capture_fps(stride, t_step) / recording_playback_slowdown(t_step)
 
 
 _UNSAFE_STEM_RE = re.compile(r'[<>:"/\\|?*\x00]')
@@ -316,16 +340,17 @@ class RecordingSampler:
     def __init__(
         self,
         *,
-        fps: float,
+        stride: float,
+        t_step: float,
         start_t: float,
         end_t: float,
         scenario_name: str,
     ) -> None:
-        if fps <= 0:
-            raise ValueError("record fps must be positive")
         require_ffmpeg()
-        self.fps = fps
-        self._encode_fps = fps / RECORD_PLAYBACK_SLOWDOWN
+        self.stride = stride
+        self.t_step = t_step
+        self.fps = recording_capture_fps(stride, t_step)
+        self._encode_fps = recording_encode_fps(stride, t_step)
         self.start_t = start_t
         self.end_t = end_t
         self.scenario_name = scenario_name

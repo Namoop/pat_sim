@@ -46,7 +46,7 @@ def run_visualizer(
     default_tab: Literal["3d", "eye", "mag"] = "3d",
     start_t: float = 0.0,
     autoplay_speed: float | None = None,
-    record_fps: float | None = None,
+    record_stride: int | None = None,
 ) -> int:
     """Open unified 3D + eye + mag visualizer. Returns process exit code."""
     configure_qt_platform()
@@ -97,9 +97,10 @@ def run_visualizer(
             self._recorder_finalize_thread: threading.Thread | None = None
             self._recording_title = f"Satellite SDA — {session.status_label()}"
 
-            if record_fps is not None:
+            if record_stride is not None:
                 self._recorder = RecordingSampler(
-                    fps=record_fps,
+                    stride=record_stride,
+                    t_step=t_step,
                     start_t=float(start_t),
                     end_t=playable_t,
                     scenario_name=config.name,

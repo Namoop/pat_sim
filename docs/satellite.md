@@ -40,8 +40,8 @@ Opens the unified visualization window after the run. The optional choice `3d`, 
 Path to the Environment base TOML containing hardware, timing, distance, `t_step`, and visualization defaults.
 - `--t T` (default: `0`)  
 Starting time `t` when opening a visualizer.
-- `--record [FPS]` (default: `10`)  
-Passively record sim-time frames to `recordings/<scenario>.mp4`. Frames are streamed to FFmpeg via a background worker as they are captured.
+- `--record [STEPS]` (default: `2`)  
+Passively record sim-time frames to `recordings/<scenario>.mp4`. Captures one frame every `STEPS` simulation steps (e.g. `2` at `t_step = 0.01` yields 50 frames per sim-second / 12.5 FPS).
 
 ### Monte Carlo Command
 

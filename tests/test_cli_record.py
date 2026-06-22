@@ -44,7 +44,7 @@ def test_record_must_be_positive():
         main([str(REPO_ROOT / "config/Scenario.toml"), "--visualize", "--record", "0"])
 
 
-def test_record_passes_fps_to_visualizer(monkeypatch):
+def test_record_passes_stride_to_visualizer(monkeypatch):
     captured: dict = {}
 
     def fake_run_visualizer(session, **kwargs):
@@ -65,11 +65,11 @@ def test_record_passes_fps_to_visualizer(monkeypatch):
         )(),
     )
     monkeypatch.setattr("scenario.__main__.format_summary", lambda r: "ok")
-    main([str(REPO_ROOT / "config/Scenario.toml"), "--visualize", "--record", "15"])
-    assert captured["record_fps"] == 15.0
+    main([str(REPO_ROOT / "config/Scenario.toml"), "--visualize", "--record", "3"])
+    assert captured["record_stride"] == 3
 
 
-def test_record_default_fps(monkeypatch):
+def test_record_default_stride(monkeypatch):
     captured: dict = {}
 
     def fake_run_visualizer(session, **kwargs):
@@ -91,4 +91,4 @@ def test_record_default_fps(monkeypatch):
     )
     monkeypatch.setattr("scenario.__main__.format_summary", lambda r: "ok")
     main([str(REPO_ROOT / "config/Scenario.toml"), "--visualize", "--record"])
-    assert captured["record_fps"] == 10.0
+    assert captured["record_stride"] == 2

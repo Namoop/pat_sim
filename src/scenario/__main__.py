@@ -49,19 +49,19 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--record",
         nargs="?",
-        const=10.0,
-        type=float,
+        const=2,
+        type=int,
         default=None,
-        metavar="FPS",
+        metavar="STEPS",
         help=(
             "Passively record sim-time frames to recordings/<scenario>.mp4 "
-            "(default 10 FPS); requires visualization extras"
+            "(default: capture every 2 sim steps); requires visualization extras"
         ),
     )
     args = parser.parse_args(argv)
 
     if args.record is not None and args.record <= 0:
-        parser.error("--record FPS must be positive")
+        parser.error("--record STEPS must be positive")
 
     if not args.config.exists():
         print(f"Scenario config not found: {args.config}", file=sys.stderr)
@@ -94,7 +94,7 @@ def main(argv: list[str] | None = None) -> int:
                 SingleResultSession(result),
                 default_tab=viz_mode,
                 start_t=args.t,
-                record_fps=args.record,
+                record_stride=args.record,
             )
         except KeyboardInterrupt:
             print("Interrupted.", file=sys.stderr)

@@ -9,11 +9,15 @@ import pytest
 
 from visualize.record import (
     FINAL_SLOT_KEY,
-    RECORD_PLAYBACK_SLOWDOWN,
+    RECORD_REFERENCE_PLAYBACK_SLOWDOWN,
+    RECORD_REFERENCE_T_STEP,
     AsyncMp4Recorder,
     RecordingSampler,
     crop_frame_to_even,
     ensure_rgb_uint8,
+    recording_capture_fps,
+    recording_encode_fps,
+    recording_playback_slowdown,
     require_ffmpeg,
     resolve_recording_path,
     sanitize_recording_stem,
@@ -122,14 +126,36 @@ def test_async_mp4_recorder_odd_dimensions(tmp_path):
     assert path.stat().st_size > 0
 
 
-def test_recording_sampler_playback_slowdown():
+def test_recording_capture_fps_default_stride():
+    assert recording_capture_fps(2, 0.01) == pytest.approx(50.0)
+
+
+def test_recording_playback_slowdown_scales_with_t_step():
+    assert recording_playback_slowdown(RECORD_REFERENCE_T_STEP) == pytest.approx(
+        RECORD_REFERENCE_PLAYBACK_SLOWDOWN
+    )
+    assert recording_playback_slowdown(0.0001) == pytest.approx(400.0)
+
+
+def test_recording_encode_fps_matches_reference_slowdown():
+    stride = 2.0
+    t_step = 0.01
+    capture = recording_capture_fps(stride, t_step)
+    assert recording_encode_fps(stride, t_step) == pytest.approx(
+        capture / RECORD_REFERENCE_PLAYBACK_SLOWDOWN
+    )
+
+
+def test_recording_sampler_encode_fps():
     sampler = RecordingSampler(
-        fps=20.0,
+        stride=2,
+        t_step=0.01,
         start_t=0.0,
         end_t=1.0,
         scenario_name="slow",
     )
-    assert sampler._encode_fps == pytest.approx(20.0 / RECORD_PLAYBACK_SLOWDOWN)
+    assert sampler.fps == pytest.approx(50.0)
+    assert sampler._encode_fps == pytest.approx(12.5)
 
 
 def test_recording_sampler_requires_ffmpeg(monkeypatch):
@@ -138,7 +164,9 @@ def test_recording_sampler_requires_ffmpeg(monkeypatch):
 
     monkeypatch.setattr("visualize.record._ffmpeg_exe", _missing)
     with pytest.raises(RuntimeError, match="Recording requires imageio-ffmpeg"):
-        RecordingSampler(fps=10.0, start_t=0.0, end_t=0.2, scenario_name="test")
+        RecordingSampler(
+            stride=2, t_step=0.01, start_t=0.0, end_t=0.2, scenario_name="test"
+        )
 
 
 @pytest.mark.skipif(not HAS_FFMPEG, reason="imageio-ffmpeg not available")
@@ -150,7 +178,9 @@ def test_recording_sampler_keep_first(tmp_path, monkeypatch):
         grabs.append(len(grabs))
         return np.full((4, 4, 3), (grabs[-1], 0, 0), dtype=np.uint8)
 
-    sampler = RecordingSampler(fps=10.0, start_t=0.0, end_t=0.2, scenario_name="test")
+    sampler = RecordingSampler(
+        stride=2, t_step=0.01, start_t=0.0, end_t=0.2, scenario_name="test"
+    )
     sampler.on_t_advanced(-1.0, 0.0, grab_fn=grab)
     assert len(sampler._captured_slots) == 0
     assert sampler.has_frames is False
@@ -166,7 +196,9 @@ def test_recording_sampler_crops_odd_grab(tmp_path, monkeypatch):
     def grab():
         return np.full((11, 15, 3), (128, 64, 32), dtype=np.uint8)
 
-    sampler = RecordingSampler(fps=10.0, start_t=0.0, end_t=0.1, scenario_name="odd")
+    sampler = RecordingSampler(
+        stride=2, t_step=0.01, start_t=0.0, end_t=0.1, scenario_name="odd"
+    )
     sampler.on_t_advanced(0.0, 0.1, grab_fn=grab)
     path = sampler.finalize()
     assert path is not None
@@ -180,7 +212,9 @@ def test_recording_sampler_completes_at_end(tmp_path, monkeypatch):
     def grab():
         return np.zeros((2, 2, 3), dtype=np.uint8)
 
-    sampler = RecordingSampler(fps=10.0, start_t=0.0, end_t=0.2, scenario_name="complete")
+    sampler = RecordingSampler(
+        stride=2, t_step=0.01, start_t=0.0, end_t=0.2, scenario_name="complete"
+    )
     assert sampler.on_t_advanced(-1.0, 0.0, grab_fn=grab) is False
     assert sampler.on_t_advanced(0.0, 0.2, grab_fn=grab) is True
     path = sampler.finalize()
