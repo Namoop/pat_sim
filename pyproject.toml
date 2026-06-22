@@ -17,6 +17,7 @@ viz = [
     "pyvista>=0.43",
     "pyvistaqt>=0.11",
     "PyQt6>=6.6",
+    "Pillow>=10.0",
 ]
 gpu = [
     "numba>=0.59",
