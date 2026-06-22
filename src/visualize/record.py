@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import queue
 import re
-import shutil
 import subprocess
 import threading
 from collections.abc import Callable
@@ -23,15 +22,21 @@ RECORD_PLAYBACK_SLOWDOWN = 4.0  # MP4 plays this many times slower than capture 
 _UNSAFE_STEM_RE = re.compile(r'[<>:"/\\|?*\x00]')
 
 
+def _ffmpeg_exe() -> str:
+    import imageio_ffmpeg
+
+    return imageio_ffmpeg.get_ffmpeg_exe()
+
+
 def require_ffmpeg() -> str:
-    """Return the ffmpeg executable path or raise with install guidance."""
-    exe = shutil.which("ffmpeg")
-    if exe is None:
+    """Return the ffmpeg executable path (bundled via imageio-ffmpeg)."""
+    try:
+        return _ffmpeg_exe()
+    except ImportError as exc:
         raise RuntimeError(
-            "ffmpeg is required for --record but was not found on PATH. "
-            "Install it with your package manager (e.g. sudo dnf install ffmpeg)."
-        )
-    return exe
+            "Recording requires imageio-ffmpeg. "
+            'Install visualization extras: pip install -e ".[viz]"'
+        ) from exc
 
 
 def slot_index(t: float, start_t: float, fps: float) -> int:
@@ -102,8 +107,7 @@ def slots_to_capture(
     return due
 
 
-def pixmap_to_pil(pixmap: Any):
-    from PIL import Image
+def pixmap_to_rgb_array(pixmap: Any) -> np.ndarray:
     from PyQt6.QtGui import QImage
 
     image = pixmap.toImage().convertToFormat(QImage.Format.Format_RGBA8888)
@@ -111,24 +115,18 @@ def pixmap_to_pil(pixmap: Any):
     height = image.height()
     ptr = image.bits()
     ptr.setsize(height * width * 4)
-    arr = np.frombuffer(ptr, np.uint8).reshape((height, width, 4)).copy()
-    return Image.fromarray(arr, mode="RGBA").convert("RGB")
+    rgba = np.frombuffer(ptr, np.uint8).reshape((height, width, 4))
+    return np.ascontiguousarray(rgba[..., :3])
 
 
-def array_to_pil(rgb: np.ndarray):
-    from PIL import Image
-
-    if rgb.shape[-1] == 4:
-        return Image.fromarray(rgb[..., :3], mode="RGB")
-    return Image.fromarray(rgb, mode="RGB")
-
-
-def pil_to_rgb_array(img: Any) -> np.ndarray:
-    from PIL import Image
-
-    if img.mode != "RGB":
-        img = img.convert("RGB")
-    return np.asarray(img, dtype=np.uint8)
+def ensure_rgb_uint8(rgb: np.ndarray) -> np.ndarray:
+    """Return H×W×3 uint8 RGB, dropping alpha if present."""
+    arr = np.asarray(rgb, dtype=np.uint8)
+    if arr.ndim != 3 or arr.shape[-1] not in (3, 4):
+        raise ValueError(f"expected H×W×3 or H×W×4 uint8 array, got {arr.shape}")
+    if arr.shape[-1] == 4:
+        arr = arr[..., :3]
+    return np.ascontiguousarray(arr)
 
 
 def crop_frame_to_even(rgb: np.ndarray) -> tuple[int, int, np.ndarray]:
@@ -344,9 +342,8 @@ class RecordingSampler:
     def finalized(self) -> bool:
         return self._finalized
 
-    def _submit_frame(self, pil_image: Any) -> None:
-        rgb = pil_to_rgb_array(pil_image)
-        width, height, rgb = crop_frame_to_even(rgb)
+    def _submit_frame(self, frame: np.ndarray) -> None:
+        width, height, rgb = crop_frame_to_even(ensure_rgb_uint8(frame))
         if self._encoder is None:
             path = resolve_recording_path(self.scenario_name)
             self._output_path = path
@@ -373,7 +370,7 @@ class RecordingSampler:
         prev_t: float,
         new_t: float,
         *,
-        grab_fn: Callable[[], Any],
+        grab_fn: Callable[[], np.ndarray],
     ) -> bool:
         """Capture newly crossed slots after the view has been rendered."""
         if self._finalized:

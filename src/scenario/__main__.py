@@ -55,7 +55,7 @@ def main(argv: list[str] | None = None) -> int:
         metavar="FPS",
         help=(
             "Passively record sim-time frames to recordings/<scenario>.mp4 "
-            "(default 10 FPS); requires visualization and ffmpeg"
+            "(default 10 FPS); requires visualization extras"
         ),
     )
     args = parser.parse_args(argv)

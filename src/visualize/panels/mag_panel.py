@@ -682,10 +682,10 @@ class MagPanel:
         if visible:
             self._position_overlay()
 
-    def capture_record_image(self):
-        from visualize.record import pixmap_to_pil
+    def capture_record_image(self) -> np.ndarray:
+        from visualize.record import pixmap_to_rgb_array
 
-        return pixmap_to_pil(self._view_container.grab())
+        return pixmap_to_rgb_array(self._view_container.grab())
 
     def _emit_profile(self) -> None:
         if self._profile_callback is None:

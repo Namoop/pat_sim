@@ -734,10 +734,10 @@ class EyePanel:
         if visible:
             self._position_overlay()
 
-    def capture_record_image(self):
-        from visualize.record import pixmap_to_pil
+    def capture_record_image(self) -> np.ndarray:
+        from visualize.record import pixmap_to_rgb_array
 
-        return pixmap_to_pil(self._view_container.grab())
+        return pixmap_to_rgb_array(self._view_container.grab())
 
     def _set_correlation_mode(self, mode: CorrelationMode) -> None:
         if self._correlation_mode == mode:

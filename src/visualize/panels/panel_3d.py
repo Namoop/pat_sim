@@ -779,9 +779,9 @@ class ThreeDPanel:
         if self._scene_built and self.plotter is not None:
             self.plotter.render()
 
-    def capture_record_image(self):
+    def capture_record_image(self) -> np.ndarray:
         """Capture the rendered 3D view (Qt grab cannot read the GL framebuffer)."""
-        from visualize.record import array_to_pil
+        from visualize.record import ensure_rgb_uint8
 
         if not self._scene_built or self.plotter is None:
             raise RuntimeError("ThreeDPanel must be initialized before capture")
@@ -790,7 +790,7 @@ class ThreeDPanel:
         rgb = self.plotter.screenshot(return_img=True)
         if rgb is None:
             raise RuntimeError("3D screenshot failed")
-        return array_to_pil(np.asarray(rgb))
+        return ensure_rgb_uint8(np.asarray(rgb))
 
     def set_overlay_visible(self, visible: bool) -> None:
         self._btn_bar.setVisible(visible)

@@ -2,12 +2,10 @@
 
 from __future__ import annotations
 
-import shutil
 from pathlib import Path
 
 import numpy as np
 import pytest
-from PIL import Image
 
 from visualize.record import (
     FINAL_SLOT_KEY,
@@ -15,7 +13,7 @@ from visualize.record import (
     AsyncMp4Recorder,
     RecordingSampler,
     crop_frame_to_even,
-    pil_to_rgb_array,
+    ensure_rgb_uint8,
     require_ffmpeg,
     resolve_recording_path,
     sanitize_recording_stem,
@@ -24,7 +22,18 @@ from visualize.record import (
     slots_to_capture,
 )
 
-HAS_FFMPEG = shutil.which("ffmpeg") is not None
+
+def _has_ffmpeg() -> bool:
+    try:
+        from visualize.record import require_ffmpeg
+
+        require_ffmpeg()
+        return True
+    except RuntimeError:
+        return False
+
+
+HAS_FFMPEG = _has_ffmpeg()
 
 
 def test_slot_index_and_time():
@@ -63,16 +72,19 @@ def test_slots_to_capture_unaligned_end():
 
 
 def test_require_ffmpeg_raises_when_missing(monkeypatch):
-    monkeypatch.setattr(shutil, "which", lambda _name: None)
-    with pytest.raises(RuntimeError, match="ffmpeg is required"):
+    def _missing() -> str:
+        raise ImportError("imageio_ffmpeg not installed")
+
+    monkeypatch.setattr("visualize.record._ffmpeg_exe", _missing)
+    with pytest.raises(RuntimeError, match="Recording requires imageio-ffmpeg"):
         require_ffmpeg()
 
 
-def test_pil_to_rgb_array():
-    img = Image.new("RGB", (20, 10), color=(255, 0, 0))
-    frame = pil_to_rgb_array(img)
-    assert frame.shape == (10, 20, 3)
-    assert frame.dtype == np.uint8
+def test_ensure_rgb_uint8_drops_alpha():
+    rgba = np.zeros((4, 6, 4), dtype=np.uint8)
+    rgb = ensure_rgb_uint8(rgba)
+    assert rgb.shape == (4, 6, 3)
+    assert rgb.dtype == np.uint8
 
 
 def test_crop_frame_to_even():
@@ -82,7 +94,7 @@ def test_crop_frame_to_even():
     assert cropped.shape == (10, 14, 3)
 
 
-@pytest.mark.skipif(not HAS_FFMPEG, reason="ffmpeg not installed")
+@pytest.mark.skipif(not HAS_FFMPEG, reason="imageio-ffmpeg not available")
 def test_async_mp4_recorder_writes_file(tmp_path):
     path = tmp_path / "stream.mp4"
     recorder = AsyncMp4Recorder(path, width=8, height=8, fps=10.0)
@@ -97,7 +109,7 @@ def test_async_mp4_recorder_writes_file(tmp_path):
     assert path.stat().st_size > 0
 
 
-@pytest.mark.skipif(not HAS_FFMPEG, reason="ffmpeg not installed")
+@pytest.mark.skipif(not HAS_FFMPEG, reason="imageio-ffmpeg not available")
 def test_async_mp4_recorder_odd_dimensions(tmp_path):
     """Odd grab sizes are cropped to even before encoding (libx264 yuv420p)."""
     path = tmp_path / "odd.mp4"
@@ -121,19 +133,22 @@ def test_recording_sampler_playback_slowdown():
 
 
 def test_recording_sampler_requires_ffmpeg(monkeypatch):
-    monkeypatch.setattr(shutil, "which", lambda _name: None)
-    with pytest.raises(RuntimeError, match="ffmpeg is required"):
+    def _missing() -> str:
+        raise ImportError("imageio_ffmpeg not installed")
+
+    monkeypatch.setattr("visualize.record._ffmpeg_exe", _missing)
+    with pytest.raises(RuntimeError, match="Recording requires imageio-ffmpeg"):
         RecordingSampler(fps=10.0, start_t=0.0, end_t=0.2, scenario_name="test")
 
 
-@pytest.mark.skipif(not HAS_FFMPEG, reason="ffmpeg not installed")
+@pytest.mark.skipif(not HAS_FFMPEG, reason="imageio-ffmpeg not available")
 def test_recording_sampler_keep_first(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     grabs: list[int] = []
 
     def grab():
         grabs.append(len(grabs))
-        return Image.new("RGB", (4, 4), color=(grabs[-1], 0, 0))
+        return np.full((4, 4, 3), (grabs[-1], 0, 0), dtype=np.uint8)
 
     sampler = RecordingSampler(fps=10.0, start_t=0.0, end_t=0.2, scenario_name="test")
     sampler.on_t_advanced(-1.0, 0.0, grab_fn=grab)
@@ -144,12 +159,12 @@ def test_recording_sampler_keep_first(tmp_path, monkeypatch):
     assert sampler.has_frames is False
 
 
-@pytest.mark.skipif(not HAS_FFMPEG, reason="ffmpeg not installed")
+@pytest.mark.skipif(not HAS_FFMPEG, reason="imageio-ffmpeg not available")
 def test_recording_sampler_crops_odd_grab(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
 
     def grab():
-        return Image.new("RGB", (15, 11), color=(128, 64, 32))
+        return np.full((11, 15, 3), (128, 64, 32), dtype=np.uint8)
 
     sampler = RecordingSampler(fps=10.0, start_t=0.0, end_t=0.1, scenario_name="odd")
     sampler.on_t_advanced(0.0, 0.1, grab_fn=grab)
@@ -158,15 +173,12 @@ def test_recording_sampler_crops_odd_grab(tmp_path, monkeypatch):
     assert path.stat().st_size > 0
 
 
-@pytest.mark.skipif(not HAS_FFMPEG, reason="ffmpeg not installed")
+@pytest.mark.skipif(not HAS_FFMPEG, reason="imageio-ffmpeg not available")
 def test_recording_sampler_completes_at_end(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
-    frames: list[Image.Image] = []
 
     def grab():
-        img = Image.new("RGB", (2, 2), color=(0, 0, 0))
-        frames.append(img)
-        return img
+        return np.zeros((2, 2, 3), dtype=np.uint8)
 
     sampler = RecordingSampler(fps=10.0, start_t=0.0, end_t=0.2, scenario_name="complete")
     assert sampler.on_t_advanced(-1.0, 0.0, grab_fn=grab) is False
