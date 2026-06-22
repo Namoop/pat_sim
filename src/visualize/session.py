@@ -45,10 +45,14 @@ class SingleResultSession:
 class MonteCarloVizSession:
     """Lazy Monte Carlo — one run at a time for interactive visualization."""
 
-    def __init__(self, mc: MonteCarloConfig) -> None:
+    def __init__(self, mc: MonteCarloConfig, *, start_run: int = 1) -> None:
+        if start_run < 1 or start_run > mc.runs:
+            raise ValueError(
+                f"start_run must be between 1 and {mc.runs}, got {start_run}"
+            )
         self._mc = mc
         self._sim = load_simulation_config(mc.simulation_path)
-        
+
         self._runs_metadata = []
         chain_rng = np.random.default_rng(mc.seed)
         seeds = chain_rng.integers(0, 2**32 - 1, size=mc.runs).tolist()
@@ -60,7 +64,7 @@ class MonteCarloVizSession:
         for s in seeds:
             self._runs_metadata.append((s, chain_strategy))
 
-        self._run_index = 0
+        self._run_index = start_run - 1
         self._current: ScenarioResult | None = None
 
     def current(self) -> ScenarioResult:

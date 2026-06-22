@@ -77,7 +77,7 @@ def test_monte_carlo_viz_session_offsets_match_batch():
     mc = _mc_fixture()
     mc = replace(mc, runs=2, chain=mc.strategy.chain)
     sim = load_simulation_config(mc.simulation_path)
-    
+
     rng = np.random.default_rng(mc.seed)
     seeds = [int(rng.integers(0, 2**32 - 1)) for _ in range(2)]
     batch = [run_monte_carlo_single(mc, sim, seeds[i], i) for i in range(2)]
@@ -87,3 +87,24 @@ def test_monte_carlo_viz_session_offsets_match_batch():
     second = session.advance()
     assert second is not None
     assert second.config.s1.bench_theta_offset == batch[1].s1_theta
+
+
+def test_monte_carlo_viz_session_start_run():
+    mc = _mc_fixture()
+    mc = replace(mc, runs=3, chain=mc.strategy.chain)
+    sim = load_simulation_config(mc.simulation_path)
+
+    rng = np.random.default_rng(mc.seed)
+    seeds = [int(rng.integers(0, 2**32 - 1)) for _ in range(3)]
+    expected = run_monte_carlo_single(mc, sim, seeds[1], 1)
+
+    session = MonteCarloVizSession(mc, start_run=2)
+    assert session._run_index == 1
+    first = session.current()
+    assert first.config.name == "mc_run_1"
+    np.testing.assert_allclose(
+        first.config.s1.bench_theta_offset,
+        expected.s1_theta,
+    )
+    assert "2/3" in session.status_label()
+    assert session.has_next() is True
