@@ -6,4 +6,4 @@ dist/
 build/
 .pytest_cache/
 src/optimize/logs/
-# *.log
+/config/_*.toml
