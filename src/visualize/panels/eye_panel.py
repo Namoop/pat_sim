@@ -32,8 +32,6 @@ from visualize.eye_history import (
 from visualize.frames import pixel_to_tangent
 from visualize.scene import EyeScene, EyeView, build_scene
 
-CorrelationMode = Literal["none", "target", "cursor", "heatmap"]
-
 _EYE_BTN_STYLE = (
     "QPushButton {"
     "  background-color: #f5f5f7;"
@@ -54,6 +52,13 @@ _EYE_BTN_STYLE = (
     "  border-color: #0071e3;"
     "}"
 )
+
+_EYE_TITLE_STYLE = (
+    "color: #282828; font-family: 'Sans'; font-size: 11px;"
+    " font-weight: bold; background: transparent;"
+)
+
+CorrelationMode = Literal["none", "target", "cursor", "heatmap"]
 
 
 @dataclass(frozen=True)
@@ -204,8 +209,6 @@ class EyeCanvas(QWidget):
         self._axis_limit = axis_limit
         self._hover_source = hover_source
         self._state: _EyeCanvasState | None = None
-        self._last_paint_seconds = 0.0
-        self._on_paint_complete: Callable[[float], None] | None = None
         self._on_hover: Callable[[tuple[float, float] | None], None] | None = None
         self._on_resize: Callable[[], None] | None = None
 
@@ -241,10 +244,6 @@ class EyeCanvas(QWidget):
 
     def set_axis_limit(self, limit: float) -> None:
         self._axis_limit = limit
-
-    @property
-    def last_paint_seconds(self) -> float:
-        return self._last_paint_seconds
 
     def set_hover_callback(
         self,
@@ -379,7 +378,6 @@ class EyeCanvas(QWidget):
 
     def paintEvent(self, event) -> None:  # noqa: N802
         del event
-        t0 = time.perf_counter()
         painter = QPainter(self)
         _enable_smooth_painting(painter)
 
@@ -390,20 +388,10 @@ class EyeCanvas(QWidget):
 
         if self._state is None:
             painter.end()
-            self._last_paint_seconds = time.perf_counter() - t0
             return
 
         view = self._state.view
         partner_label = self._state.partner_label
-        role = "TX" if view.is_transmitting else "RX"
-
-        painter.setPen(QColor(40, 40, 40))
-        painter.setFont(QFont("Sans", 11, QFont.Weight.Bold))
-        painter.drawText(
-            8,
-            18,
-            f"{view.satellite} ({role})",
-        )
 
         pen = QPen(QColor(200, 200, 200))
         pen.setWidthF(0.5)
@@ -491,9 +479,6 @@ class EyeCanvas(QWidget):
         painter.drawText(int(plot.right()) - 36, int(plot.bottom()) + 16, lim_label)
 
         painter.end()
-        self._last_paint_seconds = time.perf_counter() - t0
-        if self._on_paint_complete is not None:
-            self._on_paint_complete(self._last_paint_seconds)
 
 
 class _OverlayHost(QWidget):
@@ -519,15 +504,25 @@ class EyePanel:
         layout.setContentsMargins(0, 0, 0, 0)
 
         self._canvas_host = _OverlayHost(self, self._widget)
-        canvas_host_layout = QHBoxLayout(self._canvas_host)
+        host_layout = QVBoxLayout(self._canvas_host)
+        host_layout.setContentsMargins(0, 0, 0, 0)
+
+        self._view_container = QWidget(self._canvas_host)
+        canvas_host_layout = QHBoxLayout(self._view_container)
         canvas_host_layout.setContentsMargins(0, 0, 0, 0)
 
         self._canvas_s1 = EyeCanvas(axis_limit=1.0)
         self._canvas_s2 = EyeCanvas(axis_limit=1.0)
         canvas_host_layout.addWidget(self._canvas_s1, stretch=1)
         canvas_host_layout.addWidget(self._canvas_s2, stretch=1)
+        host_layout.addWidget(self._view_container, stretch=1)
 
         layout.addWidget(self._canvas_host, stretch=1)
+
+        self._title_s1 = QLabel(self._canvas_host)
+        self._title_s1.setStyleSheet(_EYE_TITLE_STYLE)
+        self._title_s2 = QLabel(self._canvas_host)
+        self._title_s2.setStyleSheet(_EYE_TITLE_STYLE)
 
         self._btn_bar = QWidget(self._canvas_host)
         self._btn_bar.setAutoFillBackground(True)
@@ -623,16 +618,26 @@ class EyePanel:
 
     def _position_overlay(self) -> None:
         margin = 12
+        host = self._canvas_host
+        half_w = max(1, host.width() // 2)
+        title_h = 22
+
+        self._title_s1.setGeometry(8, 4, half_w - 16, title_h)
+        self._title_s2.setGeometry(half_w + 8, 4, half_w - 16, title_h)
+
         self._btn_bar.adjustSize()
         bar_w = self._btn_bar.sizeHint().width()
         bar_h = self._btn_bar.sizeHint().height()
-        host = self._canvas_host
         self._btn_bar.setGeometry(
             host.width() - margin - bar_w,
             margin,
             bar_w,
             bar_h,
         )
+        if self._title_s1.isVisible():
+            self._title_s1.raise_()
+        if self._title_s2.isVisible():
+            self._title_s2.raise_()
         if self._btn_bar.isVisible():
             self._btn_bar.raise_()
 
@@ -723,9 +728,16 @@ class EyePanel:
         pass
 
     def set_overlay_visible(self, visible: bool) -> None:
+        self._title_s1.setVisible(visible)
+        self._title_s2.setVisible(visible)
         self._btn_bar.setVisible(visible)
         if visible:
             self._position_overlay()
+
+    def capture_record_image(self):
+        from visualize.record import pixmap_to_pil
+
+        return pixmap_to_pil(self._view_container.grab())
 
     def _set_correlation_mode(self, mode: CorrelationMode) -> None:
         if self._correlation_mode == mode:
@@ -1068,6 +1080,11 @@ class EyePanel:
         return log_lines
 
     def _update_canvases(self, scene: EyeScene) -> None:
+        role_s1 = "TX" if scene.s1.is_transmitting else "RX"
+        role_s2 = "TX" if scene.s2.is_transmitting else "RX"
+        self._title_s1.setText(f"{scene.s1.satellite} ({role_s1})")
+        self._title_s2.setText(f"{scene.s2.satellite} ({role_s2})")
+
         if self._canvas_s1.set_view(scene.s1, partner_label="S2"):
             self._canvas_s1.repaint()
         if self._canvas_s2.set_view(scene.s2, partner_label="S1"):

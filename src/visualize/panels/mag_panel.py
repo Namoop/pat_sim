@@ -10,7 +10,41 @@ from typing import Literal
 import numpy as np
 from PyQt6.QtCore import QPointF, Qt, QTimer
 from PyQt6.QtGui import QBrush, QColor, QFont, QPainter, QPen, QPolygonF
-from PyQt6.QtWidgets import QButtonGroup, QGridLayout, QPushButton, QSizePolicy, QVBoxLayout, QWidget
+from PyQt6.QtWidgets import (
+    QButtonGroup,
+    QGridLayout,
+    QLabel,
+    QPushButton,
+    QSizePolicy,
+    QVBoxLayout,
+    QWidget,
+)
+
+_MAG_BTN_STYLE = (
+    "QPushButton {"
+    "  background-color: #f5f5f7;"
+    "  border: 1px solid #d2d2d7;"
+    "  border-radius: 4px;"
+    "  padding: 4px 12px;"
+    "  color: #1d1d1f;"
+    "  font-family: 'Sans';"
+    "  font-size: 11px;"
+    "  font-weight: bold;"
+    "}"
+    "QPushButton:hover {"
+    "  background-color: #e8e8ed;"
+    "}"
+    "QPushButton:checked {"
+    "  background-color: #0071e3;"
+    "  color: white;"
+    "  border-color: #0071e3;"
+    "}"
+)
+
+_MAG_TITLE_STYLE = (
+    "color: #282828; font-family: 'Sans'; font-size: 11px;"
+    " font-weight: bold; background: transparent;"
+)
 
 from visualize.frames import direction_to_tangent_angles
 from visualize.scene import EyeScene, build_scene
@@ -46,7 +80,6 @@ class MagPanelWidget(QWidget):
         self._scene: EyeScene | None = None
         self._result: ScenarioResult | None = None
         self._config = None
-        self._last_paint_seconds = 0.0
         self._view_mode: ViewMode = "center"
         self._scene_signed_tilt = 0.0
         self._display_signed_tilt = 0.0
@@ -63,61 +96,6 @@ class MagPanelWidget(QWidget):
         self._tilt_timer.setInterval(16)
         self._tilt_timer.timeout.connect(self._on_tilt_tick)
 
-        # Create overlay button group in a top-right grid
-        self._btn_bar = QWidget(self)
-        self._btn_layout = QGridLayout(self._btn_bar)
-        self._btn_layout.setContentsMargins(0, 0, 0, 0)
-        self._btn_layout.setHorizontalSpacing(6)
-        self._btn_layout.setVerticalSpacing(6)
-
-        self._btn_group = QButtonGroup(self)
-        self._btn_group.setExclusive(True)
-
-        self._buttons: dict[ViewMode, QPushButton] = {}
-        for row, modes in enumerate(
-            [
-                [("s1", "Focus S1"), ("center", "Center"), ("s2", "Focus S2")],
-                [("follow_s1", "Follow S1"), ("balance", "Balance"), ("follow_s2", "Follow S2")],
-            ]
-        ):
-            for col, (mode, label) in enumerate(modes):
-                btn = QPushButton(label, self._btn_bar)
-                btn.setCheckable(True)
-                if mode == "center":
-                    btn.setChecked(True)
-
-                btn.setStyleSheet(
-                    "QPushButton {"
-                    "  background-color: #f5f5f7;"
-                    "  border: 1px solid #d2d2d7;"
-                    "  border-radius: 4px;"
-                    "  padding: 4px 12px;"
-                    "  color: #1d1d1f;"
-                    "  font-family: 'Sans';"
-                    "  font-size: 11px;"
-                    "  font-weight: bold;"
-                    "}"
-                    "QPushButton:hover {"
-                    "  background-color: #e8e8ed;"
-                    "}"
-                    "QPushButton:checked {"
-                    "  background-color: #0071e3;"
-                    "  color: white;"
-                    "  border-color: #0071e3;"
-                    "}"
-                )
-                btn.setSizePolicy(
-                    QSizePolicy.Policy.Expanding,
-                    QSizePolicy.Policy.Fixed,
-                )
-                self._btn_group.addButton(btn)
-                self._buttons[mode] = btn
-                btn.clicked.connect(lambda checked, m=mode: self.set_view_mode(m))
-                self._btn_layout.addWidget(btn, row, col)
-
-        for col in range(3):
-            self._btn_layout.setColumnStretch(col, 1)
-
         self.setSizePolicy(
             QSizePolicy.Policy.Expanding,
             QSizePolicy.Policy.Expanding,
@@ -125,12 +103,14 @@ class MagPanelWidget(QWidget):
         self.setMinimumSize(400, 300)
         self.setAttribute(Qt.WidgetAttribute.WA_OpaquePaintEvent, True)
 
+    @property
+    def view_mode(self) -> ViewMode:
+        return self._view_mode
+
     def set_view_mode(self, mode: ViewMode) -> None:
         if mode == self._view_mode:
             return
         self._view_mode = mode
-        if mode in self._buttons:
-            self._buttons[mode].setChecked(True)
         self._scene_signed_tilt = self._compute_target_signed_tilt()
         self._begin_camera_animation(
             self._scene_signed_tilt,
@@ -298,23 +278,6 @@ class MagPanelWidget(QWidget):
             self._tilt_timer.stop()
         self.update()
 
-    def _position_buttons(self) -> None:
-        margin = 12
-        self._btn_bar.adjustSize()
-        bar_w = self._btn_bar.sizeHint().width()
-        bar_h = self._btn_bar.sizeHint().height()
-        self._btn_bar.setGeometry(self.width() - margin - bar_w, margin, bar_w, bar_h)
-        self._btn_bar.raise_()
-
-    def resizeEvent(self, event) -> None:  # noqa: N802
-        super().resizeEvent(event)
-        self._position_buttons()
-
-    def set_overlay_visible(self, visible: bool) -> None:
-        self._btn_bar.setVisible(visible)
-        if visible:
-            self._position_buttons()
-
     def set_scene(self, scene: EyeScene, result: ScenarioResult) -> None:
         result_changed = result is not self._result
         self._scene = scene
@@ -331,8 +294,6 @@ class MagPanelWidget(QWidget):
             self._camera_target_tilt = self._scene_signed_tilt
             self._camera_target_pin_blend = pin_blend
             self._camera_target_vertical_center_blend = vertical_center_blend
-            if self._view_mode in self._buttons:
-                self._buttons[self._view_mode].setChecked(True)
         else:
             self._scene_signed_tilt = self._compute_target_signed_tilt()
             if self._is_live_tilt_mode(self._view_mode):
@@ -368,7 +329,6 @@ class MagPanelWidget(QWidget):
 
     def paintEvent(self, event) -> None:  # noqa: N802
         del event
-        t0 = time.perf_counter()
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
 
@@ -377,7 +337,6 @@ class MagPanelWidget(QWidget):
 
         if self._scene is None or self._result is None or self._config is None:
             painter.end()
-            self._last_paint_seconds = time.perf_counter() - t0
             return
 
         scene = self._scene
@@ -417,11 +376,6 @@ class MagPanelWidget(QWidget):
             pin_blend,
             self._display_vertical_center_blend,
         )
-
-        # Title (fixed size; not part of the scaled diagram)
-        painter.setPen(QColor(40, 40, 40))
-        painter.setFont(QFont("Sans", 11, QFont.Weight.Bold))
-        painter.drawText(15, 25, "2D Magnitude Alignment Profile")
 
         painter.save()
         painter.translate(W * 0.5, cy)
@@ -536,7 +490,18 @@ class MagPanelWidget(QWidget):
 
         painter.restore()
         painter.end()
-        self._last_paint_seconds = time.perf_counter() - t0
+
+
+class _MagOverlayHost(QWidget):
+    """Repositions floating title and button overlays on resize."""
+
+    def __init__(self, panel: "MagPanel", parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self._panel = panel
+
+    def resizeEvent(self, event) -> None:  # noqa: N802
+        super().resizeEvent(event)
+        self._panel._position_overlay()
 
 
 class MagPanel:
@@ -548,8 +513,58 @@ class MagPanel:
         layout = QVBoxLayout(self._widget)
         layout.setContentsMargins(0, 0, 0, 0)
 
-        self._canvas = MagPanelWidget(self._widget)
-        layout.addWidget(self._canvas, stretch=1)
+        self._canvas_host = _MagOverlayHost(self, self._widget)
+        host_layout = QVBoxLayout(self._canvas_host)
+        host_layout.setContentsMargins(0, 0, 0, 0)
+
+        self._view_container = QWidget(self._canvas_host)
+        view_layout = QVBoxLayout(self._view_container)
+        view_layout.setContentsMargins(0, 0, 0, 0)
+        self._canvas = MagPanelWidget(self._view_container)
+        view_layout.addWidget(self._canvas, stretch=1)
+        host_layout.addWidget(self._view_container, stretch=1)
+
+        layout.addWidget(self._canvas_host, stretch=1)
+
+        self._title_label = QLabel("2D Magnitude Alignment Profile", self._canvas_host)
+        self._title_label.setStyleSheet(_MAG_TITLE_STYLE)
+
+        self._btn_bar = QWidget(self._canvas_host)
+        self._btn_bar.setAutoFillBackground(True)
+        self._btn_bar.setStyleSheet("background-color: #ffffff;")
+        btn_layout = QGridLayout(self._btn_bar)
+        btn_layout.setContentsMargins(0, 0, 0, 0)
+        btn_layout.setHorizontalSpacing(6)
+        btn_layout.setVerticalSpacing(6)
+
+        self._btn_group = QButtonGroup(self._btn_bar)
+        self._btn_group.setExclusive(True)
+        self._buttons: dict[ViewMode, QPushButton] = {}
+        for row, modes in enumerate(
+            [
+                [("s1", "Focus S1"), ("center", "Center"), ("s2", "Focus S2")],
+                [("follow_s1", "Follow S1"), ("balance", "Balance"), ("follow_s2", "Follow S2")],
+            ]
+        ):
+            for col, (mode, label) in enumerate(modes):
+                btn = QPushButton(label, self._btn_bar)
+                btn.setCheckable(True)
+                if mode == "center":
+                    btn.setChecked(True)
+                btn.setStyleSheet(_MAG_BTN_STYLE)
+                btn.setSizePolicy(
+                    QSizePolicy.Policy.Expanding,
+                    QSizePolicy.Policy.Fixed,
+                )
+                self._btn_group.addButton(btn)
+                self._buttons[mode] = btn
+                btn.clicked.connect(lambda checked, m=mode: self._set_view_mode(m))
+                btn_layout.addWidget(btn, row, col)
+
+        for col in range(3):
+            btn_layout.setColumnStretch(col, 1)
+
+        self._position_overlay()
 
         self._profiler = FrameProfiler.from_env(False)
         self._sim_profile_enabled = False
@@ -561,6 +576,37 @@ class MagPanel:
     @property
     def widget(self):
         return self._widget
+
+    def _position_overlay(self) -> None:
+        margin = 12
+        host = self._canvas_host
+        self._title_label.adjustSize()
+        title_h = self._title_label.sizeHint().height()
+        self._title_label.setGeometry(margin, margin, host.width() - 2 * margin, title_h)
+
+        self._btn_bar.adjustSize()
+        bar_w = self._btn_bar.sizeHint().width()
+        bar_h = self._btn_bar.sizeHint().height()
+        self._btn_bar.setGeometry(
+            host.width() - margin - bar_w,
+            margin,
+            bar_w,
+            bar_h,
+        )
+        if self._title_label.isVisible():
+            self._title_label.raise_()
+        if self._btn_bar.isVisible():
+            self._btn_bar.raise_()
+
+    def _set_view_mode(self, mode: ViewMode) -> None:
+        self._canvas.set_view_mode(mode)
+        if mode in self._buttons:
+            self._buttons[mode].setChecked(True)
+
+    def _sync_view_mode_buttons(self) -> None:
+        mode = self._canvas.view_mode
+        if mode in self._buttons:
+            self._buttons[mode].setChecked(True)
 
     def set_profile_callback(self, callback) -> None:
         self._profile_callback = callback
@@ -620,6 +666,8 @@ class MagPanel:
         else:
             self._canvas.set_scene(scene, result)
 
+        self._sync_view_mode_buttons()
+
         return MagFrameInfo(
             capture_active=scene.capture_active,
             event_log=tuple(event_log),
@@ -629,7 +677,15 @@ class MagPanel:
         pass
 
     def set_overlay_visible(self, visible: bool) -> None:
-        self._canvas.set_overlay_visible(visible)
+        self._title_label.setVisible(visible)
+        self._btn_bar.setVisible(visible)
+        if visible:
+            self._position_overlay()
+
+    def capture_record_image(self):
+        from visualize.record import pixmap_to_pil
+
+        return pixmap_to_pil(self._view_container.grab())
 
     def _emit_profile(self) -> None:
         if self._profile_callback is None:
