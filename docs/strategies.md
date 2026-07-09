@@ -142,7 +142,8 @@ The **Asymmetric Swap** strategy is an evolution of the asymmetric probe, design
 
 * `spiral_radius` (float or `"fov"`, milliradians): Probe spiral radius.
 * `lock_duration` (float, seconds): Hold duration required to declare lock.
-* `spiral_speed` (float): Speed multiplier for the spirals.                                            
+* `spiral_speed` (float): Speed multiplier for the spirals.
+* `s2_radius_mod` (float): Scale multiplier for S2's spiral search radius (defaults to `1.0` if omitted).
 
 
 ### Action Script (Pseudocode)

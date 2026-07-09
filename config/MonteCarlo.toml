@@ -2,10 +2,15 @@
 environment = "Environment.toml"
 seed = 42
 runs = 500
-chain = ["lissajous_scan"]
+chain = ["asymmetric_swap"]
 error.distribution = "gaussian"
 error.gaussian.limit = 1.74
 satellite.s2_fov_mod = 2
+
+[strategy.asymmetric_swap]
+lock_duration = 0.3
+spiral_radius = 1.6
+s2_radius_mod = 2.0
 
 [strategy.dual_spiral]
 

@@ -175,6 +175,10 @@ def build_parameter_spaces(sim_cfg, mc_cfg) -> dict:
             "growth_exponent":  ("float", 0.5, 2.0),
             "s2_offset_shells": ("int", 0, 4),
         },
+        "asymmetric_swap": {
+            "spiral_radius":    ("float", 0.1, R * 1e3 * 2.0),
+            "s2_radius_mod":    ("float", 0.1, 5.0),
+        },
     }
 
 
@@ -215,7 +219,7 @@ def peak_speed_for_strategy(
     k = strat.k
     w = strat.spiral_w(sat)
 
-    if strategy_name in ("dual_spiral", "concentric_shells"):
+    if strategy_name in ("dual_spiral", "concentric_shells", "asymmetric_swap"):
         # Both satellites spiral at max_beam_speed
         return sat.max_beam_speed
 
