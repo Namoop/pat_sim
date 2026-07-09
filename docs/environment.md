@@ -12,6 +12,7 @@ The configuration file is loaded by [`load_simulation_config`](../src/satellite/
 
 - `body_radius` (float, meters): Physical radius of the spacecraft body.
 - `dish_fov` (float, milliradians): Full field-of-view of the receiver dish.
+- `s2_fov_mod` (float): Modifier scaling factor for S2 receiver field-of-view (defaults to `1.0` if omitted). E.g. if `dish_fov = 2.0` and `s2_fov_mod = 0.5`, S2 receiver FOV will be `1.0`.
 - `max_beam_speed` (float, milliradians/second): Maximum optical bench/beam slew speed.
 - `max_fsm_speed` (float, milliradians/second): Maximum Fast Steering Mirror deflection speed.
 - `beam_width` (float, milliradians): Full spread of the transmitter beam.

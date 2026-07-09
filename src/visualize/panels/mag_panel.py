@@ -396,10 +396,8 @@ class MagPanelWidget(QWidget):
             painter.drawLine(QPointF(cx1, cy), QPointF(cx2, cy))
 
         alpha = config.satellite.alpha
-        dish_fov = config.satellite.dish_fov
 
         visual_alpha = alpha * scale_factor
-        visual_fov = dish_fov * scale_factor
 
         for sat_idx, (sat, panel, cx, cy_sat, name, base_angle, color) in enumerate(
             [
@@ -408,6 +406,7 @@ class MagPanelWidget(QWidget):
             ]
         ):
             toward_partner = sat.bench.toward_partner  # always the reference
+            visual_fov = sat.receiver.dish_fov * scale_factor
 
             # 1. Transmitter beam pointing offset relative to toward_partner
             tx_aim = sat.bench.bench_boresight

@@ -60,11 +60,15 @@ class Satellite:
             beam_length,
             boresight_extension=config.simulation.boresight_extension,
         )
+        dish_fov = hw.dish_fov
+        if name == "S2":
+            dish_fov *= hw.s2_fov_mod
+
         receiver = ReceiverSDA(
             bench=bench,
             fsm=fsm,
             body_radius=hw.body_radius,
-            dish_fov=hw.dish_fov,
+            dish_fov=dish_fov,
         )
         return Satellite(
             name=name,

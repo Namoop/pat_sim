@@ -22,6 +22,7 @@ class SharedSatelliteConfig:
     k: float
     scan_envelope_ramp: float
     scan_envelope_profile: str = "smooth"
+    s2_fov_mod: float = 1.0
 
     @property
     def scan_envelope_profile_id(self) -> int:
@@ -96,6 +97,7 @@ def _load_shared_satellite(data: dict) -> SharedSatelliteConfig:
         k=float(data.get("k", 10.0)),
         scan_envelope_ramp=float(data.get("scan_envelope_ramp", 2.0)),
         scan_envelope_profile=profile,
+        s2_fov_mod=float(data.get("s2_fov_mod", 1.0)),
     )
 
 

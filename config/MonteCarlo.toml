@@ -5,6 +5,7 @@ runs = 500
 chain = ["lissajous_scan"]
 error.distribution = "gaussian"
 error.gaussian.std = 1.5
+satellite.s2_fov_mod = 2
 
 [strategy.dual_spiral]
 

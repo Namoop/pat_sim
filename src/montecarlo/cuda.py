@@ -491,8 +491,8 @@ if CUDA_AVAILABLE:
         timeout = sim_params[trial_idx, 1]
         beam_length = sim_params[trial_idx, 2]
         body_radius = sim_params[trial_idx, 3]
-        dish_fov = sim_params[trial_idx, 4]
-        cos_dish_fov = sim_params[trial_idx, 5]
+        s1_dish_fov = sim_params[trial_idx, 4]
+        s1_cos_dish_fov = sim_params[trial_idx, 5]
         max_beam_speed = sim_params[trial_idx, 6]
         max_fsm_speed = sim_params[trial_idx, 7]
         alpha = sim_params[trial_idx, 8]
@@ -500,6 +500,8 @@ if CUDA_AVAILABLE:
         max_fsm_radius = sim_params[trial_idx, 10]
         scan_envelope_ramp = sim_params[trial_idx, 11]
         scan_envelope_profile = int(sim_params[trial_idx, 12])
+        s2_dish_fov = sim_params[trial_idx, 13]
+        s2_cos_dish_fov = sim_params[trial_idx, 14]
 
 
         # Scenario initial error offsets
@@ -713,7 +715,7 @@ if CUDA_AVAILABLE:
                 rx_aim_temp[2] = s2_bench_boresight[2]
                 
             visible_12 = s1_beam_enabled and s2_rx_enabled and beam_hits_dish_device(
-                s1_pos, s2_pos, rx_aim_temp, cos_dish_fov, aim_temp, cos_alpha, beam_length, body_radius
+                s1_pos, s2_pos, rx_aim_temp, s2_cos_dish_fov, aim_temp, cos_alpha, beam_length, body_radius
             )
 
             # S2 to S1 pointing
@@ -736,7 +738,7 @@ if CUDA_AVAILABLE:
                 rx_aim_temp[2] = s1_bench_boresight[2]
                 
             visible_21 = s2_beam_enabled and s1_rx_enabled and beam_hits_dish_device(
-                s2_pos, s1_pos, rx_aim_temp, cos_dish_fov, aim_temp, cos_alpha, beam_length, body_radius
+                s2_pos, s1_pos, rx_aim_temp, s1_cos_dish_fov, aim_temp, cos_alpha, beam_length, body_radius
             )
 
             # 4. Acquisition logic updates
@@ -941,7 +943,7 @@ if CUDA_AVAILABLE:
                 direction_with_tangent_offset_device(s2_bench_boresight, ux_temp, uy_temp, s2_fsm_theta, s2_fsm_phi, rx_aim_temp)
                 
                 final_12 = s1_beam_enabled and s2_rx_enabled and beam_hits_dish_device(
-                    s1_pos, s2_pos, rx_aim_temp, cos_dish_fov, s1_final_aim, cos_alpha, beam_length, body_radius
+                    s1_pos, s2_pos, rx_aim_temp, s2_cos_dish_fov, s1_final_aim, cos_alpha, beam_length, body_radius
                 )
                 
                 spherical_angles_from_direction_device(s1_bench_boresight, angles_temp)
@@ -949,7 +951,7 @@ if CUDA_AVAILABLE:
                 direction_with_tangent_offset_device(s1_bench_boresight, ux_temp, uy_temp, s1_fsm_theta, s1_fsm_phi, rx_aim_temp)
                 
                 final_21 = s2_beam_enabled and s1_rx_enabled and beam_hits_dish_device(
-                    s2_pos, s1_pos, rx_aim_temp, cos_dish_fov, s2_final_aim, cos_alpha, beam_length, body_radius
+                    s2_pos, s1_pos, rx_aim_temp, s1_cos_dish_fov, s2_final_aim, cos_alpha, beam_length, body_radius
                 )
 
                 if final_12 and final_21 and s1_slew_complete and s2_slew_complete:
@@ -1180,7 +1182,7 @@ def run_monte_carlo_cuda_batch(configs: list[MonteCarloConfig]) -> list[MonteCar
         hw_s1_arr[b] = hw_s1_arr[b, np.argsort(hw_s1_arr[b, :, 0])]
         hw_s2_arr[b] = hw_s2_arr[b, np.argsort(hw_s2_arr[b, :, 0])]
 
-    sim_params_arr = np.zeros((B, 13), dtype=FLOAT_DTYPE)
+    sim_params_arr = np.zeros((B, 15), dtype=FLOAT_DTYPE)
     positions_arr = np.zeros((B, 6), dtype=FLOAT_DTYPE)
     
     runs_per_config = configs[0].runs
@@ -1202,6 +1204,7 @@ def run_monte_carlo_cuda_batch(configs: list[MonteCarloConfig]) -> list[MonteCar
         s2 = Satellite.build("S2", mock_config.s2, dummy_pos, mock_config)
         
         beam_length = mock_config.simulation.beam_length or (sim.simulation.distance + mock_config.simulation.boresight_extension)
+        s2_dish_fov = mock_config.satellite.dish_fov * mock_config.satellite.s2_fov_mod
         sim_params_arr[b] = [
             mock_config.simulation.t_step,
             all_global_t_starts[b],
@@ -1216,6 +1219,8 @@ def run_monte_carlo_cuda_batch(configs: list[MonteCarloConfig]) -> list[MonteCar
             mock_config.satellite.max_fsm_radius,
             mock_config.satellite.scan_envelope_ramp,
             float(mock_config.satellite.scan_envelope_profile_id),
+            s2_dish_fov,
+            float(np.cos(s2_dish_fov)),
         ]
         positions_arr[b] = [
             s1.position[0], s1.position[1], s1.position[2],

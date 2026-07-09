@@ -31,6 +31,16 @@ class EyeHistoryCache:
     s2_fov_center: np.ndarray
     alpha: float
     fov_radius: float
+    s1_fov_radius: float | None = None
+    s2_fov_radius: float | None = None
+
+    @property
+    def s1_fov(self) -> float:
+        return self.fov_radius if self.s1_fov_radius is None else self.s1_fov_radius
+
+    @property
+    def s2_fov(self) -> float:
+        return self.fov_radius if self.s2_fov_radius is None else self.s2_fov_radius
 
 
 def _aim_center_from_snapshot(
@@ -78,6 +88,8 @@ def build_eye_history(
         s2_fov_center=s2_fov,
         alpha=hw.alpha,
         fov_radius=hw.dish_fov,
+        s1_fov_radius=result.s1.receiver.dish_fov,
+        s2_fov_radius=result.s2.receiver.dish_fov,
     )
 
 
@@ -272,14 +284,16 @@ class HeatmapAccumulator:
         area_ceiling: float,
         mask_size: int = _MASK_SIZE_DEFAULT,
     ) -> None:
+        partner_fov_radius = cache.s2_fov if source == "S1" else cache.s1_fov
+
         self._grid_res = grid_res
         self._axis_limit = axis_limit
         self._diversity_floor = diversity_floor
-        self._fov_radius = cache.fov_radius
+        self._fov_radius = partner_fov_radius
         self._overlap_r = 2.0 * cache.alpha
         self._mask_size = mask_size
-        self._area_ceiling = max(area_ceiling, np.pi * cache.fov_radius * cache.fov_radius)
-        self._partner_bin_size = cache.fov_radius * 0.5
+        self._area_ceiling = max(area_ceiling, np.pi * partner_fov_radius * partner_fov_radius)
+        self._partner_bin_size = partner_fov_radius * 0.5
         self._theta_g, self._phi_g = _tangent_grids(axis_limit, mask_size)
         self._mask_pixel_area = ((2.0 * axis_limit) / mask_size) ** 2
         self._mask_aa = ((2.0 * axis_limit) / mask_size) * 0.5
@@ -462,7 +476,8 @@ def build_correlation_heatmap(
     Score at each cell: area_norm * (1 + diversity_floor * diversity_peak), clipped to [0, 1].
     """
     if area_ceiling is None:
-        area_ceiling = default_heatmap_area_ceiling(axis_limit, cache.fov_radius)
+        partner_fov_radius = cache.s2_fov if source == "S1" else cache.s1_fov
+        area_ceiling = default_heatmap_area_ceiling(axis_limit, partner_fov_radius)
     idx_end = int(np.searchsorted(cache.t_values, t_max, side="right"))
     acc = HeatmapAccumulator(
         cache,

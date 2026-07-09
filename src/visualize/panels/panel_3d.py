@@ -583,9 +583,9 @@ class ThreeDPanel:
         config = result.config
         viz = config.three_d_viz
         ctx = self._squish_ctx()
-        dish_fov = ctx.angle(config.satellite.dish_fov)
-        pv = self._pv
         sat = result.s1 if satellite == "S1" else result.s2
+        dish_fov = ctx.angle(sat.receiver.dish_fov)
+        pv = self._pv
         rx = sat.receiver
         raw_aim = result.bench_aim(satellite, t)
         aim = ctx.direction(raw_aim, toward_partner=sat.bench.toward_partner)

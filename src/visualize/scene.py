@@ -76,7 +76,7 @@ def build_view(
     effective_aim = fsm.effective_receive_boresight(sat.bench.bench_boresight)
     center_theta, center_phi = direction_to_tangent_angles(origin, effective_aim)
     alpha = result.config.satellite.alpha
-    dish_fov = result.config.satellite.dish_fov
+    dish_fov = sat.receiver.dish_fov
 
     beam = EyeDisc(center_theta, center_phi, alpha)
     fov = EyeDisc(center_theta, center_phi, dish_fov)
