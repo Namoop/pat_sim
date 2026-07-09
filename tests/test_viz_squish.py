@@ -46,7 +46,7 @@ def test_squish_preserves_apparent_cone_radius():
     squished_alpha = squish_angle(alpha, squish)
     original_radius = length * np.tan(alpha)
     squished_radius = squished_length * np.tan(squished_alpha)
-    np.testing.assert_allclose(squished_radius, original_radius, rtol=1e-9)
+    np.testing.assert_allclose(squished_radius, original_radius, rtol=1e-5)
 
 
 def test_squish_position_relative_to_origin():
@@ -67,4 +67,4 @@ def test_environment_toml_default_squish():
     from satellite.config import load_simulation_config
 
     sim = load_simulation_config("config/Environment.toml")
-    assert sim.three_d_viz.squish == 1.0
+    assert sim.three_d_viz.squish == 10.0

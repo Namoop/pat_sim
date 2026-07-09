@@ -154,7 +154,7 @@ runs = 1
 chain = ["minor_offset"]
 """
     )
-    with pytest.raises(ValueError, match="monte_carlo.seed is required"):
+    with pytest.raises(ValueError, match=r"\[monte_carlo\]\.seed"):
         require_monte_carlo_seed(mc_path)
 
     mc_path.write_text(
