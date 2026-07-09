@@ -30,7 +30,7 @@ def _sample_mc_cfg() -> MonteCarloConfig:
     return MonteCarloConfig(
         simulation_path=Path("config/Environment.toml"),
         seed=42,
-        error=GaussianErrorConfig(distribution="gaussian", mean=0.0, std=0.0015),
+        error=GaussianErrorConfig(distribution="gaussian", mean=0.0, limit=0.0015, confidence=1.0),
         strategy=StrategyConfig(k=10.0, chain=("lissajous_scan",), params={}),
         runs=30,
         chain=("lissajous_scan",),

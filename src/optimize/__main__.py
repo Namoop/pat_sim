@@ -741,7 +741,7 @@ def run_optuna_search(
                     continue
 
                 try:
-                    cost, _, _ = evaluate_candidate(
+                    cost, _, _, _ = evaluate_candidate(
                         candidate, strategy_name, sim_cfg, mc_cfg, fixed_offsets, 1
                     )
                     with lock:
@@ -899,7 +899,7 @@ def main():
                     break
                     
         sim_bundle = load_simulation_config(env_path_obj)
-        error_dist = GaussianErrorConfig(distribution="gaussian", mean=0.0, std=2.0 * 1e-3)
+        error_dist = GaussianErrorConfig(distribution="gaussian", mean=0.0, limit=2.0 * 1e-3, confidence=1.0)
         
         mc_cfg = MonteCarloConfig(
             simulation_path=env_path_obj.resolve(),

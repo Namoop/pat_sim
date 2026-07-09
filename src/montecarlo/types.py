@@ -21,7 +21,8 @@ class UniformErrorConfig:
 class GaussianErrorConfig:
     distribution: str
     mean: float
-    std: float
+    limit: float
+    confidence: float | str = 1.0
 
 
 ErrorDistributionConfig = UniformErrorConfig | GaussianErrorConfig

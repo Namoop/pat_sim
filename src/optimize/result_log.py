@@ -127,7 +127,8 @@ def _monte_carlo_section(mc_cfg: MonteCarloConfig, *, strategy: str) -> dict[str
     if isinstance(error, GaussianErrorConfig):
         section["error.distribution"] = "gaussian"
         section["error.gaussian.mean"] = error.mean * 1e3
-        section["error.gaussian.std"] = error.std * 1e3
+        section["error.gaussian.limit"] = error.limit * 1e3
+        section["error.gaussian.confidence"] = error.confidence
     elif isinstance(error, UniformErrorConfig):
         section["error.distribution"] = "uniform"
         section["error.uniform.min"] = error.min * 1e3

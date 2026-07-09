@@ -52,6 +52,13 @@ class MonteCarloSummary:
     median_computation_ms: float
     total_computation_ms: float
 
+def _calculate_sigma(limit_value: float, confidence: float|str):
+    if isinstance(confidence, str) and confidence.endswith('%'):
+        import scipy.special as sp
+        p = float(confidence.strip("%")) / 100.0
+        return limit_value / (np.sqrt(2) * sp.erfinv(p))
+    else:
+        return limit_value / float(confidence)
 
 def _sample_component(rng: np.random.Generator, error: ErrorDistributionConfig) -> tuple[float, float]:
     if isinstance(error, UniformErrorConfig):
@@ -65,8 +72,11 @@ def _sample_component(rng: np.random.Generator, error: ErrorDistributionConfig) 
         
         return theta, phi
     if isinstance(error, GaussianErrorConfig):
-        theta = float(rng.normal(error.mean, error.std))
-        phi = float(rng.normal(error.mean, error.std))
+        sigma = _calculate_sigma(error.limit, error.confidence)
+        magnitude = np.abs(rng.normal(error.mean, sigma))
+        angle = rng.uniform(0, 2*np.pi)
+        theta = float(magnitude * np.cos(angle))
+        phi = float(magnitude * np.sin(angle))
         return theta, phi
     raise TypeError(f"Unsupported error config: {type(error)!r}")
 

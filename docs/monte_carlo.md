@@ -22,7 +22,8 @@ Monte Carlo settings are parsed by [`montecarlo/config.py`](../src/montecarlo/co
 - `uniform.min` (float, milliradians, default: `0.0`): The minimum absolute value of the uniform error.
 - `uniform.max` (float, milliradians): The maximum absolute value of the uniform error. The magnitude is drawn from `[min, max]` and assigned a random sign ($+$ or $-$).
 - `gaussian.mean` (float, milliradians, default: `0.0`): The mean of the Gaussian distribution.
-- `gaussian.std` (float, milliradians): The standard deviation of the Gaussian distribution. Both $\theta$ and $\phi$ offsets are generated independently.
+- `gaussian.limit` (float, milliradians): The error limit.
+- `gaussian.confidence` (float or percentage string, default: `1.0`): The confidence parameter. If float, the standard deviation is $\sigma = \text{limit} / \text{confidence}$. If percentage string (e.g. `"95%"`), it is converted to probability $p$ and $\sigma = \text{limit} / (\sqrt{2} \cdot \text{erfinv}(p))$. Both $\theta$ and $\phi$ offsets are generated independently.
 
 ### `[strategy.<strategy_name>]` (Strategy Parameters)
 

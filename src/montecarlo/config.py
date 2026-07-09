@@ -46,10 +46,19 @@ def _load_error(error_data: dict) -> ErrorDistributionConfig:
         )
     if distribution == "gaussian":
         gaussian_data = error_data.get("gaussian", {})
+        limit = _require_float(gaussian_data, "limit", "[monte_carlo.error.gaussian]") * 1e-3
+        conf_raw = gaussian_data.get("confidence", 1.0)
+        if isinstance(conf_raw, (int, float)):
+            confidence: float | str = float(conf_raw)
+        elif isinstance(conf_raw, str):
+            confidence = conf_raw
+        else:
+            raise TypeError("[monte_carlo.error.gaussian].confidence must be a float or string")
         return GaussianErrorConfig(
             distribution="gaussian",
             mean=float(gaussian_data.get("mean", 0.0)) * 1e-3,
-            std=_require_float(gaussian_data, "std", "[monte_carlo.error.gaussian]") * 1e-3,
+            limit=limit,
+            confidence=confidence,
         )
     raise ValueError(f"Unsupported [monte_carlo.error].distribution: {distribution!r}")
 
