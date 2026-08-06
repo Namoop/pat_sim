@@ -117,6 +117,8 @@ class StrategyScript:
             aim_ctx = None
             prev_end_aim = sat.bench.bench_boresight.copy()
 
+            fastest_speed = 0
+
             for step in timeline.movement_steps:
                 # Transition check: move from prev_end_aim to step's start aim
                 if aim_ctx is None or isinstance(step.movement, Reset):
@@ -146,11 +148,14 @@ class StrategyScript:
                     dt = step.duration / n_samples
                     last_aim = start_aim
                     enforce = ctx.config.simulation.enforce_speed_limit
+                    #fastest_speed = 0
                     for i in range(1, n_samples + 1):
                         t_curr = i * dt
                         curr_aim = step.movement.aim_at(t_curr, step.duration, aim_ctx)
                         step_dist = angle_between(last_aim, curr_aim)
                         step_speed = step_dist / dt
+                        if step_speed > fastest_speed:
+                            fastest_speed = step_speed
 
                         # 1.05 tolerance to account for discretization/floating point variations
                         if step_speed > max_beam_speed * 1.05:
@@ -170,6 +175,8 @@ class StrategyScript:
                 prev_end_aim = step.movement.aim_at(step.duration, step.duration, aim_ctx)
                 sat.bench.set_bench_aim(prev_end_aim)
                 aim_ctx = build_aim_context(sat)
+            
+            print("Fastest speed: %.3g" % (fastest_speed*1000))
 
         return errors
 
