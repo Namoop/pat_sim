@@ -13,12 +13,15 @@ from strategy.strategies.random_curve import RandomCurveStrategy
 from strategy.strategies.random_walk import RandomWalkStrategy
 from strategy.strategies.rosette_scan import RosetteScanStrategy
 from strategy.strategies.single_miss import SingleMissStrategy
+from strategy.strategies.swap_variant import SwapVariantStrategy
+from strategy.strategies.dual_function_spiral import DualFunctionStrategy
 
 __all__ = [
     "AsymmetricSwapStrategy",
     "CenterRebiasStrategy",
     "ComprehensiveStrategy",
     "ConcentricShellsStrategy",
+    "DualFunctionStrategy",
     "DualRasterStrategy",
     "DualSpiralStrategy",
     "LissajousScanStrategy",
@@ -28,4 +31,5 @@ __all__ = [
     "RandomWalkStrategy",
     "RosetteScanStrategy",
     "SingleMissStrategy",
+    "SwapVariantStrategy",
 ]
