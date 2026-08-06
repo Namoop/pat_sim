@@ -115,15 +115,16 @@ def build_parameter_spaces(sim_cfg, mc_cfg) -> dict:
     vel_a_max = max(1e-4, v_hi / ratio_rc_max)
 
     # --- lissajous ---
-    # peak ≈ A * sqrt(wx² + wy²),  A = R / sqrt(2)
+    # peak ≈ A * sqrt(wx² + wy²),  A = R #/ sqrt(2)
     # worst case both axes equal: peak = A * wx * sqrt(2) => wx_max = v_hi / A
-    A_lis = R / math.sqrt(2.0)
+    A_lis = R #/ math.sqrt(2.0)
     wx_max = max(0.2, v_hi / max(A_lis, 1e-9))
 
     # --- rosette ---
     # peak ≈ A * (w1 + w2),  A = R
     # equal split: w_max = v_hi / (2 * R)
-    w_ros_max = max(0.2, v_hi / max(2.0 * R, 1e-9))
+    #w_ros_max = max(0.2, v_hi / max(2.0 * R, 1e-9))
+    w_ros_max = wx_max # porque no?
 
 
     # --- dual_raster ---
@@ -160,7 +161,7 @@ def build_parameter_spaces(sim_cfg, mc_cfg) -> dict:
             "s2_w2": ("float", 0.1, w_ros_max),
         },
         "dual_spiral": {
-            "k_ratio":        ("float", 0.5, 2.0),
+            "k_ratio":        ("float", 0.5, 1.0),
             "s2_hold_delay":  ("float", 0.0, 5.0),
             "phase_offset":   ("float", 0.0, 6.2831853),
         },
@@ -240,7 +241,7 @@ def peak_speed_for_strategy(
         # u = A·sin(wx·t + delta),  v = A·sin(wy·t)
         # |du/dt|_max = A·wx,  |dv/dt|_max = A·wy
         # peak ≈ A·√(wx²+wy²)  (both reach max simultaneously at worst case)
-        A = max_radius / math.sqrt(2.0)
+        A = max_radius #/ math.sqrt(2.0)
         peak_s1 = A * math.sqrt(params.get("s1_wx", 1.0) ** 2 + params.get("s1_wy", 1.41421356) ** 2)
         peak_s2 = A * math.sqrt(params.get("s2_wx", 1.0) ** 2 + params.get("s2_wy", 1.41421356) ** 2)
         return max(peak_s1, peak_s2)
@@ -250,8 +251,8 @@ def peak_speed_for_strategy(
         # |dr/dt|_max = A·w2,  peak tangential ≈ A·w1
         # conservative bound: A·(w1 + w2)
         A = max_radius
-        peak_s1 = A * (abs(params.get("s1_w1", 1.0)) + abs(params.get("s1_w2", 11.0)))
-        peak_s2 = A * (abs(params.get("s2_w1", 1.0)) + abs(params.get("s2_w2", 1.0)))
+        peak_s1 = A * math.sqrt(params.get("s1_w1", 1.0) ** 2 + params.get("s1_w2", 1.41421356) ** 2)
+        peak_s2 = A * math.sqrt(params.get("s2_w1", 1.0) ** 2 + params.get("s2_w2", 1.41421356) ** 2)
         return max(peak_s1, peak_s2)
 
     if strategy_name in ("random_curve", "center_rebias"):
@@ -292,6 +293,7 @@ def evaluate_candidate(
     mc_cfg,
     fixed_offsets: list,
     max_workers: int,
+    max_success_penalty: float,
 ) -> tuple[float, float, float, float | None]:
     from strategy.base import CONFIG_PARSERS
 
@@ -321,20 +323,22 @@ def evaluate_candidate(
         chain=(strategy_name,),
         error=mc_cfg.error,
         strategy=strategy,
+        overrides=mc_cfg.overrides,
     )
 
     if os.environ.get("SATELLITE_NO_GPU") != "1" and is_strategy_chain_supported_on_gpu(mc):
         summary = run_monte_carlo_cuda(mc)
         success_rate = summary.success_rate
+        success_rate_cost = min((success_rate * (1/max_success_penalty)), 1) # cap success cost at 90%, focus on speed after that
         timeout = sim_cfg.simulation.timeout
         mean_t = summary.mean_t if summary.mean_t is not None else timeout
         penalty = timeout * 2.0
-        cost = ((1.0 - success_rate) * penalty) + mean_t
+        cost = ((1.0 - success_rate_cost) * penalty) + mean_t
         return cost, success_rate, mean_t, summary.median_t
 
     # Fallback to CPU parallel execution
     tasks = [
-        (sim_cfg, ScenarioInstance(name=f"eval_{idx}", s1=s1_off, s2=s2_off, chain=(strategy_name,)), strategy)
+        (sim_cfg, ScenarioInstance(name=f"eval_{idx}", s1=s1_off, s2=s2_off, chain=(strategy_name,), overrides=mc.overrides), strategy)
         for idx, (s1_off, s2_off) in enumerate(fixed_offsets)
     ]
 
@@ -359,13 +363,14 @@ def evaluate_candidate(
         raise OptimizationInterrupted() from None
 
     success_rate = successes / len(fixed_offsets)
+    success_rate_cost = min((success_rate * (1/max_success_penalty)), 1) # cap success cost at 90%, focus on speed after that
     timeout = sim_cfg.simulation.timeout
     mean_t = float(np.mean(hit_times)) if hit_times else timeout
     median_t = float(np.median(hit_times)) if hit_times else None
 
     # Cost: prioritise lock rate first, then speed
     penalty = timeout * 2.0
-    cost = ((1.0 - success_rate) * penalty) + mean_t
+    cost = ((1.0 - success_rate_cost) * penalty) + mean_t
     return cost, success_rate, mean_t, median_t
 
 
@@ -417,6 +422,7 @@ def run_random_search(
     fixed_offsets: list,
     trials: int,
     max_workers: int,
+    max_success_penalty: float,
     seed: int | None = None,
 ) -> SearchResult:
     """Basic Random Search optimization.
@@ -445,7 +451,7 @@ def run_random_search(
                 continue  # draw again — does NOT advance completed_trials
 
             cost, success_rate, mean_t, _median_t = evaluate_candidate(
-                candidate, strategy_name, sim_cfg, mc_cfg, fixed_offsets, max_workers
+                candidate, strategy_name, sim_cfg, mc_cfg, fixed_offsets, max_workers, max_success_penalty
             )
             completed_trials += 1
             print(
@@ -473,6 +479,7 @@ def run_grid_search(
     fixed_offsets: list,
     grid_points: int,
     max_workers: int,
+    max_success_penalty: float,
 ) -> SearchResult:
     """Grid Search optimization. Best for 1–2 parameters.
 
@@ -528,7 +535,7 @@ def run_grid_search(
                 continue  # skip this grid point entirely
 
             cost, success_rate, mean_t, _median_t = evaluate_candidate(
-                candidate, strategy_name, sim_cfg, mc_cfg, fixed_offsets, max_workers
+                candidate, strategy_name, sim_cfg, mc_cfg, fixed_offsets, max_workers, max_success_penalty
             )
             completed_trials += 1
             print(
@@ -556,6 +563,7 @@ def run_optuna_search(
     fixed_offsets: list,
     trials: int,
     max_workers: int,
+    max_success_penalty: float,
     seed: int | None = None,
 ) -> SearchResult:
     """Optuna study optimization. Intelligent Bayesian Search."""
@@ -569,7 +577,7 @@ def run_optuna_search(
             "Falling back to Random Search instead..."
         )
         return run_random_search(
-            strategy_name, space, sim_cfg, mc_cfg, fixed_offsets, trials, max_workers, seed=seed
+            strategy_name, space, sim_cfg, mc_cfg, fixed_offsets, trials, max_workers, max_success_penalty, seed=seed
         )
 
     interrupted = False
@@ -684,6 +692,7 @@ def run_optuna_search(
                         chain=(strategy_name,),
                         error=mc_cfg.error,
                         strategy=run_strat,
+                        overrides=mc_cfg.overrides,
                     )
                     batch_configs.append(mc)
 
@@ -694,17 +703,18 @@ def run_optuna_search(
                     summaries = run_monte_carlo_cuda_batch(batch_configs)
                     for trial, summary, mc_c in zip(batch_trials, summaries, batch_configs):
                         success_rate = summary.success_rate
+                        success_rate_cost = min((success_rate * (1/max_success_penalty)), 1) # cap success cost at 90%, focus on speed after that
                         timeout = sim_cfg.simulation.timeout
                         mean_t = summary.mean_t if summary.mean_t is not None else timeout
                         penalty = timeout * 2.0
-                        cost = ((1.0 - success_rate) * penalty) + mean_t
+                        cost = ((1.0 - success_rate_cost) * penalty) + mean_t
 
                         study.tell(trial, cost)
                         completed_trials += 1
 
                         from dataclasses import asdict
                         log_params = asdict(mc_c.strategy.params[strategy_name])
-                        print(f"Trial {completed_trials}/{trials}: params={log_params} -> Cost: {cost:.4f}")
+                        print(f"Trial {completed_trials}/{trials}: mean: {mean_t:.2f}, success: {(success_rate*100):.0f} -> Cost: {cost:.2f}")
                 except Exception as e:
                     for trial in batch_trials:
                         try:
@@ -746,7 +756,7 @@ def run_optuna_search(
 
                 try:
                     cost, _, _, _ = evaluate_candidate(
-                        candidate, strategy_name, sim_cfg, mc_cfg, fixed_offsets, 1
+                        candidate, strategy_name, sim_cfg, mc_cfg, fixed_offsets, 1, max_success_penalty
                     )
                     with lock:
                         study.tell(trial, cost)
@@ -888,6 +898,7 @@ def main():
     trials = args.trials if args.trials is not None else opt_cfg.trials
     grid_points = args.grid_points
     trial_seed = args.trial_seed if args.trial_seed is not None else opt_cfg.trial_seed
+    max_success_penalty = opt_cfg.max_success_penalty
 
     # Load / resolve Monte Carlo configuration
     if config_path.exists() and "monte_carlo" in toml_data:
@@ -992,15 +1003,15 @@ def main():
     try:
         if method == "grid":
             best_params, best_cost, interrupted, completed_trials = run_grid_search(
-                strategy, space, sim_cfg, mc_cfg, fixed_offsets, grid_points, max_workers
+                strategy, space, sim_cfg, mc_cfg, fixed_offsets, grid_points, max_workers, max_success_penalty
             )
         elif method == "optuna":
             best_params, best_cost, interrupted, completed_trials = run_optuna_search(
-                strategy, space, sim_cfg, mc_cfg, fixed_offsets, trials, max_workers, seed=trial_seed
+                strategy, space, sim_cfg, mc_cfg, fixed_offsets, trials, max_workers, max_success_penalty, seed=trial_seed
             )
         else:
             best_params, best_cost, interrupted, completed_trials = run_random_search(
-                strategy, space, sim_cfg, mc_cfg, fixed_offsets, trials, max_workers, seed=trial_seed
+                strategy, space, sim_cfg, mc_cfg, fixed_offsets, trials, max_workers, max_success_penalty, seed=trial_seed
             )
     except (KeyboardInterrupt, OptimizationInterrupted):
         _note_interrupt()
@@ -1008,9 +1019,9 @@ def main():
 
     elapsed = time.time() - start_time
 
-    if best_params and strategy == "lissajous_scan":
-        best_params["s1_delta"] = 1.570796
-        best_params["s2_delta"] = 1.570796
+    # if best_params and strategy == "lissajous_scan":
+    #     best_params["s1_delta"] = 1.570796
+    #     best_params["s2_delta"] = 1.570796
 
     summary_lines = build_summary_lines(
         interrupted=interrupted,
@@ -1044,6 +1055,7 @@ def main():
             mc_cfg,
             fixed_offsets,
             max_workers,
+            max_success_penalty
         )
 
     log_path = write_result_log(
