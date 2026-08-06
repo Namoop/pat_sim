@@ -654,6 +654,7 @@ def run_optuna_search(
     max_workers: int,
     max_success_penalty: float,
     seed: int | None = None,
+    batch_size: int = 32,
 ) -> SearchResult:
     """Optuna study optimization. Intelligent Bayesian Search."""
     try:
@@ -718,7 +719,7 @@ def run_optuna_search(
         study = optuna.create_study(direction="minimize")
 
     if use_gpu_batch:
-        BATCH_SIZE = max_workers if max_workers > 1 else 8
+        BATCH_SIZE = max(1, int(batch_size))
         MAX_PRUNE_ATTEMPTS = BATCH_SIZE * 200  # give up filling a batch after this many consecutive pruned candidates
         print(f"Using GPU batch execution (batch size {BATCH_SIZE})...")
         try:
@@ -978,6 +979,7 @@ def main():
     grid_points = args.grid_points
     trial_seed = args.trial_seed if args.trial_seed is not None else opt_cfg.trial_seed
     max_success_penalty = opt_cfg.max_success_penalty
+    batch_size = opt_cfg.batch_size
 
     # Load / resolve Monte Carlo configuration
     if config_path.exists() and "monte_carlo" in toml_data:
@@ -1086,7 +1088,16 @@ def main():
             )
         elif method == "optuna":
             best_params, best_cost, interrupted, completed_trials = run_optuna_search(
-                strategy, space, sim_cfg, mc_cfg, fixed_offsets, trials, max_workers, max_success_penalty, seed=trial_seed
+                strategy,
+                space,
+                sim_cfg,
+                mc_cfg,
+                fixed_offsets,
+                trials,
+                max_workers,
+                max_success_penalty,
+                seed=trial_seed,
+                batch_size=batch_size,
             )
         else:
             best_params, best_cost, interrupted, completed_trials = run_random_search(
@@ -1120,6 +1131,8 @@ def main():
     }
     if trial_seed is not None:
         optimize_section["trial_seed"] = trial_seed
+    if method == "optuna":
+        optimize_section["batch_size"] = batch_size
     if method == "grid":
         optimize_section["grid_points"] = grid_points
 

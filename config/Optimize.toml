@@ -4,11 +4,12 @@ method = "optuna"
 trials = 150
 trial_seed = 105
 max_success_penalty = 0.95
+batch_size = 16
 
 [monte_carlo]
 environment = "Environment.toml"
 seed = 42
-runs = 1000
+runs = 500
 error.distribution = "gaussian"
 error.gaussian.limit = 4        # 68% will be below limit for confidence = 1, 95% below 2*limit
 error.gaussian.confidence = 3   # sigma

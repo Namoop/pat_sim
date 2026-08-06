@@ -128,6 +128,8 @@ The configuration file contains two primary blocks:
 - `method` (string): The search algorithm to employ (`"grid"`, `"random"`, or `"optuna"`).
 - `trials` (int): Number of search iterations (for `"random"` and `"optuna"`).
 - `trial_seed` (int, optional): Seed for the search algorithm's random sampler.
+- `max_success_penalty` (float, optional): Caps how strongly success rate dominates the cost (default `1.0`).
+- `batch_size` (int, optional): GPU Optuna batch size — how many candidates are evaluated in one CUDA launch (default `32`).
 
 ### `[monte_carlo]` (Evaluation Environment)
 
