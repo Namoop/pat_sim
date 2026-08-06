@@ -1,7 +1,7 @@
 [optimize]
-strategy = "dual_spiral"
+strategy = "lissajous_scan"
 method = "optuna"
-trials = 122
+trials = 150
 trial_seed = 105
 max_success_penalty = 0.95
 
@@ -10,7 +10,6 @@ environment = "Environment.toml"
 seed = 42
 runs = 1000
 error.distribution = "gaussian"
-error.gaussian.limit = 2    # 68% will be below limit, 95% below 2*limit
-error.gaussian.confidence = 3
-simulation.max_search_radius = 2
-simulation.timeout = 100    # also increases failure punishment
+error.gaussian.limit = 4        # 68% will be below limit for confidence = 1, 95% below 2*limit
+error.gaussian.confidence = 3   # sigma
+simulation.timeout = 100        # also increases failure punishment

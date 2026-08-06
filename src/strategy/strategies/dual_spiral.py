@@ -17,13 +17,17 @@ class DualSpiralConfig:
     k_ratio: float = 1.0
     s2_hold_delay: float = 0.0
     phase_offset: float = 0.0
+    radius: float | None = None
 
 
 def parse_dual_spiral_config(data: dict) -> DualSpiralConfig:
+    radius_raw = data.get("radius")
+    radius = None if radius_raw is None else float(radius_raw) * 1e-3
     return DualSpiralConfig(
         k_ratio=float(data.get("k_ratio", 1.0)),
         s2_hold_delay=float(data.get("s2_hold_delay", 0.0)),
         phase_offset=float(data.get("phase_offset", 0.0)),
+        radius=radius,
     )
 
 
@@ -45,7 +49,11 @@ class DualSpiralStrategy(SearchStrategy):
     def build_script(self, ctx: StrategyContext):
         from strategy.actions import hold
 
-        max_radius = ctx.config.simulation.max_search_radius
+        max_radius = (
+            self.config.radius
+            if self.config.radius is not None
+            else ctx.config.simulation.max_search_radius
+        )
         max_beam_speed = ctx.config.satellite.max_beam_speed
         strategy_config = ctx.config.strategy
         timeout = ctx.config.simulation.timeout

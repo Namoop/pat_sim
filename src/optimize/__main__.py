@@ -84,7 +84,7 @@ def _note_interrupt() -> None:
 SearchResult = tuple[dict, float, bool, int]
 
 from config import load_toml
-from montecarlo.run import load_monte_carlo_config, sample_offsets
+from montecarlo.run import _calculate_sigma, load_monte_carlo_config, sample_offsets
 from montecarlo.types import GaussianErrorConfig, MonteCarloConfig
 from optimize.config import parse as parse_optimize
 from optimize.result_log import build_summary_lines, write_result_log
@@ -96,6 +96,23 @@ from strategy.config import StrategyConfig
 # ---------------------------------------------------------------------------
 # Search spaces
 # ---------------------------------------------------------------------------
+
+def _three_sigma_mrad(mc_cfg, sim_cfg) -> float:
+    """Return the 3σ pointing-error radius in milliradians."""
+    error = mc_cfg.error
+    if isinstance(error, GaussianErrorConfig):
+        return 3.0 * _calculate_sigma(error.limit, error.confidence) * 1e3
+    return sim_cfg.simulation.max_search_radius * 1e3
+
+
+def _radius_search_bounds_mrad(sim_cfg, mc_cfg) -> tuple[float, float]:
+    """Optimize radius in [max(FOV, 3σ−2), 3σ+1] milliradians."""
+    three_sigma = _three_sigma_mrad(mc_cfg, sim_cfg)
+    fov = sim_cfg.satellite.dish_fov * 1e3
+    lo = max(fov, three_sigma - 2.0)
+    hi = max(lo, three_sigma + 1.0)
+    return lo, hi
+
 
 def build_parameter_spaces(sim_cfg, mc_cfg) -> dict:
     """Derive per-strategy parameter bounds from the loaded simulation config.
@@ -114,18 +131,12 @@ def build_parameter_spaces(sim_cfg, mc_cfg) -> dict:
     ratio_rc_max = 3.0
     vel_a_max = max(1e-4, v_hi / ratio_rc_max)
 
-    # --- lissajous ---
-    # peak ≈ A * sqrt(wx² + wy²),  A = R #/ sqrt(2)
-    # worst case both axes equal: peak = A * wx * sqrt(2) => wx_max = v_hi / A
-    A_lis = R #/ math.sqrt(2.0)
+    # --- lissajous / rosette / dual_spiral radius (mrad) ---
+    radius_lo, radius_hi = _radius_search_bounds_mrad(sim_cfg, mc_cfg)
+    # Frequency caps use the largest searchable radius so peak speed stays valid
+    A_lis = radius_hi * 1e-3
     wx_max = max(0.2, v_hi / max(A_lis, 1e-9))
-
-    # --- rosette ---
-    # peak ≈ A * (w1 + w2),  A = R
-    # equal split: w_max = v_hi / (2 * R)
-    #w_ros_max = max(0.2, v_hi / max(2.0 * R, 1e-9))
-    w_ros_max = wx_max # porque no?
-
+    w_ros_max = wx_max
 
     # --- dual_raster ---
     # peak = 2 * R * steps * speed / 10
@@ -153,17 +164,22 @@ def build_parameter_spaces(sim_cfg, mc_cfg) -> dict:
             "s1_wy": ("float", 0.1, wx_max),
             "s2_wx": ("float", 0.1, wx_max),
             "s2_wy": ("float", 0.1, wx_max),
+            "s2_hold_delay": ("discrete", 0.0, 2.5, 4.0),
+            "radius": ("float", radius_lo, radius_hi),
         },
         "rosette_scan": {
             "s1_w1": ("float", 0.1, w_ros_max),
             "s1_w2": ("float", 0.1, w_ros_max),
             "s2_w1": ("float", 0.1, w_ros_max),
             "s2_w2": ("float", 0.1, w_ros_max),
+            "s2_hold_delay": ("discrete", 0.0, 2.5, 4.0),
+            "radius": ("float", radius_lo, radius_hi),
         },
         "dual_spiral": {
             "k_ratio":        ("float", 0.5, 1.0),
             "s2_hold_delay":  ("float", 0.0, 5.0),
             "phase_offset":   ("float", 0.0, 6.2831853),
+            "radius":         ("float", radius_lo, radius_hi),
         },
         "dual_raster": {
             "steps_a":     ("int",   5,     steps_max),
@@ -241,7 +257,9 @@ def peak_speed_for_strategy(
         # u = A·sin(wx·t + delta),  v = A·sin(wy·t)
         # |du/dt|_max = A·wx,  |dv/dt|_max = A·wy
         # peak ≈ A·√(wx²+wy²)  (both reach max simultaneously at worst case)
-        A = max_radius #/ math.sqrt(2.0)
+        # Optimizer samples radius in mrad; fall back to max_search_radius.
+        radius_mrad = params.get("radius")
+        A = (float(radius_mrad) * 1e-3) if radius_mrad is not None else max_radius
         peak_s1 = A * math.sqrt(params.get("s1_wx", 1.0) ** 2 + params.get("s1_wy", 1.41421356) ** 2)
         peak_s2 = A * math.sqrt(params.get("s2_wx", 1.0) ** 2 + params.get("s2_wy", 1.41421356) ** 2)
         return max(peak_s1, peak_s2)
@@ -250,7 +268,8 @@ def peak_speed_for_strategy(
         # r = A·cos(w2·t); u = r·cos(w1·t), v = r·sin(w1·t)
         # |dr/dt|_max = A·w2,  peak tangential ≈ A·w1
         # conservative bound: A·(w1 + w2)
-        A = max_radius
+        radius_mrad = params.get("radius")
+        A = (float(radius_mrad) * 1e-3) if radius_mrad is not None else max_radius
         peak_s1 = A * math.sqrt(params.get("s1_w1", 1.0) ** 2 + params.get("s1_w2", 1.41421356) ** 2)
         peak_s2 = A * math.sqrt(params.get("s2_w1", 1.0) ** 2 + params.get("s2_w2", 1.41421356) ** 2)
         return max(peak_s1, peak_s2)
@@ -378,14 +397,78 @@ def evaluate_candidate(
 # Candidate sampling helpers
 # ---------------------------------------------------------------------------
 
+def _discrete_choices(spec: tuple) -> list[float]:
+    """Return the allowed values for a ``("discrete", v0, v1, ...)`` space spec."""
+    values = [float(v) for v in spec[1:]]
+    if not values:
+        raise ValueError("discrete parameter space requires at least one value")
+    return values
+
+
+def _spec_lo(spec: tuple) -> float:
+    if spec[0] == "discrete":
+        return min(_discrete_choices(spec))
+    return float(spec[1])
+
+
+def _spec_hi(spec: tuple) -> float:
+    if spec[0] == "discrete":
+        return max(_discrete_choices(spec))
+    return float(spec[2])
+
+
+def _suggest_param(trial, param: str, spec: tuple):
+    """Sample one parameter for an Optuna trial from a space *spec*."""
+    ptype = spec[0]
+    if ptype == "float":
+        _, start, end = spec
+        return trial.suggest_float(param, start, end)
+    if ptype == "int":
+        _, start, end = spec
+        return trial.suggest_int(param, start, end)
+    if ptype == "discrete":
+        return trial.suggest_categorical(param, _discrete_choices(spec))
+    raise ValueError(f"unknown parameter type {ptype!r} for {param}")
+
+
+def _midpoint_param(spec: tuple):
+    """Return a mid-range default for a space *spec* (dummy / fill values)."""
+    ptype = spec[0]
+    if ptype == "float":
+        _, start, end = spec
+        return (start + end) / 2.0
+    if ptype == "int":
+        _, start, end = spec
+        return int((start + end) / 2)
+    if ptype == "discrete":
+        values = _discrete_choices(spec)
+        return values[len(values) // 2]
+    raise ValueError(f"unknown parameter type {ptype!r}")
+
+
+def _format_space_spec(spec: tuple) -> str:
+    ptype = spec[0]
+    if ptype == "discrete":
+        return f"{ptype} {{{', '.join(str(v) for v in _discrete_choices(spec))}}}"
+    _, start, end = spec
+    return f"{ptype} in [{start}, {end}]"
+
+
 def _sample_candidate(space: dict, rng: np.random.Generator) -> dict:
     candidate = {}
     for param, spec in space.items():
-        ptype, start, end = spec
+        ptype = spec[0]
         if ptype == "float":
+            _, start, end = spec
             candidate[param] = float(rng.uniform(start, end))
         elif ptype == "int":
+            _, start, end = spec
             candidate[param] = int(rng.integers(start, end + 1))
+        elif ptype == "discrete":
+            values = _discrete_choices(spec)
+            candidate[param] = float(values[int(rng.integers(0, len(values)))])
+        else:
+            raise ValueError(f"unknown parameter type {ptype!r} for {param}")
     return candidate
 
 
@@ -499,11 +582,17 @@ def run_grid_search(
 
     grids = []
     for k in keys:
-        ptype, start, end = space[k]
+        ptype = space[k][0]
         if ptype == "float":
+            _, start, end = space[k]
             grids.append(np.linspace(start, end, grid_points))
         elif ptype == "int":
+            _, start, end = space[k]
             grids.append(np.unique(np.round(np.linspace(start, end, grid_points)).astype(int)))
+        elif ptype == "discrete":
+            grids.append(np.asarray(_discrete_choices(space[k])))
+        else:
+            raise ValueError(f"unknown parameter type {ptype!r} for {k}")
 
     grid_coords = np.meshgrid(*grids)
     flat_coords = [c.flatten() for c in grid_coords]
@@ -593,10 +682,7 @@ def run_optuna_search(
     from montecarlo.cuda import is_strategy_chain_supported_on_gpu, run_monte_carlo_cuda_batch, CUDA_AVAILABLE
     
     # Construct a valid dummy parameters object using midpoints of the search space
-    dummy_params = {}
-    for param, spec in space.items():
-        ptype, start, end = spec
-        dummy_params[param] = (start + end) / 2.0 if ptype == "float" else int((start + end) / 2)
+    dummy_params = {param: _midpoint_param(spec) for param, spec in space.items()}
         
     if strategy_name == "lissajous_scan":
         dummy_params["s1_delta"] = 1.570796
@@ -652,13 +738,10 @@ def run_optuna_search(
                         break
 
                     trial = study.ask()
-                    candidate = {}
-                    for param, spec in space.items():
-                        ptype, start, end = spec
-                        if ptype == "float":
-                            candidate[param] = trial.suggest_float(param, start, end)
-                        elif ptype == "int":
-                            candidate[param] = trial.suggest_int(param, start, end)
+                    candidate = {
+                        param: _suggest_param(trial, param, spec)
+                        for param, spec in space.items()
+                    }
 
                     cand_eval = dict(candidate)
                     if strategy_name == "lissajous_scan":
@@ -741,11 +824,7 @@ def run_optuna_search(
 
                 candidate: dict = {}
                 for param, spec in space.items():
-                    ptype, start, end = spec
-                    if ptype == "float":
-                        candidate[param] = trial.suggest_float(param, start, end)
-                    elif ptype == "int":
-                        candidate[param] = trial.suggest_int(param, start, end)
+                    candidate[param] = _suggest_param(trial, param, spec)
 
                 peak = peak_speed_for_strategy(strategy_name, candidate, sim_cfg, mc_cfg)
                 if peak > max_speed:
@@ -975,13 +1054,13 @@ def main():
     space = build_parameter_spaces(sim_cfg, mc_cfg)[strategy]
     print(f"\nOptimizing strategy: '{strategy}' with search space:")
     for param, spec in space.items():
-        print(f"  {param}: {spec[0]} in [{spec[1]}, {spec[2]}]")
+        print(f"  {param}: {_format_space_spec(spec)}")
 
     # Warn early if the entire search space is physically infeasible
     max_speed = sim_cfg.satellite.max_beam_speed
-    hi_params = {p: spec[2] for p, spec in space.items()}  # all parameters at upper bound
+    hi_params = {p: _spec_hi(spec) for p, spec in space.items()}
     hi_peak = peak_speed_for_strategy(strategy, hi_params, sim_cfg, mc_cfg)
-    lo_params = {p: spec[1] for p, spec in space.items()}  # all parameters at lower bound
+    lo_params = {p: _spec_lo(spec) for p, spec in space.items()}
     lo_peak = peak_speed_for_strategy(strategy, lo_params, sim_cfg, mc_cfg)
     print(
         f"\nSpeed range across search space: {lo_peak:.4f} – {hi_peak:.4f} rad/s "

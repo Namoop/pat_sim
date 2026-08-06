@@ -192,12 +192,14 @@ hold(duration=lock_duration)
 
 In the **Dual Spiral** strategy, both satellites perform an Archimedean spiral search simultaneously. To maximize the probability of beam intersection and avoid "phase locking" where the satellites remain at the same relative phase, their expansion rates (or angular frequencies) are related by an irrational ratio, typically $\sqrt{2}$.
 
-Both satellites spiral from the center $(0,0)$ out to the global `max_search_radius`, and then immediately spiral back from the maximum radius to the center. This "in-and-out" motion ensures that the search covers the central high-probability region twice per cycle.
+Both satellites spiral from the center $(0,0)$ out to the configured search `radius`, and then immediately spiral back from the maximum radius to the center. This "in-and-out" motion ensures that the search covers the central high-probability region twice per cycle.
 
 ### Configuration Parameters
 
-* `speed_a` (float): Base spiral speed.
-* `speed_ratio` (float): Ratio of S2 to S1 spiral speed (`speed_b = speed_a * speed_ratio`).                                    
+* `radius` (float, milliradians, optional): Spiral envelope radius. Defaults to `simulation.max_search_radius` when omitted.
+* `k_ratio` (float): Ratio relating S2 spiral pitch/frequency to S1 (default `1.0`).
+* `s2_hold_delay` (float, seconds): Duration S2 holds at boresight before starting its spiral (default `0`).
+* `phase_offset` (float, radians): Phase offset applied to S2's spiral (default `0`).
 
 
 ### Action Script (Pseudocode)
@@ -206,16 +208,17 @@ Both satellites spiral from the center $(0,0)$ out to the global `max_search_rad
 
 ```python
 beam.enable(); receiver.enable()
-spiral(radius=max_search_radius, speed=speed_a)
-spiral(radius=0, speed=speed_a)
+spiral(radius=radius, ...)
+spiral(radius=0, ...)
 ```
 
 **Satellite S2:**
 
 ```python
 beam.enable(); receiver.enable()
-spiral(radius=max_search_radius, speed=speed_a * speed_ratio)
-spiral(radius=0, speed=speed_a * speed_ratio)
+hold(duration=s2_hold_delay)  # skipped when delay is 0
+spiral(radius=radius, phase_offset=phase_offset, ...)
+spiral(radius=0, phase_offset=phase_offset, ...)
 ```
 
 ---
@@ -265,14 +268,16 @@ The boresight position $(x, y)$ is given by:
 $x(t) = \text{maxsearchradius} \cdot \sin(\omega_x t + \delta)$
 $y(t) = \text{maxsearchradius} \cdot \sin(\omega_y t)$
 
-By selecting a frequency ratio $\omega_x / \omega_y$ that is near-irrational or a large-denominator rational, the curve will fill the rectangular bounding box of the `max_search_radius` without repeating itself for a long duration.
+By selecting a frequency ratio $\omega_x / \omega_y$ that is near-irrational or a large-denominator rational, the curve will fill the rectangular bounding box of the configured search `radius` without repeating itself for a long duration.
 
 ### Configuration Parameters
 
+* `radius` (float, milliradians, optional): Pattern envelope radius. Defaults to `simulation.max_search_radius` when omitted.
 * `s1_wx` / `s1_wy` (float, rad/s): Sinusoidal frequencies for S1.
 * `s1_delta` (float, radians): Phase offset for S1 (kept in radians).
 * `s2_wx` / `s2_wy` (float, rad/s): Sinusoidal frequencies for S2.
 * `s2_delta` (float, radians): Phase offset for S2 (kept in radians).
+* `s2_hold_delay` (float, seconds): Duration S2 holds at boresight before starting its scan (default `0`).
 
 
 ### Action Script (Pseudocode)
@@ -281,7 +286,15 @@ By selecting a frequency ratio $\omega_x / \omega_y$ that is near-irrational or 
 
 ```python
 beam.enable(); receiver.enable()
-lissajous(A=max_search_radius, wx=wx, wy=wy, delta=delta, duration=duration)
+lissajous(A=radius, wx=wx, wy=wy, delta=delta, duration=timeout)
+```
+
+**Satellite S2:**
+
+```python
+beam.enable(); receiver.enable()
+hold(duration=s2_hold_delay)  # skipped when delay is 0
+lissajous(A=radius, wx=wx, wy=wy, delta=delta, duration=timeout - s2_hold_delay)
 ```
 
 ---
@@ -293,15 +306,17 @@ lissajous(A=max_search_radius, wx=wx, wy=wy, delta=delta, duration=duration)
 The **Rosette Scan** produces a flower-like pattern that provides extremely high density at the center of the search area while still covering the peripheral field of regard. The pattern is defined by the superposition of two counter-rotating circular motions.
 
 The boresight position $(x, y)$ is given by:
-$x(t) = \text{maxsearchradius} \cdot \cos(\omega_1 t)$
-$y(t) = \text{maxsearchradius} \cdot \cos(\omega_2 t)$
+$x(t) = \text{radius} \cdot \cos(\omega_1 t)$
+$y(t) = \text{radius} \cdot \cos(\omega_2 t)$
 
-If the ratio $\omega_1 / \omega_2$ is irrational, the pattern will eventually fill the entire circular area bounded by the global `max_search_radius`.
+If the ratio $\omega_1 / \omega_2$ is irrational, the pattern will eventually fill the entire circular area bounded by `radius`.
 
 ### Configuration Parameters
 
+* `radius` (float, milliradians, optional): Pattern envelope radius. Defaults to `simulation.max_search_radius` when omitted.
 * `s1_w1` / `s1_w2` (float, rad/s): counter-rotating frequencies for S1.
 * `s2_w1` / `s2_w2` (float, rad/s): counter-rotating frequencies for S2.
+* `s2_hold_delay` (float, seconds): Duration S2 holds at boresight before starting its scan (default `0`).
 
 
 ### Action Script (Pseudocode)
@@ -310,14 +325,15 @@ If the ratio $\omega_1 / \omega_2$ is irrational, the pattern will eventually fi
 
 ```python
 beam.enable(); receiver.enable()
-rosette(A=max_search_radius, w1=s1_w1, w2=s1_w2, duration=duration)
+rosette(A=radius, w1=s1_w1, w2=s1_w2, duration=timeout)
 ```
 
 **Satellite S2:**
 
 ```python
 beam.enable(); receiver.enable()
-rosette(A=max_search_radius, w1=s2_w1, w2=s2_w2, duration=duration)
+hold(duration=s2_hold_delay)  # skipped when delay is 0
+rosette(A=radius, w1=s2_w1, w2=s2_w2, duration=timeout - s2_hold_delay)
 ```
 
 ---

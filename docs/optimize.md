@@ -36,6 +36,10 @@ The script supports three search methods:
 - **Random Search (`random`)**: Randomly samples parameters from predefined uniform bounds. Surprisingly robust for higher-dimensional spaces.
 - **Bayesian Optimization (`optuna`)**: Uses **Optuna**'s Tree-structured Parzen Estimator (TPE) to build a surrogate model of the objective function, predicting which parameters will perform best. Highly recommended for multi-parameter strategies.
 
+Parameter spaces may include continuous floats, ints, or **discrete** categorical floats (e.g. `s2_hold_delay` for `lissajous_scan` / `rosette_scan` over `{0.0, 2.5, 4.0}`).
+
+For `lissajous_scan`, `rosette_scan`, and `dual_spiral`, `radius` (milliradians) is searched over $[\max(\text{FOV},\,3\sigma-2),\,3\sigma+1]$, where $3\sigma = 3\cdot\text{limit}/\text{confidence}$ for a numeric Gaussian confidence (or the equivalent from a percentage confidence). Non-Gaussian error configs fall back to `max_search_radius` as the $3\sigma$ stand-in.
+
 ### 4. Physical Speed Validation
 
 Every candidate parameter set is checked analytically against the hardware `max_beam_speed` limit **before** any simulation is run.

@@ -36,6 +36,7 @@ spiral_radius = 3
 k_ratio = 0.968159
 s2_hold_delay = 2.38801
 phase_offset = 1.84128
+#radius = 2.5
 
 [strategy.dual_raster]
 speed_a = 4.013988
@@ -50,6 +51,8 @@ s1_delta = 2.957257
 s2_wx = 16.992454
 s2_wy = 3.821853
 s2_delta = 5.530637
+#s2_hold_delay = 0.0
+#radius = 2.5
 
 #[strategy.lissajous_scan]
 #s1_wx = 1.804176
@@ -70,6 +73,8 @@ s1_w1 = 0.753856
 s1_w2 = 3.17467
 s2_w1 = 1.78189
 s2_w2 = 2.8708
+#s2_hold_delay = 0.0
+#radius = 2.5
 
 [strategy.center_rebias]
 velocity_a = 43.708
