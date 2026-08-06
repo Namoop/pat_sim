@@ -179,7 +179,7 @@ def run_monte_carlo_single(
             flush=True,
         )
     instance = ScenarioInstance(
-        name=f"mc_run_{run_index}",
+        name=f"mc_run_{run_index+1}",
         s1=s1_off,
         s2=s2_off,
         chain=mc.chain,
