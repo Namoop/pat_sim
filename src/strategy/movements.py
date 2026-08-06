@@ -10,6 +10,7 @@ from strategy.patterns import (
     basis_at_direction,
     circle_aim_at,
     grid_aim_at,
+    inout_spiral_aim_at,
     line_aim_at,
     lissajous_aim_at,
     raster_aim_at,
@@ -118,6 +119,31 @@ class Spiral(MovementPattern):
             u_y=ctx.u_y,
             u_z=ctx.u_z,
             max_radius=self.max_radius,
+            max_beam_speed=ctx.max_beam_speed,
+            phase_offset=self.phase_offset,
+        )
+
+
+@dataclass(frozen=True)
+class InOutSpiral(MovementPattern):
+    """Repeating out-to-radius then back-to-center spiral cycles in one leg."""
+
+    w: float
+    k: float
+    max_radius: float
+    one_way_duration: float
+    phase_offset: float = 0.0
+
+    def aim_at(self, local_t: float, duration: float, ctx: AimContext) -> Vec3:
+        return inout_spiral_aim_at(
+            local_t,
+            w=self.w,
+            k=self.k,
+            u_x=ctx.u_x,
+            u_y=ctx.u_y,
+            u_z=ctx.u_z,
+            max_radius=self.max_radius,
+            one_way_duration=self.one_way_duration,
             max_beam_speed=ctx.max_beam_speed,
             phase_offset=self.phase_offset,
         )

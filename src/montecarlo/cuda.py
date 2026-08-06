@@ -74,7 +74,7 @@ from scenario.types import (
     positions_for_distance,
 )
 from strategy.config import StrategyConfig
-from strategy.movements import Hold, Reset, Spiral, SerpentineRaster, Rosette, Lissajous
+from strategy.movements import Hold, Reset, Spiral, InOutSpiral, SerpentineRaster, Rosette, Lissajous
 from strategy.base import StrategyContext, StrategyResult
 from strategy.meta import MetaStrategy
 from strategy.actions import StrategyScript
@@ -319,7 +319,7 @@ if CUDA_AVAILABLE:
         return t * t * (3.0 - 2.0 * t)
 
     @cuda.jit(device=True)
-    def get_aim_device(leg_type, leg_params, local_t, duration, step_start_aim, u_x, u_y, u_z, envelope_ramp, envelope_profile, out_aim):
+    def get_aim_device(leg_type, leg_params, local_t, duration, step_start_aim, u_x, u_y, u_z, envelope_ramp, envelope_profile, max_beam_speed, out_aim):
         if leg_type == 0: # Hold
             out_aim[0] = step_start_aim[0]
             out_aim[1] = step_start_aim[1]
@@ -459,6 +459,78 @@ if CUDA_AVAILABLE:
             v_y = u_z[1] + u_off * u_x[1] + v_off * u_y[1]
             v_z = u_z[2] + u_off * u_x[2] + v_off * u_y[2]
             normalize_device((v_x, v_y, v_z), out_aim)
+        elif leg_type == 6: # InOutSpiral
+            w = leg_params[0]
+            k = leg_params[1]
+            max_radius = leg_params[2]
+            one_way_duration = leg_params[3]
+            phase_offset = leg_params[4]
+            if w <= 0.0 or one_way_duration <= 0.0 or max_radius <= 0.0:
+                out_aim[0] = u_z[0]
+                out_aim[1] = u_z[1]
+                out_aim[2] = u_z[2]
+                return
+
+            cycle = 2.0 * one_way_duration
+            phase = math.fmod(local_t, cycle)
+            if phase < 0.0:
+                phase += cycle
+
+            effective_speed = max_beam_speed
+            if phase < one_way_duration:
+                t_out = phase
+                if k <= 0.0:
+                    u = effective_speed * t_out
+                else:
+                    Y = (k * effective_speed * t_out) / w
+                    if Y <= 0.0:
+                        u = 0.0
+                    else:
+                        x = math.sqrt(2.0 * Y) if Y > 2.0 else Y
+                        for _ in range(3):
+                            sqrt_term = math.sqrt(1.0 + x * x)
+                            h_x = 0.5 * (x * sqrt_term + math.log(x + sqrt_term))
+                            diff = h_x - Y
+                            x = x - diff / sqrt_term
+                        u = x / k
+                if w * u > max_radius:
+                    u = max_radius / w
+                theta_l = w * u
+                phi_l = k * u + phase_offset
+            else:
+                t_in = phase - one_way_duration
+                t_reverse = one_way_duration - t_in
+                if t_reverse < 0.0:
+                    t_reverse = 0.0
+                if k <= 0.0:
+                    u = effective_speed * t_reverse
+                else:
+                    Y = (k * effective_speed * t_reverse) / w
+                    if Y <= 0.0:
+                        u = 0.0
+                    else:
+                        x = math.sqrt(2.0 * Y) if Y > 2.0 else Y
+                        for _ in range(3):
+                            sqrt_term = math.sqrt(1.0 + x * x)
+                            h_x = 0.5 * (x * sqrt_term + math.log(x + sqrt_term))
+                            diff = h_x - Y
+                            x = x - diff / sqrt_term
+                        u = x / k
+                theta_l = w * u
+                u_start = max_radius / w
+                phi_l = k * u_start * 2.0 - k * u + phase_offset
+
+            sin_theta = math.sin(theta_l)
+            cos_theta = math.cos(theta_l)
+            sin_phi = math.sin(phi_l)
+            cos_phi = math.cos(phi_l)
+            al0 = sin_theta * cos_phi
+            al1 = sin_theta * sin_phi
+            al2 = cos_theta
+            asx = al0 * u_x[0] + al1 * u_y[0] + al2 * u_z[0]
+            asy = al0 * u_x[1] + al1 * u_y[1] + al2 * u_z[1]
+            asz = al0 * u_x[2] + al1 * u_y[2] + al2 * u_z[2]
+            normalize_device((asx, asy, asz), out_aim)
 
     # ==============================================================================
     # Parallel Simulation Kernel
@@ -661,7 +733,7 @@ if CUDA_AVAILABLE:
                 leg_type = int(legs_s1[trial_idx, leg_idx, 2])
                 leg_params = (legs_s1[trial_idx, leg_idx, 3], legs_s1[trial_idx, leg_idx, 4], legs_s1[trial_idx, leg_idx, 5], legs_s1[trial_idx, leg_idx, 6], legs_s1[trial_idx, leg_idx, 7])
                 
-                get_aim_device(leg_type, leg_params, local_t - leg_start, leg_duration, s1_step_start_aim, s1_u_x, s1_u_y, s1_u_z, scan_envelope_ramp, scan_envelope_profile, aim_temp)
+                get_aim_device(leg_type, leg_params, local_t - leg_start, leg_duration, s1_step_start_aim, s1_u_x, s1_u_y, s1_u_z, scan_envelope_ramp, scan_envelope_profile, max_beam_speed, aim_temp)
                 s1_bench_boresight[0] = aim_temp[0]
                 s1_bench_boresight[1] = aim_temp[1]
                 s1_bench_boresight[2] = aim_temp[2]
@@ -689,7 +761,7 @@ if CUDA_AVAILABLE:
                 leg_type = int(legs_s2[trial_idx, leg_idx, 2])
                 leg_params = (legs_s2[trial_idx, leg_idx, 3], legs_s2[trial_idx, leg_idx, 4], legs_s2[trial_idx, leg_idx, 5], legs_s2[trial_idx, leg_idx, 6], legs_s2[trial_idx, leg_idx, 7])
                 
-                get_aim_device(leg_type, leg_params, local_t - leg_start, leg_duration, s2_step_start_aim, s2_u_x, s2_u_y, s2_u_z, scan_envelope_ramp, scan_envelope_profile, aim_temp)
+                get_aim_device(leg_type, leg_params, local_t - leg_start, leg_duration, s2_step_start_aim, s2_u_x, s2_u_y, s2_u_z, scan_envelope_ramp, scan_envelope_profile, max_beam_speed, aim_temp)
                 s2_bench_boresight[0] = aim_temp[0]
                 s2_bench_boresight[1] = aim_temp[1]
                 s2_bench_boresight[2] = aim_temp[2]
@@ -1008,11 +1080,11 @@ def is_strategy_chain_supported_on_gpu(mc: MonteCarloConfig) -> bool:
     for strategy in meta.strategies:
         script = strategy.build_script(ctx)
         for step in script.s1.movement_steps:
-            if not isinstance(step.movement, (Hold, Reset, Spiral, SerpentineRaster, Rosette, Lissajous)):
+            if not isinstance(step.movement, (Hold, Reset, Spiral, InOutSpiral, SerpentineRaster, Rosette, Lissajous)):
                 _gpu_compat_cache[cache_key] = False
                 return False
         for step in script.s2.movement_steps:
-            if not isinstance(step.movement, (Hold, Reset, Spiral, SerpentineRaster, Rosette, Lissajous)):
+            if not isinstance(step.movement, (Hold, Reset, Spiral, InOutSpiral, SerpentineRaster, Rosette, Lissajous)):
                 _gpu_compat_cache[cache_key] = False
                 return False
                 
@@ -1091,6 +1163,9 @@ def run_monte_carlo_cuda_batch(configs: list[MonteCarloConfig]) -> list[MonteCar
                 elif isinstance(mv, Spiral):
                     t_type = 2
                     p = [mv.w, mv.k, mv.max_radius, s1.bench.max_beam_speed, mv.phase_offset]
+                elif isinstance(mv, InOutSpiral):
+                    t_type = 6
+                    p = [mv.w, mv.k, mv.max_radius, mv.one_way_duration, mv.phase_offset]
                 elif isinstance(mv, SerpentineRaster):
                     t_type = 3
                     p = [mv.radius, float(mv.steps), 1.0 if mv.horizontal else 0.0, 1.0, 0.0]
@@ -1114,6 +1189,9 @@ def run_monte_carlo_cuda_batch(configs: list[MonteCarloConfig]) -> list[MonteCar
                 elif isinstance(mv, Spiral):
                     t_type = 2
                     p = [mv.w, mv.k, mv.max_radius, s2.bench.max_beam_speed, mv.phase_offset]
+                elif isinstance(mv, InOutSpiral):
+                    t_type = 6
+                    p = [mv.w, mv.k, mv.max_radius, mv.one_way_duration, mv.phase_offset]
                 elif isinstance(mv, SerpentineRaster):
                     t_type = 3
                     p = [mv.radius, float(mv.steps), 1.0 if mv.horizontal else 0.0, 1.0, 0.0]

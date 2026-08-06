@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from strategy.actions import beam, receiver, spiral, strategy
+from strategy.actions import beam, hold, inout_spiral, receiver, strategy
 from strategy.base import SearchStrategy, StrategyContext, register_strategy
 
 if TYPE_CHECKING:
@@ -47,8 +47,6 @@ class DualSpiralStrategy(SearchStrategy):
         )
 
     def build_script(self, ctx: StrategyContext):
-        from strategy.actions import hold
-
         max_radius = (
             self.config.radius
             if self.config.radius is not None
@@ -69,34 +67,47 @@ class DualSpiralStrategy(SearchStrategy):
         duration_s2 = strategy_config.spiral_duration(max_radius, w2, max_beam_speed)
 
         script = strategy(self.name)
-        
+
         with script.satellite("S1"):
             beam.enable(); receiver.enable()
             current_t = 0.0
             cycle = 2 * duration_s1
             if cycle > 0.0:
-                while current_t + cycle <= timeout:
-                    spiral(duration=duration_s1, w=w1, k=k1, max_radius=max_radius)
-                    spiral(duration=duration_s1, w=w1, k=k1, max_radius=0)
-                    current_t += cycle
+                n_cycles = int((timeout - current_t) // cycle)
+                if n_cycles > 0:
+                    inout_spiral(
+                        duration=n_cycles * cycle,
+                        w=w1,
+                        k=k1,
+                        max_radius=max_radius,
+                        one_way_duration=duration_s1,
+                    )
+                    current_t += n_cycles * cycle
             if current_t < timeout:
                 hold(duration=timeout - current_t)
 
         with script.satellite("S2"):
             beam.enable(); receiver.enable()
             current_t = 0.0
-            
+
             hold_delay = min(self.config.s2_hold_delay, timeout)
             if hold_delay > 0.0:
                 hold(duration=hold_delay)
                 current_t += hold_delay
-                
+
             cycle = 2 * duration_s2
             if cycle > 0.0:
-                while current_t + cycle <= timeout:
-                    spiral(duration=duration_s2, w=w2, k=k2, max_radius=max_radius, phase_offset=self.config.phase_offset)
-                    spiral(duration=duration_s2, w=w2, k=k2, max_radius=0, phase_offset=self.config.phase_offset)
-                    current_t += cycle
+                n_cycles = int((timeout - current_t) // cycle)
+                if n_cycles > 0:
+                    inout_spiral(
+                        duration=n_cycles * cycle,
+                        w=w2,
+                        k=k2,
+                        max_radius=max_radius,
+                        one_way_duration=duration_s2,
+                        phase_offset=self.config.phase_offset,
+                    )
+                    current_t += n_cycles * cycle
             if current_t < timeout:
                 hold(duration=timeout - current_t)
 

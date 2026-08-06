@@ -192,7 +192,7 @@ hold(duration=lock_duration)
 
 In the **Dual Spiral** strategy, both satellites perform an Archimedean spiral search simultaneously. To maximize the probability of beam intersection and avoid "phase locking" where the satellites remain at the same relative phase, their expansion rates (or angular frequencies) are related by an irrational ratio, typically $\sqrt{2}$.
 
-Both satellites spiral from the center $(0,0)$ out to the configured search `radius`, and then immediately spiral back from the maximum radius to the center. This "in-and-out" motion ensures that the search covers the central high-probability region twice per cycle.
+Both satellites spiral from the center $(0,0)$ out to the configured search `radius`, and then immediately spiral back from the maximum radius to the center. This "in-and-out" motion ensures that the search covers the central high-probability region twice per cycle. Complete out-and-back cycles repeat until `simulation.timeout`; any leftover time shorter than one full cycle is a hold at center.
 
 ### Configuration Parameters
 
@@ -208,8 +208,8 @@ Both satellites spiral from the center $(0,0)$ out to the configured search `rad
 
 ```python
 beam.enable(); receiver.enable()
-spiral(radius=radius, ...)
-spiral(radius=0, ...)
+inout_spiral(...)   # repeats out-and-back for floor(timeout / cycle) cycles
+hold(duration=remainder)  # skipped when remainder is 0
 ```
 
 **Satellite S2:**
@@ -217,8 +217,8 @@ spiral(radius=0, ...)
 ```python
 beam.enable(); receiver.enable()
 hold(duration=s2_hold_delay)  # skipped when delay is 0
-spiral(radius=radius, phase_offset=phase_offset, ...)
-spiral(radius=0, phase_offset=phase_offset, ...)
+inout_spiral(..., phase_offset=phase_offset)
+hold(duration=remainder)  # skipped when remainder is 0
 ```
 
 ---

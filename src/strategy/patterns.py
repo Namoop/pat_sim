@@ -120,6 +120,110 @@ def spiral_aim_at(
     return np.array([asx / norm, asy / norm, asz / norm], dtype=np.float64)
 
 
+def _spiral_reverse_aim_at(
+    local_t: float,
+    *,
+    duration: float,
+    w: float,
+    k: float,
+    u_x: Vec3,
+    u_y: Vec3,
+    u_z: Vec3,
+    r_start: float,
+    max_beam_speed: float,
+    phase_offset: float = 0.0,
+) -> Vec3:
+    """Inbound spiral from r_start toward center (matches Spiral(max_radius=0))."""
+    if w <= 0.0 or r_start <= 0.0 or duration <= 0.0:
+        return u_z.copy()
+
+    t_reverse = max(0.0, duration - local_t)
+    effective_speed = max_beam_speed
+    if k <= 0.0:
+        u = effective_speed * t_reverse
+    else:
+        Y = (k * effective_speed * t_reverse) / w
+        if Y <= 0.0:
+            u = 0.0
+        else:
+            x = math.sqrt(2.0 * Y) if Y > 2.0 else Y
+            for _ in range(3):
+                sqrt_term = math.sqrt(1.0 + x * x)
+                h_x = 0.5 * (x * sqrt_term + math.log(x + sqrt_term))
+                diff = h_x - Y
+                x = x - diff / sqrt_term
+            u = x / k
+
+    theta_l = w * u
+    u_start = r_start / w if w > 0.0 else 0.0
+    phi_l = k * u_start * 2.0 - k * u + phase_offset
+
+    sin_theta = math.sin(theta_l)
+    cos_theta = math.cos(theta_l)
+    sin_phi = math.sin(phi_l)
+    cos_phi = math.cos(phi_l)
+
+    al0 = sin_theta * cos_phi
+    al1 = sin_theta * sin_phi
+    al2 = cos_theta
+
+    asx = al0 * u_x[0] + al1 * u_y[0] + al2 * u_z[0]
+    asy = al0 * u_x[1] + al1 * u_y[1] + al2 * u_z[1]
+    asz = al0 * u_x[2] + al1 * u_y[2] + al2 * u_z[2]
+
+    norm = (asx * asx + asy * asy + asz * asz) ** 0.5
+    return np.array([asx / norm, asy / norm, asz / norm], dtype=np.float64)
+
+
+def inout_spiral_aim_at(
+    local_t: float,
+    *,
+    w: float,
+    k: float,
+    u_x: Vec3,
+    u_y: Vec3,
+    u_z: Vec3,
+    max_radius: float,
+    one_way_duration: float,
+    max_beam_speed: float,
+    phase_offset: float = 0.0,
+) -> Vec3:
+    """Repeating out-and-back Archimedean spiral (one timeline leg, many cycles)."""
+    if one_way_duration <= 0.0 or max_radius <= 0.0:
+        return u_z.copy()
+
+    cycle = 2.0 * one_way_duration
+    phase = math.fmod(local_t, cycle)
+    if phase < 0.0:
+        phase += cycle
+
+    if phase < one_way_duration:
+        return spiral_aim_at(
+            phase,
+            w=w,
+            k=k,
+            u_x=u_x,
+            u_y=u_y,
+            u_z=u_z,
+            max_radius=max_radius,
+            max_beam_speed=max_beam_speed,
+            phase_offset=phase_offset,
+        )
+
+    return _spiral_reverse_aim_at(
+        phase - one_way_duration,
+        duration=one_way_duration,
+        w=w,
+        k=k,
+        u_x=u_x,
+        u_y=u_y,
+        u_z=u_z,
+        r_start=max_radius,
+        max_beam_speed=max_beam_speed,
+        phase_offset=phase_offset,
+    )
+
+
 @njit(cache=True)
 def circle_aim_at(
     local_t: float,

@@ -13,6 +13,7 @@ from strategy.movements import (
     Circle,
     Grid,
     Hold,
+    InOutSpiral,
     Line,
     MovementPattern,
     Reset,
@@ -354,6 +355,29 @@ def spiral(
 ) -> None:
     _active_builder().movement(
         Spiral(w=w, k=k, max_radius=max_radius, phase_offset=phase_offset),
+        duration=duration,
+        label=label,
+    )
+
+
+def inout_spiral(
+    *,
+    duration: float,
+    w: float,
+    k: float,
+    max_radius: float,
+    one_way_duration: float,
+    phase_offset: float = 0.0,
+    label: str = "inout_spiral",
+) -> None:
+    _active_builder().movement(
+        InOutSpiral(
+            w=w,
+            k=k,
+            max_radius=max_radius,
+            one_way_duration=one_way_duration,
+            phase_offset=phase_offset,
+        ),
         duration=duration,
         label=label,
     )
