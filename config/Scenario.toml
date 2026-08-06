@@ -9,7 +9,7 @@ bench_theta_offset = 1.0
 bench_phi_offset = 1.0
 
 [s2]
-bench_theta_offset = 2.0
+bench_theta_offset = -1.0
 bench_phi_offset = 1.5
 
 [strategy.minor_offset]

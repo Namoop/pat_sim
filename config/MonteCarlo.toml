@@ -1,18 +1,41 @@
 [monte_carlo]
 environment = "Environment.toml"
 seed = 42
-runs = 500
-chain = ["asymmetric_swap"]
+runs = 10000
+chain = ["dual_spiral"]
 error.distribution = "gaussian"
-error.gaussian.limit = 1.74
-satellite.s2_fov_mod = 2
+error.gaussian.limit = 1
+#satellite.s2_fov_mod = 2
+simulation.max_search_radius = 2
+
+[strategy.minor_offset]
+max_spiral_radius = "fov"
+
+[strategy.swap_variant]
+lock_duration = 0.3
+spiral_radius = 4
+#s2_radius_mod = 2.0
+
+[strategy.dual_function_spiral]
+lock_duration = 0.3
+spiral_radius = 4
+#s2_radius_mod = 2.0
 
 [strategy.asymmetric_swap]
 lock_duration = 0.3
-spiral_radius = 1.6
-s2_radius_mod = 2.0
+spiral_radius = 3
+#s2_radius_mod = 2.0
 
 [strategy.dual_spiral]
+#k_ratio = 0.965136     # for 3mrad limit, 5mrad search
+#s2_hold_delay = 4.29044
+#phase_offset = 2.15442
+#k_ratio = 0.687438      # for 1mrad limit, 2mrad search
+#s2_hold_delay = 0.972381
+#phase_offset = 0.92076
+k_ratio = 0.968159
+s2_hold_delay = 2.38801
+phase_offset = 1.84128
 
 [strategy.dual_raster]
 speed_a = 4.013988
@@ -28,11 +51,25 @@ s2_wx = 16.992454
 s2_wy = 3.821853
 s2_delta = 5.530637
 
+#[strategy.lissajous_scan]
+#s1_wx = 1.804176
+#s1_wy = 2.496835
+#s2_wx = 0.707206
+#s2_wy = 3.255825
+#s1_delta = 1.570796
+#s2_delta = 1.570796
+
+#[strategy.rosette_scan]
+#s1_w1 = 6.949170
+#s1_w2 = 9.913765
+#s2_w1 = 7.542091
+#s2_w2 = 9.304704
+
 [strategy.rosette_scan]
-s1_w1 = 6.949170
-s1_w2 = 9.913765
-s2_w1 = 7.542091
-s2_w2 = 9.304704
+s1_w1 = 0.753856
+s1_w2 = 3.17467
+s2_w1 = 1.78189
+s2_w2 = 2.8708
 
 [strategy.center_rebias]
 velocity_a = 43.708
@@ -42,6 +79,9 @@ max_turn_radius = 863.263
 bias_strength = 0.389001
 
 [strategy.concentric_shells]
+num_shells = 3
+growth_exponent = 1
+s2_offset_shells = 0
 
 [strategy.random_walk]
 step_duration_a = 1.0
