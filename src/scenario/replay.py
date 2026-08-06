@@ -180,6 +180,7 @@ def initial_conditions_lines(result: ScenarioResult) -> list[str]:
     s2 = cfg.s2
     distance_km = cfg.simulation.distance / 1000.0
     return [
+        "Scenario: " + cfg.name,
         "Initial conditions:",
         f"  distance = {_format_sigfig(distance_km)} km",
         (

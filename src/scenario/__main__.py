@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import re
 import sys
 from pathlib import Path
 
@@ -60,6 +61,11 @@ def main(argv: list[str] | None = None) -> int:
     )
     args = parser.parse_args(argv)
 
+    config_str = str(args.config)
+    if (config_str.startswith("%")):
+        sanitized = re.sub(r'[^a-z0-9_]', '_', config_str[1:].strip().lower().replace(' ', '_'))
+        args.config = Path(f"config/_scenario_{sanitized}.toml")
+
     if args.record is not None and args.record <= 0:
         parser.error("--record STEPS must be positive")
 
@@ -70,6 +76,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.environment is not None and not args.environment.exists():
         print(f"Environment config not found: {args.environment}", file=sys.stderr)
         return 1
+
 
     config = load_single_scenario(args.config, args.environment)
 
